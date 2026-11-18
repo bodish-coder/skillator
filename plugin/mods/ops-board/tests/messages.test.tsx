@@ -643,9 +643,9 @@ test('F177 URL guard frames: unchanged URL - no warning; changed - the warning w
   await ui.unmount()
 })
 
-// A235 3: the URL y copied under d is never acked after the disarm; an ack in flight keeps its
-// view when c is pressed after the arm it waited for
-test('A235 3: no deferred ack after a disarm; the deferred ack keeps its view under a later c', async ($, on) => {
+// A235 3: the URL y copied under d is never acked after the disarm. A235 fix 1: an ack reply
+// never overwrites the view of an arm started after it
+test('A235 3: no deferred ack after a disarm; an ack reply never overwrites a later arm', async ($, on) => {
   const [w, clock] = world(on)
   const modes = () => w.runs.filter(r => r.argv[1] === SETUP_SH).map(r => r.argv[2])
   const warns = async () => (await ui.findAll({})).filter(x => !!x.key && x.key.startsWith('arm:warn')).map(x => x.text)
@@ -666,7 +666,7 @@ test('A235 3: no deferred ack after a disarm; the deferred ack keeps its view un
   endDisarm(ran(KV({ result: 'disarmed' })))
   await clock.settle()
   expect(modes()).not.toContain('--ack')
-  // y under c: acked after it; c pressed while that ack is in flight does not drop the ack's view
+  // y under c: acked after it; c pressed while that ack is in flight lands armed, then the ack replies
   w.arm['--status'] = ran(KV({ ...ARMED, result: 'status', url: U2, url_changed: '1' }))
   await ui.press({ key: 'tab:tickets' })
   await clock.settle()
@@ -683,15 +683,14 @@ test('A235 3: no deferred ack after a disarm; the deferred ack keeps its view un
   endArm(ran(KV({ ...ARMED, url: U2, url_changed: '1' })))
   await clock.settle()
   expect(modes().at(-1)).toBe('--ack')
-  const [arm2, endArm2] = later()
-  w.arm['--arm'] = arm2
+  const U3 = 'https://nn11mm22-3978.euw.devtunnels.ms'
+  w.arm['--arm'] = ran(KV({ ...ARMED, url: U3, url_changed: '1' }))
   await ui.press({ key: 'key:connect' })
   await clock.settle()
   endAck(ran(KV({ ...ARMED, result: 'acked', url: U2 })))
   await clock.settle()
-  expect(await warns()).toEqual([])
-  endArm2(ran(KV({ ...ARMED, url: U2 })))
-  await clock.settle()
+  expect((await ui.find({ key: 'arm:url' }))?.text).toContain(U3)   // the armed view stays
+  expect((await warns()).join(' ')).toContain('tunnel URL changed')
   await ui.unmount()
 })
 

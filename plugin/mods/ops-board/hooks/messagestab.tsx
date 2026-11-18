@@ -247,14 +247,16 @@ async function markRead($: EngineInterface) {
 // owner's key press reaches team-arm; entering the tab runs --status (a read). ---
 let armBusy = false
 let ackAfter: string | null = null                 // the URL y copied while an arm was in flight
+let armSeq = 0                                     // bumped as each arm / disarm starts; a read started before is stale
 async function runArm($: EngineInterface, call: 'team-arm' | 'team-disarm' | 'team-arm-status' | 'team-url-ack', args: string[] = []) {
   const quiet = call === 'team-arm-status' || call === 'team-url-ack'
   if (armBusy) { if (!quiet) $.ui.toast('Teams: still working - one moment'); return }
-  if (!quiet) armBusy = true
+  if (!quiet) { armBusy = true; armSeq++ }
+  const seq = armSeq
   try {
     const r = await runCall($, call, args)
-    // an arm or disarm started meanwhile is the newer read; an ack's reply is still shown
-    if (call === 'team-arm-status' && armBusy) return
+    // an arm or disarm in flight, or started after this read, is the newer view
+    if (quiet && (armBusy || seq !== armSeq)) return
     // a toast never carries the URL: the ack's argument is replaced by value
     const said = (s: string) => args.filter(Boolean).reduce((t, a) => t.split(a).join('<url>'), [s, ran(r.argv)].join('\n'))
     const v = parseArm(r.out)

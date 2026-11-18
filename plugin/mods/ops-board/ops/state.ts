@@ -207,6 +207,7 @@ export type State = {
   teamsCfg: TeamsCfgView | null
   teamsArm: ArmView | null; armBusy: boolean   // F177: what setup --status last said; an arm / disarm in flight
   ackAfter: string | null                      // A235: the URL y copied while an arm was in flight
+  armSeq: number                               // A235: bumped as each arm / disarm starts; a read started before is stale
   profiles: string | null; profilesBusy: boolean  // F176: the last `ops --status --refresh` table (p on Health); one in flight
   setup: Setup | null; setupField: SetupField
   help: HelpState | null                       // F127: Help & Skills guide viewer
@@ -247,7 +248,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, runMode: 'parallel', engage: null, startRun: null,
   dialog: null, dialogIndex: 0, dialogField: 'who', decide: null, person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
-  messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, teamsArm: null, armBusy: false, ackAfter: null, profiles: null, profilesBusy: false, setup: null, setupField: 'token',
+  messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, teamsArm: null, armBusy: false, ackAfter: null, armSeq: 0, profiles: null, profilesBusy: false, setup: null, setupField: 'token',
   help: null,
   explorer: EX0,
   ...RUN_INITIAL,
@@ -1485,12 +1486,12 @@ function markRead(s: State): Step {
 // --- F177: connect Teams. c runs setup --arm, d setup --disarm, y copies the URL. Only
 // these keys act; entering the tab runs --status (a read). ---
 type ArmCall = 'team-arm' | 'team-disarm' | 'team-arm-status' | 'team-url-ack'
-const armThen = (call: ArmCall, args: string[] = []): Then => r => x => {
+const armThen = (call: ArmCall, args: string[] = [], seq = 0): Then => r => x => {
   const quiet = call === 'team-arm-status' || call === 'team-url-ack'
-  // an arm or disarm in flight is the newer read; an ack's reply is still shown
-  if (call === 'team-arm-status' && x.armBusy) return x
+  // an arm or disarm in flight, or started after this read, is the newer view
+  if (quiet && (x.armBusy || x.armSeq !== seq)) return x
   // A235: the URL y copied under an arm is acked once it lands; never after a disarm
-  const effects = !quiet && call !== 'team-disarm' && x.ackAfter ? [ackRun(x.ackAfter)] : []
+  const effects = !quiet && call !== 'team-disarm' && x.ackAfter ? [ackRun(x.ackAfter, x.armSeq)] : []
   const y: State = quiet ? x : { ...x, armBusy: false, ackAfter: null }
   // a toast never carries the URL: the ack's argument is replaced by value
   const said = (t: string) => args.filter(Boolean).reduce((m, a) => m.split(a).join('<url>'), [t, ran(r.argv)].join('\n'))
@@ -1499,12 +1500,12 @@ const armThen = (call: ArmCall, args: string[] = []): Then => r => x => {
   const t = armToast(v)
   return { state: t ? toast({ ...y, teamsArm: v }, said(t)) : { ...y, teamsArm: v }, effects }
 }
-const armStatus = (): Effect => run('team-arm-status', [], armThen('team-arm-status'))
-const ackRun = (url: string): Effect => run('team-url-ack', [url], armThen('team-url-ack', [url]))
+const armStatus = (seq: number): Effect => run('team-arm-status', [], armThen('team-arm-status', [], seq))
+const ackRun = (url: string, seq: number): Effect => run('team-url-ack', [url], armThen('team-url-ack', [url], seq))
 
 function armRun(s: State, call: 'team-arm' | 'team-disarm'): Step {
   if (s.armBusy) return { state: toast(s, 'Teams: still working - one moment'), effects: [] }
-  return { state: { ...s, armBusy: true, toast: call === 'team-arm' ? 'Connecting Teams…' : 'Disconnecting Teams…' }, effects: [run(call, [], armThen(call))] }
+  return { state: { ...s, armBusy: true, armSeq: s.armSeq + 1, toast: call === 'team-arm' ? 'Connecting Teams…' : 'Disconnecting Teams…' }, effects: [run(call, [], armThen(call))] }
 }
 
 function copyUrl(s: State): Step {
@@ -1514,7 +1515,7 @@ function copyUrl(s: State): Step {
     ? toast(x, `✗ not copied: ${r.err.trim() || 'clipboard unavailable'} - read it on the Messages tab`)
     // A235: the ack carries the URL copied; under a connect or disconnect in flight it waits for it
     : { state: toast(x.teamsArm?.urlChanged && x.armBusy ? { ...x, ackAfter: url } : x, '✓ tunnel URL copied - paste it as the Teams outgoing webhook callback URL'),
-        effects: x.teamsArm?.urlChanged && !x.armBusy ? [ackRun(url)] : [] }
+        effects: x.teamsArm?.urlChanged && !x.armBusy ? [ackRun(url, x.armSeq)] : [] }
   return { state: s, effects: [{ kind: 'copy', text: url, then }] }
 }
 
@@ -1537,7 +1538,7 @@ function messagesKey(s: State, k: Key): Step {
 function toTab(s: State, tab: Tab): Step {
   if (tab === 'help') return openHelp(s)
   const effects: Effect[] = tab === 'runs' && s.tab !== 'runs' ? [{ kind: 'poll', what: 'runs' }] : []
-  if (tab === 'messages' && s.tab !== 'messages') effects.push(showCfg(false), armStatus())
+  if (tab === 'messages' && s.tab !== 'messages') effects.push(showCfg(false), armStatus(s.armSeq))
   if (tab === 'explorer' && s.tab !== 'explorer') effects.push(...enterExplorer(s).effects)
   if (tab === 'run' && s.tab !== 'run') effects.push(enterRunEffect())
   return { state: { ...s, tab, help: null }, effects }

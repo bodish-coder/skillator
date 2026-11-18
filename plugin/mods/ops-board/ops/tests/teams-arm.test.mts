@@ -256,7 +256,7 @@ test('A235 5: a devtunnel the board cannot inspect - a dim note on the arm line,
   assert.equal(armToast(v), '✓ Teams connected - tunnel hosted, listener up on 127.0.0.1:3978')
 })
 
-test('A235 3: no deferred ack after a disarm; an ack in flight keeps its view when c is pressed after', () => {
+test('A235 3: no deferred ack after a disarm', () => {
   const changed: State = { ...onTab.state, teamsArm: parseArm(KV({ ...ARMED, url: U2, url_changed: '1' })) }
   const copied = (s: State) => {
     const y = reduce(s, { name: 'y' })
@@ -267,9 +267,25 @@ test('A235 3: no deferred ack after a disarm; an ack in flight keeps its view wh
   const off = afterRun(runs(d.effects)[0]!, ok(KV({ result: 'disarmed' })), copied(d.state).state, NOW)
   assert.deepEqual(runs(off.effects), [])
   assert.equal(off.state.ackAfter, null)
-  const ack = runs(copied(changed).effects)[0]!
-  const c = reduce(changed, { name: 'c' })
-  const acked = afterRun(ack, ok(KV({ ...ARMED, result: 'acked', url: U2 })), c.state, NOW).state
+})
+
+test('A235 fix 1: an ack reply never overwrites a view an arm started after it drew', () => {
+  const changed: State = { ...onTab.state, teamsArm: parseArm(KV({ ...ARMED, url: U2, url_changed: '1' })) }
+  const y = reduce(changed, { name: 'y' })
+  const copy = y.effects.find((e): e is Extract<Effect, { kind: 'copy' }> => e.kind === 'copy')!
+  const copied = afterRun({ then: copy.then! }, { code: 0, out: '', err: '', argv: [] }, y.state, NOW)
+  const ack = runs(copied.effects)[0]!
+  // ack in flight; c starts and lands armed; then the ack's reply arrives - the armed view stays
+  const c = reduce(copied.state, { name: 'c' })
+  const NEW = 'https://nn11mm22-3978.euw.devtunnels.ms'
+  const armed = afterRun(runs(c.effects)[0]!, ok(KV({ ...ARMED, url: NEW, url_changed: '1' })), c.state, NOW).state
+  const late = afterRun(ack, ok(KV({ ...ARMED, result: 'acked', url: U2 })), armed, NOW).state
+  assert.equal(late.teamsArm?.url, NEW)
+  assert.equal(late.teamsArm?.urlChanged, true)
+  // and while c is still in flight, the ack's reply is not drawn either
+  const during = afterRun(ack, ok(KV({ ...ARMED, result: 'acked', url: U2 })), c.state, NOW).state
+  assert.deepEqual(during.teamsArm, c.state.teamsArm)
+  // an ack with no arm after it is drawn
+  const acked = afterRun(ack, ok(KV({ ...ARMED, result: 'acked', url: U2 })), copied.state, NOW).state
   assert.equal(acked.teamsArm?.urlChanged, false)
-  assert.equal(acked.armBusy, true)
 })
