@@ -114,7 +114,8 @@ async function openSets(root, holo) {
   pages.sort((a, b) => b.own - a.own || b.mtime - a.mtime);
   for (let { set, id } of pages) {
     if (seen.has(id)) continue;
-    seen.add(id);
+    // Only a page that yields a set claims the id: an unreadable own page never blocks a readable copy.
+    if (set) seen.add(id);
     try {
       const m = /^RUN-(\d+)$/i.exec(id);
       const path = m && runFilesFor(m[1], runs)[0];
