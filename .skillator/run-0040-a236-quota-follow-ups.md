@@ -1,6 +1,6 @@
 # RUN-0040 - A236 quota follow-ups
 plan: TICKETS.md
-started: 2026-11-18T11:33Z   updated: 2026-11-18T17:00Z
+started: 2026-11-18T11:33Z   updated: 2026-11-18T17:14Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0040-a236-quota-follow-ups
 branch: run/RUN-0040-a236-quota-follow-ups
 
@@ -12,7 +12,7 @@ branch: run/RUN-0040-a236-quota-follow-ups
 | 309 | A241 wizard answers follow-ups | x | build:opus | 2026-11-18T16:06Z | ddde1bf |
 | 310 | B32 reproduce agy Health tab | ~ | build:opus | 2026-11-18T15:57Z | - |
 | 311 | B32 fix agy Health tab | ~ | build:opus | 2026-11-18T17:00Z | - |
-| 312 | B31 selftest.ps1 weekly gate | ~ | build:opus | 2026-11-18T17:00Z | - |
+| 312 | B31 selftest.ps1 weekly gate | x | build:opus | 2026-11-18T17:14Z | 752f779 |
 | 313 | A244 ui.focus stubs in seven mod tests | ~ | build:opus | 2026-11-18T17:00Z | - |
 
 ## In flight
@@ -103,3 +103,4 @@ prompt: |
 - 2026-11-18T16:07Z - stage 307 fix round back 72f82ce..b5efc06 (agent: quota-refresh sh 33 / ps1 31, ops 342/344 with the failure fixed in b5efc06; orchestrator: status+reset 27/0, read the kill changes - unreadable start kills, taskkill /T on every Windows PID). Landed by the stop rule as b5efc06. Ruling: no review of this fix round at 7d 95% - it restores the pre-A236 kill-when-unsure rule and is tested - leftover review in A246. 308 and 309 merged. 310 stays on its branch (a deliberately failing test) for the B32 fix stage.
 - 2026-11-18T16:26Z - released 4.30.1 / 0.18.1: run merged into main cb2c034; checks green (routing, tickets, commands, holo 73/0, self-update selftest, ops 338 + 5 PowerShell timing flakes that pass alone 6/0 and 2/0, 0 stub hits); bump 91c353c pushed e54be92..91c353c as bodish-coder, switched back. Owner approved. s308/s309 worktrees removed; the run and stage 310 (B32) stay open for the B32 fix after the weekly reset.
 - 2026-11-18T17:00Z - owner: do the not-started tickets in parallel. A227/A229/A230 are the owner's (Teams admin, real token, machine). Ruling: 3 at once (owner's parallel 3, ~3 GB free): B32 fix (311, in s310's worktree), B31 (312), A244 (313) - file-disjoint; the other six wait - 7d at 95%, the 97% stop halts all agents with a handoff - cost if wrong: stages stopped mid-flight, resumable from their prompts. Stub PATH must be a /c/ path (stage 310's real-agy-call lesson).
+- 2026-11-18T17:14Z - stage 312 (B31) back 1736967. Root cause (verified): the Claude probe put seven_day used_percentage into the main-flag max, so a week at 92-96% fired the 92% handoff gate. Fix: both twins drop seven_day from the max (codex path already did, A98). Orchestrator: read the diff (3 files, +8/-5 in hooks), selftest.ps1 ok end to end. Agent ran a single-pass /code-review: none. Landed as 752f779.
