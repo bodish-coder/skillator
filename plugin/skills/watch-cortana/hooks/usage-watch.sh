@@ -360,12 +360,13 @@ if [ "$mode" = refresh ]; then
   # tree is killed, so no read outlives the lock.
   # Parent first (its children listed beforehand), so nothing it runs gets to finish.
   # A listed child that started before its parent (start tick from /proc, where there is
-  # one) is an orphan whose dead parent's PID was reused - never ours, never killed.
+  # one) is an orphan whose dead parent's PID was reused - never ours, never killed. A start
+  # that cannot be read or compared is killed.
   started() { sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '{ print $20 }'; }
   kill_tree() {
     t=$(started "$1")
     set -- "$1" $(ps -ef 2>/dev/null | awk -v p="$1" '$3 == p { print $2 }' |
-      while read -r c; do { [ -z "$t" ] || [ "$(started "$c")" -ge "$t" ] 2>/dev/null; } && echo "$c"; done)
+      while read -r c; do s=$(started "$c"); [ -n "$t" ] && [ -n "$s" ] && [ "$s" -lt "$t" ] 2>/dev/null || echo "$c"; done)
     [ -r "/proc/$1/winpid" ] && MSYS_NO_PATHCONV=1 taskkill /T /F /PID "$(cat "/proc/$1/winpid")" >/dev/null 2>&1
     kill -9 "$1" 2>/dev/null
     shift
@@ -613,8 +614,8 @@ except Exception:
           process.stdout.write(f + " " + (last === undefined ? "" : ",\"last\":" + JSON.stringify(last)) + (t ? ",\"turned_at\":" + t : "")); process.exit(0)
         };
         try { s = fs.readFileSync(process.argv[1], "utf8") } catch (e) { out(0, e.code === "ENOENT" ? null : undefined) }
-        try { r = JSON.parse(s.replace(/^﻿/, "")) } catch (_) { process.stdout.write("0"); process.exit(0) }
-        if (!r || typeof r !== "object" || Array.isArray(r)) { process.stdout.write("0"); process.exit(0) }
+        try { r = JSON.parse(s.replace(/^﻿/, "")) } catch (_) { out(0) }
+        if (!r || typeof r !== "object" || Array.isArray(r)) { r = null; out(0) }
         const ok = v => typeof v === "number" && Number.isFinite(v);
         const h = ok(r["5h"]) ? r["5h"] : r.five, w = ok(r["7d"]) ? r["7d"] : r.weekly;
         if (ok(h) || ok(w)) {
