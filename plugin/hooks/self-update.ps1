@@ -49,8 +49,12 @@ function Get-WhySkip {
     if (Select-String -LiteralPath $f.FullName -Pattern '^\|[^|]*\|[^|]*\|\s*~\s*\|' -Quiet) { return "a relay run is in flight ($($f.Name))" }
   }
   $pj = Join-Path $r 'plugin/.claude-plugin/plugin.json'
-  if ((Test-Path -LiteralPath $pj) -and (Select-String -LiteralPath $pj -Pattern '"name"\s*:\s*"skillator"' -Quiet)) {
-    if ("$(& git -C $r status --porcelain -- plugin 2>$null)") { return 'uncommitted plugin edits' }
+  # Only a real skillator source; and a repo's own config (fsmonitor, hooks) must not run.
+  $real = (Test-Path -LiteralPath (Join-Path $r 'plugin/install.sh')) -and (Test-Path -LiteralPath (Join-Path $r 'plugin/install.ps1')) -and
+    (Test-Path -LiteralPath $pj) -and (Select-String -LiteralPath $pj -Pattern '"name"\s*:\s*"skillator"' -Quiet)
+  if ($real) {
+    $hp = if ($env:OS -eq 'Windows_NT') { 'NUL' } else { '/dev/null' }
+    if ("$(& git -c core.fsmonitor= -c core.hooksPath=$hp -c core.untrackedCache=false -C $r status --porcelain -- plugin 2>$null)") { return 'uncommitted plugin edits' }
   }
   ''
 }
@@ -136,6 +140,7 @@ function Invoke-SelfTest {
   $d = Join-Path ([IO.Path]::GetTempPath()) ("su-" + [guid]::NewGuid().ToString('N'))
   $bin = Join-Path $d 'bin'; $repo = Join-Path $d 'repo'; $inst = Join-Path $d 'inst'; $mkt = Join-Path $d 'mkt'
   foreach ($x in @($bin, (Join-Path $d 'home'), (Join-Path $repo '.git'), $inst, (Join-Path $mkt '.claude-plugin'))) { New-Item -ItemType Directory -Force $x | Out-Null }
+  $rg = "$((Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source)"
   $env:SU_D = $d; $env:USERPROFILE = Join-Path $d 'home'; $env:HOME = $env:USERPROFILE; $env:PATH = "$bin;$env:PATH"
   foreach ($v in 'SKILLATOR_AUTO_UPDATE', 'SKILLATOR_UPDATE_HOURS', 'SU_OFFLINE', 'SU_CONFIRM', 'SU_SLEEP', 'SU_DIRTY', 'SU_OLDV', 'SU_NEWV') { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
   $script:S = Join-Path $env:USERPROFILE '.skillator/self-update.json'
@@ -155,6 +160,7 @@ exit 1
 '@
   Set-Content -LiteralPath (Join-Path $bin 'git.ps1') -Encoding utf8 -Value @'
 Add-Content -LiteralPath "$env:SU_D/log" -Value ("git " + ($args -join ' '))
+if ($env:SU_REALGIT) { & $env:SU_REALGIT @args; exit $LASTEXITCODE }
 if (($args -join ' ') -match 'status') { $env:SU_DIRTY }
 '@
   Set-Content -LiteralPath (Join-Path $inst 'install.sh') -Value '#!/bin/sh'
@@ -203,9 +209,21 @@ if (($args -join ' ') -match 'status') { $env:SU_DIRTY }
 
     Reset-T; New-Item -ItemType Directory -Force (Join-Path $repo 'plugin/.claude-plugin') | Out-Null
     Set-Content -LiteralPath (Join-Path $repo 'plugin/.claude-plugin/plugin.json') -Value '{"name": "skillator"}'
+    Su 'check' | Out-Null
+    T 'not a skillator source (no installers): no git probe' (-not ((Lg) -match '^git'))
+    foreach ($n in 'install.sh', 'install.ps1') { Set-Content -LiteralPath (Join-Path $repo "plugin/$n") -Value '' }
+    Remove-Item -Force -LiteralPath $log -ErrorAction SilentlyContinue
     $env:SU_DIRTY = ' M plugin/x'
     T 'dirty plugin: skipped' ((Su 'check') -eq 'skipped: uncommitted plugin edits' -and -not ((Lg) -match '^claude'))
     Remove-Item Env:SU_DIRTY
+
+    Reset-T; $r2 = Join-Path $d 'repo2'; New-Item -ItemType Directory -Force (Join-Path $r2 'plugin/.claude-plugin') | Out-Null
+    & $rg init -q $r2; & $rg -C $r2 config core.fsmonitor 'touch fsmon-marker; false'
+    Set-Content -LiteralPath (Join-Path $r2 'plugin/.claude-plugin/plugin.json') -Value '{"name": "skillator"}'
+    foreach ($n in 'install.sh', 'install.ps1') { Set-Content -LiteralPath (Join-Path $r2 "plugin/$n") -Value '' }
+    Push-Location $r2; $env:SU_REALGIT = $rg
+    try { $o = Su 'check' } finally { Remove-Item Env:SU_REALGIT; Pop-Location }
+    T 'hostile core.fsmonitor: never runs' (-not (Test-Path -LiteralPath (Join-Path $r2 'fsmon-marker')) -and $o -eq 'skipped: uncommitted plugin edits')
 
     Reset-T; $env:SKILLATOR_AUTO_UPDATE = '0'
     T 'opt-out: check skipped' ((Su 'check') -eq 'skipped: SKILLATOR_AUTO_UPDATE=0')

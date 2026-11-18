@@ -81,9 +81,12 @@ why_skip() {
     [ -f "$f" ] && grep -qE '^\|[^|]*\|[^|]*\|[[:space:]]*~[[:space:]]*\|' "$f" \
       && { echo "a relay run is in flight (${f##*/})"; return 0; }
   done
-  grep -qs '"name"[[:space:]]*:[[:space:]]*"skillator"' "$r/plugin/.claude-plugin/plugin.json" \
-    && [ -n "$(git -C "$r" status --porcelain -- plugin 2>/dev/null)" ] \
-    && echo 'uncommitted plugin edits'
+  # Only a real skillator source; and a repo's own config (fsmonitor, hooks) must not run.
+  [ -f "$r/plugin/install.sh" ] && [ -f "$r/plugin/install.ps1" ] || return 0
+  grep -qs '"name"[[:space:]]*:[[:space:]]*"skillator"' "$r/plugin/.claude-plugin/plugin.json" || return 0
+  case $(uname -s 2>/dev/null) in MINGW*|MSYS*) hp=NUL ;; *) hp=/dev/null ;; esac
+  [ -n "$(git -c core.fsmonitor= -c core.hooksPath="$hp" -c core.untrackedCache=false \
+    -C "$r" status --porcelain -- plugin 2>/dev/null)" ] && echo 'uncommitted plugin edits'
   return 0
 }
 
@@ -175,6 +178,7 @@ selftest() {
   me=$(cd "$(dirname -- "$0")" && pwd)/self-update.sh
   mkdir -p "$d/bin" "$d/home" "$d/repo/.git" "$d/inst" "$d/mkt/.claude-plugin"
   lw=$(cd "$d" && { pwd -W 2>/dev/null || pwd; })
+  rg=$(command -v git)
   export SU_D="$d" HOME="$d/home" USERPROFILE="$d/home" PATH="$d/bin:$PATH"
   unset SKILLATOR_AUTO_UPDATE SKILLATOR_UPDATE_HOURS SU_OFFLINE SU_CONFIRM SU_SLEEP SU_DIRTY SU_OLDV SU_NEWV
   cat_v() { printf '{"name":"skillator","plugins":[{"name":"skillator","version":"%s"}]}\n' "$1" > "$d/mkt/.claude-plugin/marketplace.json"; }
@@ -194,6 +198,7 @@ EOF
   cat > "$d/bin/git" <<'EOF'
 #!/bin/sh
 echo "git $*" >> "$SU_D/log"
+[ -n "$SU_REALGIT" ] && exec "$SU_REALGIT" "$@"
 case "$*" in *status*) printf '%s' "$SU_DIRTY" ;; esac
 EOF
   printf '#!/bin/sh\necho "installer sh $*" >> "$SU_D/log"\n' > "$d/inst/install.sh"
@@ -246,7 +251,17 @@ claude plugin list --json'
 
   reset; mkdir -p "$d/repo/plugin/.claude-plugin"
   printf '{"name": "skillator"}\n' > "$d/repo/plugin/.claude-plugin/plugin.json"
+  sh "$me" check > /dev/null
+  t 'not a skillator source (no installers): no git probe' '! lg | grep -q ^git'
+  : > "$d/repo/plugin/install.sh"; : > "$d/repo/plugin/install.ps1"; rm -f "$d/log"
   t 'dirty plugin: skipped' '[ "$(SU_DIRTY=" M plugin/x" sh "$me" check)" = "skipped: uncommitted plugin edits" ] && ! lg | grep -q ^claude'
+
+  reset; r2="$d/repo2"; mkdir -p "$r2/plugin/.claude-plugin"
+  "$rg" init -q "$r2" && "$rg" -C "$r2" config core.fsmonitor 'touch fsmon-marker; false'
+  printf '{"name": "skillator"}\n' > "$r2/plugin/.claude-plugin/plugin.json"
+  : > "$r2/plugin/install.sh"; : > "$r2/plugin/install.ps1"
+  o=$(cd "$r2" && SU_REALGIT="$rg" sh "$me" check)
+  t 'hostile core.fsmonitor: never runs' '[ ! -e "$r2/fsmon-marker" ] && [ "$o" = "skipped: uncommitted plugin edits" ]'
 
   reset
   t 'opt-out: check skipped' '[ "$(SKILLATOR_AUTO_UPDATE=0 sh "$me" check)" = "skipped: SKILLATOR_AUTO_UPDATE=0" ]'
