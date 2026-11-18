@@ -163,17 +163,17 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
       } catch (e) { r.refused.push({ path, why: e.message }); }
     }
   }
-  // A fully settled run stays open only while a FINAL for it is newer than its run file.
-  for (const [id, t] of done) if (!cands.some((c) => c.id === id && isFinalized(c.ans) && c.mtime > t)) sets.delete(id);
-  for (const c of cands) if (!sets.has(c.id)) r.ignored.push({ path: c.path, why: `"${c.id}" is settled - its run file is newer than this file` });
-  cands = cands.filter((c) => sets.has(c.id));
-  r.sets = [...sets.keys()];
   // Verified: the export carries this page's nonce (the sidecar's when the page has none), or
   // (an older export without one) it sits in the page folder, which is the owner's repo.
   for (const c of cands) {
     const pageNonce = sets.get(c.id).nonce || (tryRead(nonceFile(root, c.id)) || "").trim();
     c.verified = c.ans && c.ans.nonce ? !!pageNonce && c.ans.nonce === pageNonce : searched[c.folder].why === "page folder";
   }
+  // A fully settled run stays open only while a verified FINAL for it is newer than its run file.
+  for (const [id, t] of done) if (!cands.some((c) => c.id === id && c.verified && isFinalized(c.ans) && c.mtime > t)) sets.delete(id);
+  for (const c of cands) if (!sets.has(c.id)) r.ignored.push({ path: c.path, why: `"${c.id}" is settled - its run file is newer than this file` });
+  cands = cands.filter((c) => sets.has(c.id));
+  r.sets = [...sets.keys()];
   // FINAL before draft, verified before unverified (never fail open), then the
   // higher round, newest finalizedAt, newest file; folder order only breaks a tie.
   const when = (c) => Date.parse(c.ans && c.ans.finalizedAt) || 0;
