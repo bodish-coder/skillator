@@ -768,3 +768,14 @@ test("A233-5: the summary counts only answers that produce a command", async () 
   assert.match(report(await findAnswers(s.opts)), /, 0 to apply, 0 already settled/, "an unverified pick applies nothing");
 });
 
+test("A233-6: one reconcile(pageSet, run) in wizard.mjs, used by answers.mjs and holo.mjs", async () => {
+  const { reconcile } = await import("../wizard.mjs");
+  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8");
+  const page = setFromRun(parseRun(md), "r.md");
+  const r = reconcile(page, parseRun(md.replace("### Q1 open", "### Q1 answered")), "r.md");
+  assert.deepEqual(r.set.decisions.map((d) => d.id), ["Q2"]);
+  assert.deepEqual(r.set.settled.map((d) => d.id), ["Q1"]);
+  assert.deepEqual([...r.gone], ["Q1"]);
+  assert.equal(reconcile({ ...page, id: "RUN-9" }, parseRun(md), "r.md").set.decisions.length, 2, "another set's page gives way to the run's");
+  for (const f of ["answers.mjs", "holo.mjs"]) assert.match(readFileSync(join(HERE, "..", f), "utf8"), /\breconcile\(/, f);
+});

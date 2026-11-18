@@ -40,7 +40,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { setFromRun, checkSet, wizardPage, pageSet, answersToCommands, nextWizardSet, settledIn, without, fileStem, pageFile, clean, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
+import { setFromRun, checkSet, wizardPage, pageSet, answersToCommands, nextWizardSet, reconcile, without, fileStem, pageFile, clean, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
 import { anatomyFigure, ANATOMY_CSS, ANATOMY_SCRIPT } from "./anatomy.mjs";
 import { extractDomainGraph, understandPage } from "./understand.mjs";
 import { FORMATS, THEMES, formatPage, themeCss } from "./formats.mjs";
@@ -1150,10 +1150,10 @@ async function main(argv) {
       else if (roundOf(set) !== round) throw new Error(`the page for round ${round} is not on disk - open the round-${round} page and finalize again`);
       if (run) {
         // What the run has settled leaves the questions and stays in the settled reference, as setFromRun lists it.
-        const gone = settledIn(run), have = new Set((set.settled || []).map((x) => x && x.id));
-        for (const a of ans && Array.isArray(ans.answers) ? ans.answers : []) if (gone.has(a && a.id)) console.log(`${clean(a.id, 40)}: already settled - skipped`);
-        ans = without(ans, gone);
-        if (Array.isArray(set.decisions)) set = { ...set, decisions: set.decisions.filter((d) => !gone.has(d && d.id)), settled: [...(set.settled || []), ...fromRun.settled.filter((x) => !have.has(x.id))] };
+        const r = reconcile(set, run, fromRun.source);
+        for (const a of ans && Array.isArray(ans.answers) ? ans.answers : []) if (r.gone.has(a && a.id)) console.log(`${clean(a.id, 40)}: already settled - skipped`);
+        ans = without(ans, r.gone);
+        set = r.set;
       }
       set = nextWizardSet(set, ans);
       if (!set.decisions.length) throw new Error(`no decision left to ask - every answer is settled; round ${set.round} page not written`);

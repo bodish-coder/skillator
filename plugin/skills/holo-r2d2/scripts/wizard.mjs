@@ -144,6 +144,19 @@ export function setFromRun(run, runPath) {
   return { schema: SET_SCHEMA, id: run.id, title: `${run.id} - ${run.title}`, source: runPath || run.id, decisions, settled };
 }
 
+// A page's set against its run file now: the page's set (the run's own when the page is another set's
+// or unreadable), less what the run has settled, which joins the settled reference as setFromRun lists it.
+// live: the run's set now; gone: the decision ids the run has settled.
+export function reconcile(pageSet, run, runPath) {
+  const live = setFromRun(run, runPath), gone = settledIn(run);
+  const base = pageSet && String(pageSet.id) === String(live.id) ? pageSet : live;
+  const have = new Set((base.settled || []).map((x) => x && x.id));
+  const set = Array.isArray(base.decisions)
+    ? { ...base, decisions: base.decisions.filter((d) => !gone.has(d && d.id)), settled: [...(base.settled || []), ...live.settled.filter((x) => !have.has(x.id))] }
+    : base;
+  return { set, live, gone };
+}
+
 // Throws on a set the page could not ask honestly.
 export function checkSet(set) {
   const bad = (m) => { throw new Error(`decision set: ${m}`); };

@@ -14,7 +14,7 @@ import { join, resolve, dirname, relative } from "node:path";
 import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { nextWizardSet, setFromRun, answersToCommands, isFinalized, fileStem, pageFile, pageSet, settledIn, without, CTRL, clean, q } from "./wizard.mjs";
+import { nextWizardSet, reconcile, answersToCommands, isFinalized, fileStem, pageFile, pageSet, without, CTRL, clean, q } from "./wizard.mjs";
 import { parseRun, findRoot, runFiles, runFilesFor, nonceFile } from "./holo.mjs";
 
 const MAX_FILE = 1048576;
@@ -103,7 +103,7 @@ export function downloadDirs({ home = homedir(), env = process.env, platform = p
 // done: a fully settled RUN set, with its run file's time.
 async function openSets(root, holo) {
   const sets = new Map(), openNow = new Map(), gone = new Map(), done = new Map();
-  const runs = await runFiles(root), pages = [], seen = new Set();
+  const runs = await runFiles(root), pages = [], seen = new Set(), parsed = new Map();
   for (const n of tryDir(holo).filter((n) => n.endsWith(".wizard.html"))) {
     try {
       const p = join(holo, n), set = pageSet(await readFile(p, "utf8")), id = String(set?.id ?? n.slice(0, -".wizard.html".length));
@@ -119,11 +119,11 @@ async function openSets(root, holo) {
       const m = /^RUN-(\d+)$/i.exec(id);
       const path = m && runFilesFor(m[1], runs)[0];
       if (path) {
-        const run = parseRun(await readFile(path, "utf8"));
-        const live = setFromRun(run, relative(root, path).replace(/\\/g, "/"));
-        if (!set || String(set.id) !== String(live.id)) set = live;
+        if (!parsed.has(path)) parsed.set(path, parseRun(await readFile(path, "utf8")));
+        const r = reconcile(set, parsed.get(path), relative(root, path).replace(/\\/g, "/")), live = r.live;
+        set = r.set;
         openNow.set(String(set.id), new Set(live.decisions.map((d) => d.id)));
-        gone.set(String(set.id), settledIn(run));
+        gone.set(String(set.id), r.gone);
         if (!live.decisions.length) done.set(String(set.id), (await stat(path)).mtimeMs);
       }
       if (set && set.decisions && (path || set.decisions.length)) sets.set(String(set.id), set);
