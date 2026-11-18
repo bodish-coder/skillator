@@ -108,7 +108,7 @@ function world(on: On, cfg = CFG_SET, repoRoot = '/r', commonGitDir: string | nu
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('ui.status', () => ({ value: undefined }))
-  on('ui.focus', ($, e) => { if (e.element) w.focuses.push(e.element); return {} })
+  on('ui.focus', { plugin: '*' }, ($, e) => { if (e.element) w.focuses.push(e.element); return { value: undefined } })
   return [w, clock]
 }
 
