@@ -1,4 +1,6 @@
-import { test } from 'node:test'
+import { mock, test } from 'node:test'
+import fs from 'node:fs'
+import { syncBuiltinESMExports } from 'node:module'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
@@ -356,17 +358,59 @@ test('F176 last round: a top-level 7d over 7 days old (its at, else the file mti
   assert.deepEqual(waits, [`${h}/.claude-atold`, `${h}/.claude-mold`])
 })
 
-test('F176 last round: a turn that gave no limits holds the forced read 24 h', async () => {
+// A236 (7): turned_at holds only the paid turn - usage-watch's own gate keeps it 24 h - so the
+// free get_usage read still runs and the row can fill inside the 24 h.
+test('A236: a turn that gave no limits does not hold the free forced read', async () => {
   const h = home(), now = Math.floor(Date.now() / 1000)
   const rec = (turned_at: number) => JSON.stringify({ src: 'claude-code', note: 'one turn gave no limits', failures: 1, backoff_secs: 60, last: null, turned_at })
   writeFileSync(join(dir(h, '.claude-held', '.credentials.json'), 'quota-cache.json'), rec(now - 3600))
   writeFileSync(join(dir(h, '.claude-past', '.credentials.json'), 'quota-cache.json'), rec(now - 86400 - 60))
   const waits: string[] = []
+  const read: Reader = async (e, ms) => {
+    if (e.SKILLATOR_QUOTA_REFRESH_WAIT === '1') { waits.push(e.SKILLATOR_PROFILE_DIR!); return NONE(e, ms) }
+    return said('src=claude-code 5h=7.0 7d=30.0 ctx=- max=30.0\n')(e, ms)
+  }
+  const out: string[][] = []
+  for (const p of discover(h)) out.push(...await profileRows(p, read, {}, false, true))
+  assert.deepEqual(waits, [`${h}/.claude-held`, `${h}/.claude-past`])
+  assert.deepEqual(out.find(r => r[0] === 'claude-held'), ['claude-held', '7%', '30%', ''])
+})
+
+// A236 (6, part): a 7d or an at that is there but not a number is unknown - it holds the forced
+// read, never lets it through.
+test('A236: a non-number 7d or at holds the forced read as unknown', async () => {
+  const h = home(), now = Math.floor(Date.now() / 1000)
+  const put = (name: string, c: unknown) => writeFileSync(join(dir(h, `.claude-${name}`, '.credentials.json'), 'quota-cache.json'), JSON.stringify(c))
+  put('s7d', { src: 'claude-code', '7d': '95' })
+  put('sweekly', { src: 'claude-code', weekly: '95' })
+  put('sat', { src: 'claude-code', '7d': 95, at: String(now) })
+  put('slast', { src: 'claude-code', note: 'x', failures: 1, backoff_secs: 60, last: { '7d': '95', at: now } })
+  put('slastat', { src: 'claude-code', note: 'x', failures: 1, backoff_secs: 60, last: { '7d': 95, at: String(now) } })
+  const waits: string[] = []
   const read: Reader = async (e, ms) => { if (e.SKILLATOR_QUOTA_REFRESH_WAIT === '1') waits.push(e.SKILLATOR_PROFILE_DIR!); return NONE(e, ms) }
   const out: string[][] = []
   for (const p of discover(h)) out.push(...await profileRows(p, read, {}, false, true))
-  assert.deepEqual(waits, [`${h}/.claude-past`])
-  assert.equal(out.find(r => r[0] === 'claude-held')![3], 'not refreshed: one turn gave no limits (held 24 h)')
+  assert.deepEqual(waits, [], 'no forced read on an unknown 7d')
+  for (const r of out) assert.equal(r[3], 'not refreshed: last 7d unknown', r[0])
+})
+
+// A236 (9): one stat and one read of quota-cache.json per row (the main row's via note and
+// its model rows share them).
+test('A236: a row reads quota-cache.json once', async () => {
+  const h = home()
+  const c = dir(h, '.claude-once', '.credentials.json')
+  writeFileSync(join(c, 'quota-cache.json'), JSON.stringify({ src: 'claude-code', '5h': 23, '7d': 5, via: 'turn', models: [{ name: 'Opus', '7d': 3 }] }))
+  const p = discover(h)[0]!
+  const hits = { read: 0, stat: 0 }
+  const realRead = fs.readFileSync, realStat = fs.statSync
+  mock.method(fs, 'readFileSync', (f: any, ...a: any[]) => { if (String(f).endsWith('quota-cache.json')) hits.read++; return (realRead as any)(f, ...a) })
+  mock.method(fs, 'statSync', (f: any, ...a: any[]) => { if (String(f).endsWith('quota-cache.json')) hits.stat++; return (realStat as any)(f, ...a) })
+  syncBuiltinESMExports()
+  try {
+    const rows = await profileRows(p, said('src=claude-code 5h=23.0 7d=5.0 ctx=- max=23.0\n'), {}, false, false)
+    assert.deepEqual(rows, [['claude-once', '23%', '5%', 'via one turn'], ['  Opus', '-', '3%', '']])
+  } finally { mock.restoreAll(); syncBuiltinESMExports() }
+  assert.deepEqual(hits, { read: 1, stat: 1 })
 })
 
 test('F176: a reading a forced read got from one tiny turn says so on its row', async () => {

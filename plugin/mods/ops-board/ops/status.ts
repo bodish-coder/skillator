@@ -295,17 +295,23 @@ function loggedIn(p: Profile, darwin: boolean): boolean {
 
 const FRESH_MS = 3 * 3600 * 1000
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? `${Math.round(v)}%` : '-')
-const readCache = (p: Profile): Record<string, any> | null => {
-  try { return JSON.parse(readFileSync(`${p.dir}/quota-cache.json`, 'utf8').replace(/^﻿/, '')) } catch { return null }
+// A236: one stat and one read of the profile cache, shared by everything a row needs from it.
+type Cache = { c: Record<string, any> | null; mtime: number | undefined }
+const loadCache = (p: Profile): Cache => {
+  const f = `${p.dir}/quota-cache.json`
+  let mtime: number | undefined, c: Record<string, any> | null = null
+  try { mtime = statSync(f).mtimeMs } catch { return { c, mtime } }
+  try { c = JSON.parse(readFileSync(f, 'utf8').replace(/^﻿/, '')) } catch { /* corrupt */ }
+  return { c, mtime }
 }
 
 // F176: the per-model windows under a profile - the cache usage-watch's refresh wrote
 // (claude get_usage, agy /usage groups), or for codex the newest fresh rollout's latest
 // rate_limits per named bucket (limit_name set; the unnamed one is the profile row).
-function modelRows(p: Profile): Row[] {
+function modelRows(p: Profile, { c, mtime }: Cache): Row[] {
   if (p.cli === 'codex') return codexModels(p.dir)
-  try { if (Date.now() - statSync(`${p.dir}/quota-cache.json`).mtimeMs > FRESH_MS) return [] } catch { return [] }
-  const models = readCache(p)?.models
+  if (mtime === undefined || Date.now() - mtime > FRESH_MS) return []
+  const models = c?.models
   if (!Array.isArray(models)) return []
   return models.filter(m => typeof m?.name === 'string').map(m => [`  ${m.name}`, num(m['5h']), num(m['7d']), ''])
 }
@@ -369,30 +375,33 @@ const FORCED = new Set(['claude', 'agy', 'muse'])
 // is first read by usage-watch level with SKILLATOR_QUOTA_REFRESH_WAIT - it reads the CLI
 // in the foreground only when the cache is blank or stale, under its lock and backoff (a
 // plain read first would take that lock for a background read); never at a last 7d >= 90%
-// under 7 days old (a failure record's carried `last`, or a legacy `weekly`), nor within 24 h
-// of a turn that gave no limits (`turned_at`), nor past `deadline`.
+// under 7 days old (a failure record's carried `last`, or a legacy `weekly`) or one that is
+// there but not a number (unknown), nor past `deadline`. A turn that gave no limits
+// (`turned_at`) holds only the paid turn - usage-watch's gate keeps it 24 h - not this read.
 export async function profileRows(p: Profile, read: Reader, base: Env, darwin: boolean, refresh: boolean, deadline = Infinity): Promise<Row[]> {
-  let held: number | null = null, late = false, turned = false
+  let held: number | null = null, late = false, unknown = false, cache: Cache | undefined
   if (refresh && FORCED.has(p.cli) && loggedIn(p, darwin)) {
-    const c = readCache(p), now = Date.now() / 1000
+    cache = loadCache(p)
+    const { c } = cache, now = Date.now() / 1000
     // A reading holds for 7 days from its `at` (a top-level one: else the file's mtime); after,
     // a reset is plausible - aged, so the forced read goes ahead (usage-watch's gate decides a turn).
-    const fresh = (at: unknown) => typeof at === 'number' && now - at < 7 * 86400
-    let mtime: number | undefined
-    try { mtime = statSync(`${p.dir}/quota-cache.json`).mtimeMs / 1000 } catch { /* no cache */ }
-    const top = fresh(c?.at ?? mtime) ? c?.['7d'] ?? c?.weekly : undefined
-    const last = top ?? (fresh(c?.last?.at) ? c?.last?.['7d'] ?? c?.last?.weekly : undefined)
-    if (typeof last === 'number' && last >= 90) held = last
-    else if (typeof c?.turned_at === 'number' && now - c.turned_at < 86400) turned = true
+    const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+    const bad = (v: unknown) => v !== undefined && !isNum(v)
+    const fresh = (at: unknown) => isNum(at) && now - at < 7 * 86400
+    const top = c?.['7d'] ?? c?.weekly, l = c?.last, lv = l?.['7d'] ?? l?.weekly
+    unknown = bad(top) || bad(c?.at) || bad(lv) || bad(l?.at)
+    const last = isNum(top) && fresh(c?.at ?? (cache.mtime ?? NaN) / 1000) ? top : fresh(l?.at) ? lv : undefined
+    if (unknown) { /* held */ } else if (isNum(last) && last >= 90) held = last
     else if (Date.now() + REFRESH_MS > deadline) late = true
-    else await read({ ...readerEnv(p, base), SKILLATOR_QUOTA_REFRESH_WAIT: '1' }, REFRESH_MS)
+    else { await read({ ...readerEnv(p, base), SKILLATOR_QUOTA_REFRESH_WAIT: '1' }, REFRESH_MS); cache = undefined }   // rewritten: reload
   }
   let main = await row(p, read, base, darwin)
-  if (held !== null && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', `not refreshed: last 7d ${Math.round(held)}% >= 90%`]
-  else if (turned && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', 'not refreshed: one turn gave no limits (held 24 h)']
+  cache ??= loadCache(p)
+  if (unknown && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', 'not refreshed: last 7d unknown']
+  else if (held !== null && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', `not refreshed: last 7d ${Math.round(held)}% >= 90%`]
   else if (late && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', 'not refreshed: out of time - press p again']
-  else if (!main[3] && (main[1] !== '-' || main[2] !== '-') && readCache(p)?.via === 'turn') main = [main[0], main[1], main[2], 'via one turn']
-  return [main, ...modelRows(p)]
+  else if (!main[3] && (main[1] !== '-' || main[2] !== '-') && cache.c?.via === 'turn') main = [main[0], main[1], main[2], 'via one turn']
+  return [main, ...modelRows(p, cache)]
 }
 
 export function render(rows: Row[]): string {
