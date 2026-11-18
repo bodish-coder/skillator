@@ -68,14 +68,15 @@ function world(on: On, files: Record<string, string>): [World, MockClock] {
   on('fs.write', ($, e) => { w.writes.push(e.path); return { deny: 'the mod must not write files' } })
   on('process.run', async ($, e) => {
     if (e.argv.join(' ') === 'git config user.email') return { value: ran('vidul@ikran.in\n') }
-    if (e.argv.some(a => /(pending|relay-morpheus)\.(sh|ps1)$/.test(a))) return { value: ran('', 1, 'not in this test') }
+    if (e.argv.some(a => /(pending|relay-morpheus)\.(sh|ps1)$/.test(a)) || e.argv.includes('--git-common-dir')) return { value: ran('', 1, 'not in this test') }
     w.runs.push(e.argv)
     return { value: (await w.answer(e.argv)) ?? ran('', 1, 'unexpected call') }
   })
   on('ui.open', ($, e) => { w.opens.push({ id: e.id, focus: e.focus, closeOnEscape: e.closeOnEscape }); return { value: { isPlaced: true as const } } })
   on('ui.close', ($, e) => { w.closes.push(e.id); return { value: undefined } })
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
-  on('ui.focus', () => ({}))
+  on('ui.status', () => ({ value: undefined }))
+  on('ui.focus', { plugin: '*' }, () => ({ value: undefined }))
   return [w, clock]
 }
 
@@ -285,7 +286,6 @@ for (const surface of SURFACES) {
   test(`${surface}: F174 Decide opens chooser and routes (a) assign, (h) holo-ticket read-only, (q) CLI questions prompt, Esc and unknown-ID`, WITH, async ($, on) => {
     const [w, clock] = world(on, { '/r/TICKETS.md': FIXTURE })
     const submits: string[] = []
-    on('ui.status', () => ({ value: undefined }))
     on('prompt.submit', ($, e) => { submits.push(e.text); return { text: e.text } })
     w.answer = argv => {
       if (argv.includes('--ticket')) return ran('ok -> /r/.skillator/holo/ticket-F91.html (standalone page)\n')
@@ -306,7 +306,8 @@ for (const surface of SURFACES) {
 
     // 2. Unknown ID shows no such ticket and offers no chooser actions
     await typeId(pane, 'F404')
-    expect((await pane.find({ key: 'status:current' }))?.text).toContain('no such ticket')
+    // The mock drops a Text's key (it keeps Box, Button and Input keys): match the text.
+    expect(await pane.find({ type: 'Text', text: 'no such ticket' })).toBeTruthy()
     expect(await pane.find({ key: 'decide:assign' })).toBeUndefined()
     expect(await pane.find({ key: 'status:help' })).toBeUndefined()
     expect(await pane.find({ key: 'decide:questions' })).toBeUndefined()
