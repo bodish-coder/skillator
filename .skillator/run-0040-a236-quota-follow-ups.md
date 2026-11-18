@@ -1,6 +1,6 @@
 # RUN-0040 - A236 quota follow-ups
 plan: TICKETS.md
-started: 2026-11-18T11:33Z   updated: 2026-11-18T15:39Z
+started: 2026-11-18T11:33Z   updated: 2026-11-18T15:48Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0040-a236-quota-follow-ups
 branch: run/RUN-0040-a236-quota-follow-ups
 
@@ -8,7 +8,7 @@ branch: run/RUN-0040-a236-quota-follow-ups
 | # | stage | state | owner | heartbeat | landed |
 |---|-------|-------|-------|-----------|--------|
 | 307 | A236 quota gate follow-ups | ~ | build:opus | 2026-11-18T13:23Z | - |
-| 308 | A240 assign tests under the ui.focus-less mock | ~ | build:opus | 2026-11-18T15:25Z | - |
+| 308 | A240 assign tests under the ui.focus-less mock | ~ | build:opus | 2026-11-18T15:48Z | - |
 | 309 | A241 wizard answers follow-ups | ~ | build:opus | 2026-11-18T15:25Z | - |
 | 310 | B32 reproduce agy Health tab | ~ | build:opus | 2026-11-18T15:39Z | - |
 
@@ -96,3 +96,4 @@ fix round (dispatched 13:23Z) prompt: |
 - 2026-11-18T13:23Z - stage 307 back 15a0481..7d078e2 (orchestrator re-run: status+reset 25/0). Review: spare-when-unsure kill rule lets a paid turn outlive its lock on macOS, ps1 without own StartTime, Git Bash grandchildren; reset keeps the lock but kills its reader; same-second KEEP; no-node fallback loses 95%; status unknown never ages. One fix round (critical). Ruling: unreadable start time = kill (pre-A236 behaviour) - the money rule beats the reused-PID risk - cost if wrong: a reused PID's tree killed in a rare race. selftest.ps1:186 'gate: weekly fired below 97' fails on released main too -> separate ticket.
 - 2026-11-18T15:25Z - /pending-sentinel parallel 3: skipped A227/A229/A230 (owner or machine, no code); A236 holds slot 1; slots 2-3 = A240 (308), A241 (309), file-disjoint, each in its own worktree off the run branch. Ruling: B31 and A242 wait for A236 (same watch-cortana/hook files); A238/A239/A243 fill slots as they free while 7d < 97% - cost if wrong: they wait for the weekly reset.
 - 2026-11-18T15:39Z - owner: start next. Ruling: B32 runs reproduce-only as stage 310 (4th agent) - its fix touches ops/status.ts, which A236 is editing; the fix is planned after A236 lands - cost if wrong: one extra dispatch.
+- 2026-11-18T15:48Z - stage 308 (A240) back bfe5059, test-only (assign 6/37 -> 43/43, messages 23/4 -> 27/27 per agent); orchestrator read the 26-line diff: the ui.focus stub answers {plugin:'*'} with {value}, stale expectations updated to F178/A175/F174 behaviour. Ruling: merge held until stage 307 lands - its agent commits in the run worktree - cost if wrong: A240 lands an hour later. Leftover: alphabet/pane/status/explorer/log/reconcile/runtab tests keep the old ui.focus stub -> ticket.
