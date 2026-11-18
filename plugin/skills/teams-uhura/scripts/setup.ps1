@@ -47,8 +47,27 @@ function Repair-Winget {
 function Open-TunnelWindow { Start-Process -FilePath (Get-Command devtunnel -CommandType Application | Select-Object -First 1).Source -ArgumentList 'host', $Tunnel -WindowStyle Normal }
 # A226 h: a command line it cannot read (elevated, another user's) is hosted-unknown - taken as
 # hosted, never listed to stop; one that exited before CIM is ignored. A235 5: $script:Blind says
-# the answer rests on one it could not read
-function TunnelHosted([string]$name = '', [int]$port = 0, [switch]$Ids) { $target = if ($name) { $name } elseif ($Tunnel) { $Tunnel } else { 'skillator-teams' }; $blind = $false; foreach ($p in @(Get-Process devtunnel -ErrorAction SilentlyContinue)) { $cmd = $p.CommandLine; if (-not $cmd -and $p.Id) { try { $ci = Get-CimInstance Win32_Process -Filter "ProcessId = $($p.Id)" -ErrorAction SilentlyContinue; if (-not $ci) { continue }; $cmd = $ci.CommandLine } catch {} }; if (-not $cmd) { $blind = $true; continue }; if ($cmd -notmatch '\bhost\b' -or $cmd -notmatch ('(^|\s|[`"''\\])' + [regex]::Escape($target) + '($|\s|[`"''\\])')) { continue }; if ($port -gt 0 -and $cmd -match '(?i)(?:-p|--port)\s+(\d+)' -and [int]$Matches[1] -ne $port) { continue }; if ($Ids) { $p.Id; continue }; return $true }; if (-not $Ids) { $script:Blind = $blind; $blind } }
+# the answer rests on one it could not read. A readable match answers at once; CIM runs only
+# for the rest, and only when no readable one matched
+function TunnelHosted([string]$name = '', [int]$port = 0, [switch]$Ids) {
+  $target = if ($name) { $name } elseif ($Tunnel) { $Tunnel } else { 'skillator-teams' }
+  $script:Blind = $false
+  $ours = { param($cmd) $cmd -match '\bhost\b' -and $cmd -match ('(^|\s|[`"''\\])' + [regex]::Escape($target) + '($|\s|[`"''\\])') -and -not ($port -gt 0 -and $cmd -match '(?i)(?:-p|--port)\s+(\d+)' -and [int]$Matches[1] -ne $port) }
+  $rest = @()
+  foreach ($p in @(Get-Process devtunnel -ErrorAction SilentlyContinue)) {
+    if (-not $p.CommandLine) { $rest += $p; continue }
+    if (& $ours $p.CommandLine) { if (-not $Ids) { return $true }; $p.Id }
+  }
+  $blind = $false
+  foreach ($p in $rest) {
+    $cmd = $null
+    if ($p.Id) { try { $ci = Get-CimInstance Win32_Process -Filter "ProcessId = $($p.Id)" -ErrorAction SilentlyContinue; if (-not $ci) { continue }; $cmd = $ci.CommandLine } catch {} }
+    if (-not $cmd) { $blind = $true; continue }
+    if (& $ours $cmd) { if (-not $Ids) { return $true }; $p.Id }
+  }
+  $script:Blind = $blind
+  if (-not $Ids) { $blind }
+}
 
 function Step-Node {
   if (-not (Has 'node')) { Say 'node: missing - install Node.js 18 or later from https://nodejs.org/ , open a new terminal, run this again'; return $null }
@@ -166,7 +185,6 @@ function Get-Arm {
         $a['expires'] = ExpiryOf $t.out
       } else { $a['tunnel'] = 'none' }
     }
-    $script:Blind = $false
     if (TunnelHosted $Tunnel $port) { $a['hosted'] = '1' }
     # A235 5: hosted, as ruled (fails safe) - and said, never a failure
     if ($script:Blind) { $a['note'] = 'a devtunnel this board cannot inspect is running' }
@@ -337,6 +355,15 @@ if ($args -contains '--selftest' -or $args -contains '-selftest') {
   $script:Gone = $false
   $script:CimLine = 'devtunnel host other'; if (TunnelHosted $Tunnel 3978) { Fail 'h: another tunnel was taken as hosted' }
   $script:CimLine = "devtunnel host $Tunnel"; if (-not (TunnelHosted $Tunnel 3978) -or "$(TunnelHosted $Tunnel 3978 -Ids)" -ne '7') { Fail 'h: this tunnel was not seen' }
+  # A235 fix 4: a readable match answers at once - no CIM for the unreadable one, Blind reset
+  function Get-Process { @([pscustomobject]@{ Id = 7; CommandLine = $null }, [pscustomobject]@{ Id = 8; CommandLine = "devtunnel host $Tunnel" }) }
+  function Get-CimInstance { $script:CimCalls++; [pscustomobject]@{ CommandLine = $null } }
+  $script:CimCalls = 0; $script:Blind = $true
+  if (-not (TunnelHosted $Tunnel 3978) -or $script:CimCalls -or $script:Blind) { Fail "4: a readable match: cim=$($script:CimCalls) blind=$($script:Blind)" }
+  if ("$(TunnelHosted $Tunnel 3978 -Ids)" -ne '8') { Fail '4: -Ids with a readable match' }
+  function Get-Process { @([pscustomobject]@{ Id = 7; CommandLine = $null }) }
+  $script:Blind = $false
+  if (-not (TunnelHosted $Tunnel 3978) -or -not $script:Blind) { Fail '4: an unreadable devtunnel alone did not set Blind' }
   Remove-Item function:Get-Process, function:Get-CimInstance
   $RealHosted = ${function:TunnelHosted}; $RealStop = ${function:Stop-Tunnel}
   function TunnelHosted { $S.clock += $S.probe; $h = [bool]$S.hosted; if ($h -and $S.dies) { $S.hosted = $false }; $h }
