@@ -1,6 +1,6 @@
 # RUN-0040 - A236 quota follow-ups
 plan: TICKETS.md
-started: 2026-11-18T11:33Z   updated: 2026-11-18T16:06Z
+started: 2026-11-18T11:33Z   updated: 2026-11-18T17:00Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0040-a236-quota-follow-ups
 branch: run/RUN-0040-a236-quota-follow-ups
 
@@ -11,8 +11,52 @@ branch: run/RUN-0040-a236-quota-follow-ups
 | 308 | A240 assign tests under the ui.focus-less mock | x | build:opus | 2026-11-18T16:06Z | 2a27092 |
 | 309 | A241 wizard answers follow-ups | x | build:opus | 2026-11-18T16:06Z | ddde1bf |
 | 310 | B32 reproduce agy Health tab | ~ | build:opus | 2026-11-18T15:57Z | - |
+| 311 | B32 fix agy Health tab | ~ | build:opus | 2026-11-18T17:00Z | - |
+| 312 | B31 selftest.ps1 weekly gate | ~ | build:opus | 2026-11-18T17:00Z | - |
+| 313 | A244 ui.focus stubs in seven mod tests | ~ | build:opus | 2026-11-18T17:00Z | - |
 
 ## In flight
+### stage 313 (dispatched 17:00Z)
+prompt: |
+  grade: bounded · critical no · design - · build build=opus · verify orchestrator review · ceremony full (relay run) · ui tron · mode single (ruled) · usage 7d 95%
+  
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+  You are the build agent for RUN-0040 stage 313, ticket A244, in the skillator repo. Work and commit ONLY in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0040-s313 (branch run/RUN-0040-s313, off main). Never the main checkout, never push, never edit TICKETS.md. Low memory: one test process at a time, timeout 300, stdin closed; commit after each item goes green. SAFETY: never a real claude/agy/muse call - stub them first on PATH using a /c/... (Git Bash) path, never C:/..., and confirm with `command -v` that the stub resolves before any run; temp HOME/USERPROFILE. A real call is a stop.
+  Read the A244 line in TICKETS.md whole. Apply A240's fix (see plugin/mods/ops-board/tests/assign.test.tsx: on('ui.focus', { plugin: '*' }, ... => ({ value: undefined }))) to the alphabet, pane, status, explorer, log, reconcile and runtab tests under plugin/mods/ops-board/tests, run each under claude plugin test on a copy of the mod (as A240 did), and update expectations only where the product changed on purpose (cite the ticket). Tests only; product code only if it is really wrong, and say why. The pane suite is long - run it in parts. Commit per file.
+  Commit messages start 'A244:' and end with
+  Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+  Report in under 10 lines: sha per file, before/after counts per suite, anything not done.
+  
+
+### stage 312 (dispatched 17:00Z)
+prompt: |
+  grade: bounded · critical no · design - · build build=opus · verify orchestrator review · ceremony full (relay run) · ui none · mode single (ruled) · usage 7d 95%
+  
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+  You are the build agent for RUN-0040 stage 312, ticket B31, in the skillator repo. Work and commit ONLY in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0040-s312 (branch run/RUN-0040-s312, off main). Never the main checkout, never push, never edit TICKETS.md. Low memory: one test process at a time, timeout 300, stdin closed; commit after each item goes green. SAFETY: never a real claude/agy/muse call - stub them first on PATH using a /c/... (Git Bash) path, never C:/..., and confirm with `command -v` that the stub resolves before any run; temp HOME/USERPROFILE. A real call is a stop.
+  Read the B31 line in TICKETS.md whole. REPRODUCE FIRST: plugin/skills/watch-cortana/hooks/selftest.ps1 throws 'gate: weekly fired below 97' at ~line 186. Find whether the gate threshold or the test is wrong (the standing 7-day stop is 97%), with evidence; check whether the selftest reads the owner's real usage instead of its fixture (a leak would explain firing at today's 95%). Fix the cause, keep usage-watch.sh and usage-watch.ps1 in step, and make selftest.ps1 run end to end (its sh cases too). If you cannot reproduce, stop and report what you tried.
+  Commit messages start 'B31:' and end with
+  Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+  Report in under 10 lines: root cause (verified/inferred), shas, red then green, selftest results (ps1 and sh).
+  
+
+### stage 311 (dispatched 17:00Z)
+prompt: |
+  grade: bounded · critical no · design - · build build=opus · verify orchestrator review · ceremony full (relay run) · ui tron · mode single (ruled) · usage 7d 95%
+  
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+  You are the build agent for RUN-0040 stage 311, ticket B32 (FIX), in the skillator repo. Work and commit ONLY in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0040-s310 (branch run/RUN-0040-s310; it holds stage 310's failing test 9b260a2 plugin/mods/ops-board/ops/tests/b32.test.mts and is merged with main). Never the main checkout, never push, never edit TICKETS.md. Low memory: one test process at a time, timeout 300, stdin closed; commit after each item goes green. SAFETY: never a real claude/agy/muse call - stub them first on PATH using a /c/... (Git Bash) path, never C:/..., and confirm with `command -v` that the stub resolves before any run; temp HOME/USERPROFILE. A real call is a stop.
+  Read the B32 line in TICKETS.md (main checkout C:/tools/Projects/skillator2) whole - its Repro part names the four root causes. Fix test-first:
+  (a) ownProfile in ops/status.ts treats ANTIGRAVITY_APP_DATA_DIR as agy (as usage-watch does); ops.ps1/ops.sh -Open pass the CLI identity (SKILLATOR_CLI and the profile dir env present at launch) into the new terminal tab; the antigravity skillator-ops command (host-commands/antigravity/skillator-ops) sets SKILLATOR_CLI=agy. b32 test 2 goes green.
+  (b) The per-model table is read once at open (one background read, not a paid turn - plain get_usage/level only, never --refresh), and the per-profile read budget is raised from 5 s to 15 s so a 3-7 s level read fits. While reading, the ops app says 'reading every profile...' like the pane.
+  (c) Health at 80x24 never silently clips: the body scrolls (the keys the other ops tabs use) or shows a '+N more' marker; Disk, Hold and Stale locks stay reachable. b32 test 1 goes green.
+  (d) On-demand refresh: p re-reads status on demand (already exists) - make sure the help/footer says so in the agy board too. Do not make pollSlow parallel (out of scope).
+  Run b32, status, draw/health and engine ops tests with the loader (plugin/mods/ops-board/ops: node --import ./loader.mjs --test tests/<f>), then capture Health at 80x24 and 120x30 with agy's env the way stage 310 did (scratchpad b32/frames) and put the new frame paths in the report.
+  Commit messages start 'B32:' and end with
+  Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+  Report in under 12 lines: shas, red then green per item, suite counts, frame paths, stub real-call count (0).
+  
+
 ### stage 310 (dispatched 15:39Z, own worktree RUN-0040-s310)
 prompt: |
   grade: bounded · critical no · design - · build build=opus · verify orchestrator · ceremony full (relay run) · ui tron · mode single (ruled) · usage 7d 94%
@@ -58,3 +102,4 @@ prompt: |
 - 2026-11-18T15:57Z - stage 310 (B32 repro) back: failing test 9b260a2 (tests only). Root causes (verified unless noted): (1) usage rows never fill - ownProfile (status.ts ~55) ignores ANTIGRAVITY_APP_DATA_DIR and the wt new-tab from ops.ps1 -Open passes no SKILLATOR_CLI/AGY_CONFIG_DIR (inferred), so usage-watch level returns src=none; (2) per-model table only after p, and each profile read hits the 5 s budget (one level read 3.2-7.5 s); (3) Health clipped at 80x24 with no scroll or marker (Disk/Hold/Stale locks vanish); (4) loading rows resolve in 4-12 s (serial pollSlow). Fix touches ops.ps1/ops.sh, the agy skillator-ops SKILL.md, status.ts (after 307), draw.ts, maybe engine.ts. INCIDENT: the agent's first run put a C:/ path on Git Bash PATH, the stubs were skipped, and one real 'agy -p /usage' ran at 21:18 with a temp AGY_CONFIG_DIR; owner's profile dirs untouched; later runs stub-verified. Ruling: B32 fix is planned after 307 lands - status.ts overlap.
 - 2026-11-18T16:07Z - stage 307 fix round back 72f82ce..b5efc06 (agent: quota-refresh sh 33 / ps1 31, ops 342/344 with the failure fixed in b5efc06; orchestrator: status+reset 27/0, read the kill changes - unreadable start kills, taskkill /T on every Windows PID). Landed by the stop rule as b5efc06. Ruling: no review of this fix round at 7d 95% - it restores the pre-A236 kill-when-unsure rule and is tested - leftover review in A246. 308 and 309 merged. 310 stays on its branch (a deliberately failing test) for the B32 fix stage.
 - 2026-11-18T16:26Z - released 4.30.1 / 0.18.1: run merged into main cb2c034; checks green (routing, tickets, commands, holo 73/0, self-update selftest, ops 338 + 5 PowerShell timing flakes that pass alone 6/0 and 2/0, 0 stub hits); bump 91c353c pushed e54be92..91c353c as bodish-coder, switched back. Owner approved. s308/s309 worktrees removed; the run and stage 310 (B32) stay open for the B32 fix after the weekly reset.
+- 2026-11-18T17:00Z - owner: do the not-started tickets in parallel. A227/A229/A230 are the owner's (Teams admin, real token, machine). Ruling: 3 at once (owner's parallel 3, ~3 GB free): B32 fix (311, in s310's worktree), B31 (312), A244 (313) - file-disjoint; the other six wait - 7d at 95%, the 97% stop halts all agents with a handoff - cost if wrong: stages stopped mid-flight, resumable from their prompts. Stub PATH must be a /c/ path (stage 310's real-agy-call lesson).
