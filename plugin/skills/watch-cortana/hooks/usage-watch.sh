@@ -359,16 +359,17 @@ if [ "$mode" = refresh ]; then
   # F176: each claude call is capped (secs, function); on expiry its whole process
   # tree is killed, so no read outlives the lock.
   # Parent first (its children listed beforehand), so nothing it runs gets to finish.
-  # A236: only a listed child whose start tick (from /proc) is readable and not before its
-  # parent's is ours; one that started earlier is an orphan whose dead parent's PID was
-  # reused, and one that cannot be read or compared is unverified - neither is killed.
+  # A listed child is spared only when provably not ours: its start tick (from /proc) and
+  # its parent's are readable and its start is strictly earlier - an orphan whose dead
+  # parent's PID was reused. No /proc (macOS) or an unreadable start kills it: a capped paid
+  # turn must never outlive its lock.
   # taskkill /T walks a Windows tree with no such check, so only the capped call's own
   # process (no $2) gets it; a listed child is killed alone.
   started() { sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '{ print $20 }'; }
   kill_tree() {
     t=$(started "$1"); w=/T; [ -z "$2" ] || w=
     set -- "$1" $(ps -ef 2>/dev/null | awk -v p="$1" '$3 == p { print $2 }' |
-      while read -r c; do s=$(started "$c"); [ -n "$t" ] && [ -n "$s" ] && [ "$s" -ge "$t" ] 2>/dev/null && echo "$c"; done)
+      while read -r c; do s=$(started "$c"); [ -n "$t" ] && [ -n "$s" ] && [ "$s" -lt "$t" ] 2>/dev/null || echo "$c"; done)
     [ -r "/proc/$1/winpid" ] && MSYS_NO_PATHCONV=1 taskkill $w /F /PID "$(cat "/proc/$1/winpid")" >/dev/null 2>&1
     kill -9 "$1" 2>/dev/null
     shift

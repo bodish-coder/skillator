@@ -817,13 +817,13 @@ for (const port of ['ps1', 'sh']) {
     }
   })
 
-  // A236 (3, 8): sh kill_tree kills only a child whose start is readable and not before its
-  // parent's (a reused PID can never take down an unrelated tree); taskkill /T only on the
-  // capped call's own process, never on a listed child.
-  test(`${port}: A236 kill_tree spares a child whose start cannot be read or is earlier; /T only on the root`, { skip: port !== 'sh' || skip }, () => {
+  // A236 fix round (1): a capped paid turn never outlives its lock - kill_tree spares a listed
+  // child only when its start is readable and strictly earlier than its parent's (provably an
+  // orphan on a reused PID); no /proc (macOS) or an unreadable start kills it, as before A236.
+  test(`${port}: A236 kill_tree spares only a child with a readable start earlier than its parent's`, { skip: port !== 'sh' || skip }, () => {
     const src = readFileSync(`${hooksDir}/usage-watch.sh`, 'utf8')
     const fns = src.slice(src.indexOf('  started() {'), src.indexOf('  capped() {'))
-    for (const [pt, ct, killed] of [['100', '', false], ['100', 'abc', false], ['100', '200', true], ['100', '100', true], ['100', '50', false], ['', '200', false]]) {
+    for (const [pt, ct, killed] of [['100', '', true], ['100', 'abc', true], ['100', '200', true], ['100', '100', true], ['100', '50', false], ['', '200', true], ['', '', true]]) {
       const root = mkdtempSync(join(tmpdir(), 'kill-tree-')).replace(/\\/g, '/')
       try {
         const harness = `${fns}
