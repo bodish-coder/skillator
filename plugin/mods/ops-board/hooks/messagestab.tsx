@@ -237,19 +237,28 @@ async function markRead($: EngineInterface) {
 // --- F177: connect Teams. c runs setup --arm, d setup --disarm, y copies the URL. Only the
 // owner's key press reaches team-arm; entering the tab runs --status (a read). ---
 let armBusy = false
-async function runArm($: EngineInterface, call: 'team-arm' | 'team-disarm' | 'team-arm-status' | 'team-url-ack') {
+let ackAfter: string | null = null                 // the URL y copied while an arm was in flight
+async function runArm($: EngineInterface, call: 'team-arm' | 'team-disarm' | 'team-arm-status' | 'team-url-ack', args: string[] = []) {
   const quiet = call === 'team-arm-status' || call === 'team-url-ack'
   if (armBusy) { if (!quiet) $.ui.toast('Teams: still working - one moment'); return }
   if (!quiet) armBusy = true
   try {
-    const r = await runCall($, call, [])
+    const r = await runCall($, call, args)
     if (quiet && armBusy) return                    // an arm or disarm started meanwhile is the newer read
+    // a toast never carries the URL: the ack's argument is replaced by value
+    const said = (s: string) => args.filter(Boolean).reduce((t, a) => t.split(a).join('<url>'), [s, ran(r.argv)].join('\n'))
     const v = parseArm(r.out)
-    if (!v) { if (!quiet) $.ui.toast(`✗ Teams: ${why(r)}\n${ran(r.argv)}`, { timeoutMs: 8000 }); return }
+    if (!v) { if (!quiet) $.ui.toast(said(`✗ Teams: ${r.code === 0 ? 'unexpected output from teams-uhura' : why(r)}`), { timeoutMs: 8000 }); return }
     await update($, armA, () => v)
-    const said = armToast(v)
-    if (said) $.ui.toast([said, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
-  } finally { if (!quiet) armBusy = false }
+    const toast = armToast(v)
+    if (toast) $.ui.toast(said(toast), { timeoutMs: 8000 })
+  } finally {
+    if (!quiet) {
+      armBusy = false
+      const url = ackAfter; ackAfter = null
+      if (url) await runArm($, 'team-url-ack', [url])
+    }
+  }
 }
 
 async function copyUrl($: EngineInterface) {
@@ -258,7 +267,9 @@ async function copyUrl($: EngineInterface) {
   const r = await copyHost($, v.url)
   if (r.code !== 0) { $.ui.toast(`✗ not copied: ${r.err.trim() || 'clipboard unavailable'} - read it on the Messages tab`); return }
   $.ui.toast('✓ tunnel URL copied - paste it as the Teams outgoing webhook callback URL')
-  if (v.urlChanged) await runArm($, 'team-url-ack')
+  // the ack carries the URL copied, so a newer one is never remembered in its place; under a
+  // connect or disconnect in flight it runs once that is done
+  if (v.urlChanged) { if (armBusy) ackAfter = v.url; else await runArm($, 'team-url-ack', [v.url]) }
 }
 
 // --- drawing ---

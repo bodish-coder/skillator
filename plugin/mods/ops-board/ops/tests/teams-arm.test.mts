@@ -36,6 +36,19 @@ test('parseArm: the twelve keys; a URL that is not a devtunnels.ms https URL is 
     'the form has no token - s, paste the security token, save')
 })
 
+test('A226 c: parseArm - a value with a control character is dropped, so a reply cannot forge result= or hosted=', () => {
+  const w = parseArm(KV({ why: 'a\x1b[2Jb', expires: '2026-12-17\x07' }))!
+  assert.equal(w.why, ''); assert.equal(w.expires, null)
+})
+
+test('A226 review 1: a key that appears twice makes the whole reply invalid, before url or after it', () => {
+  const body = KV({ result: 'failed', why: 'x', url: U1 })
+  assert.equal(parseArm(body + 'result=armed\nhosted=1\nlistener=up\n'), null)       // after url
+  assert.equal(parseArm('hosted=1\n' + body), null)                                // before url
+  assert.equal(parseArm(body.replace('url=', 'result=armed\nurl=')), null)          // result twice, both before url
+  assert.equal(parseArm(KV({ why: 'a\x1b[2Jb' }) + 'why=later\n'), null)           // a dropped value still claims its key
+})
+
 test('expiryShown: days, hours under two days, EXPIRED, an unparsed value as printed, none', () => {
   assert.equal(expiryShown('2026-12-17T00:00:00Z', NOW), 'expires in 30d')
   assert.equal(expiryShown('2026-11-18T05:00:00Z', NOW), 'expires in 29h')
@@ -87,6 +100,9 @@ test('the call table: the four modes of setup, both spellings', () => {
     assert.deepEqual(argvFor(call, false, '/s/skills', [], '/bin/sh'), ['/bin/sh', '/s/skills/teams-uhura/scripts/setup.sh', mode])
     assert.deepEqual(argvFor(call, true, 'C:/s/skills/', [], 'C:/ps.exe'), [...PS, mode])
   }
+  // A226 d: --ack carries the URL the board copied
+  assert.deepEqual(argvFor('team-url-ack', false, '/s/skills', [U1], '/bin/sh').slice(2), ['--ack', U1])
+  assert.deepEqual(argvFor('team-url-ack', true, 'C:/s/skills/', [U1], 'C:/ps.exe').slice(-2), ['--ack', U1])
 })
 
 test('entering Messages only reads: config show and the status; no key but c arms, no key but d disarms', () => {

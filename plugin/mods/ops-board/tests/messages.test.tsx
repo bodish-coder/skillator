@@ -41,7 +41,7 @@ const KV = (o: Record<string, string> = {}) => Object.entries({ result: 'status'
   hosted: '0', listener: 'down', port: '3978', url: '', url_changed: '0', expires: '', ...o }).map(([k, v]) => `${k}=${v}`).join('\n') + '\n'
 const ARMED = { result: 'armed', hosted: '1', listener: 'up', url: U1 }
 
-type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string }[]; toasts: string[]; cfg: string; save: ProcessRunResult; auth: ProcessRunResult | Promise<ProcessRunResult>; check?: ProcessRunResult | Promise<ProcessRunResult>; focuses: string[]; arm: Record<string, ProcessRunResult>; cfgRun?: ProcessRunResult }
+type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string }[]; toasts: string[]; cfg: string; save: ProcessRunResult; auth: ProcessRunResult | Promise<ProcessRunResult>; check?: ProcessRunResult | Promise<ProcessRunResult>; focuses: string[]; arm: Record<string, ProcessRunResult | Promise<ProcessRunResult>>; cfgRun?: ProcessRunResult }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
@@ -89,7 +89,7 @@ function world(on: On, cfg = CFG_SET, repoRoot = '/r', commonGitDir: string | nu
     if (a.join(' ') === 'git config user.email') return { value: ran('vidul@ikran.in\n') }
     w.runs.push({ argv: a, stdin: e.init?.stdin })
     // F177: the setup script's board modes, answered from the fixture - nothing is started
-    if (a[0] === '/bin/sh' && a[1] === SETUP_SH && w.arm[a[2] ?? '']) return { value: w.arm[a[2]!]! }
+    if (a[0] === '/bin/sh' && a[1] === SETUP_SH && w.arm[a[2] ?? '']) return { value: await w.arm[a[2]!]! }
     if (a[0] === '/usr/bin/pbcopy') return { value: ran('') }
     if ((a[0] === NODE || a[0] === 'C:/tools/node.exe') && a[1] === TEAM_JS) {
       if (a[2] === 'config' && a[3] === 'show') return { value: w.cfgRun ?? ran(w.cfg) }
@@ -539,6 +539,12 @@ test('F177 refusals: devtunnel missing, not signed in, no token - a toast each, 
     expect((await ui.find({ key: 'arm' }))?.text).toContain('○ tunnel not hosted · ○ listener down')
   }
   expect((await ui.find({ key: 'arm' }))?.text).toContain('form: no token')
+  // A226 review 1: a key twice - the reply is not read, and the toast says so without echoing it
+  w.arm = { '--arm': ran(KV({ result: 'refused', why: 'x' }) + 'result=armed\nhosted=1\n') }
+  await ui.press({ key: 'key:connect' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toContain('✗ Teams: unexpected output from teams-uhura')
+  expect(w.toasts.at(-1)).not.toContain('hosted=1')
   // the script could not run: a toast, no crash
   w.arm = {}
   await ui.press({ key: 'key:connect' })
@@ -568,10 +574,32 @@ test('F177 URL guard frames: unchanged URL - no warning; changed - the warning w
   expect(shown[0]).toContain('▲ tunnel URL changed - update the Teams outgoing webhook callback to')
   expect(shown.join('\n')).toContain(U2)
   expect((await ui.find({ key: 'arm:url' }))?.text).toContain(U2)
+  // A226 review 1: y while c is in flight - copied, and acked once the arm is done, with no second press
+  let finish!: (r: ProcessRunResult) => void
+  w.arm['--arm'] = new Promise(resolve => { finish = resolve })
+  await ui.press({ key: 'key:connect' })
+  await clock.settle()
   await ui.press({ key: 'key:copyurl' })
   await clock.settle()
   expect(w.runs.filter(r => r.argv[0] === '/usr/bin/pbcopy').at(-1)?.stdin).toBe(U2)
+  expect(modes()).not.toContain('--ack')                     // not under the arm
+  finish(ran(KV({ ...ARMED, url: U2, url_changed: '1' })))
+  await clock.settle()
   expect(modes().at(-1)).toBe('--ack')                       // the owner took the new URL
+  expect(modes().filter(m => m === '--ack')).toHaveLength(1)
+  expect(w.runs.filter(r => r.argv[1] === SETUP_SH).at(-1)?.argv[3]).toBe(U2)  // A226 d: the URL copied, not the one read at ack time
+  expect(w.toasts.join('\n')).not.toContain('devtunnels.ms')
   expect(await warns()).toEqual([])
+  // A226 review 1: a failed ack's toast names the URL by <url>, redacted by value
+  w.arm = { '--status': ran(KV({ ...ARMED, result: 'status', url: U2, url_changed: '1' })), '--ack': ran(KV({ ...ARMED, result: 'failed', why: 'no tunnel URL to remember', url: '' })) }
+  await ui.press({ key: 'tab:tickets' })
+  await clock.settle()
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  await ui.press({ key: 'key:copyurl' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toContain('✗ Teams: no tunnel URL to remember')
+  expect(w.toasts.at(-1)).toContain(' --ack <url>')
+  expect(w.toasts.join('\n')).not.toContain('devtunnels.ms')
   await ui.unmount()
 })
