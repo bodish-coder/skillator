@@ -1,6 +1,6 @@
 # RUN-0040 - A236 quota follow-ups
 plan: TICKETS.md
-started: 2026-11-18T11:33Z   updated: 2026-11-18T13:23Z
+started: 2026-11-18T11:33Z   updated: 2026-11-18T15:25Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0040-a236-quota-follow-ups
 branch: run/RUN-0040-a236-quota-follow-ups
 
@@ -8,8 +8,34 @@ branch: run/RUN-0040-a236-quota-follow-ups
 | # | stage | state | owner | heartbeat | landed |
 |---|-------|-------|-------|-----------|--------|
 | 307 | A236 quota gate follow-ups | ~ | build:opus | 2026-11-18T13:23Z | - |
+| 308 | A240 assign tests under the ui.focus-less mock | ~ | build:opus | 2026-11-18T15:25Z | - |
+| 309 | A241 wizard answers follow-ups | ~ | build:opus | 2026-11-18T15:25Z | - |
 
 ## In flight
+### stage 309 (dispatched 15:25Z, own worktree RUN-0040-s309)
+prompt: |
+  grade: bounded · critical no · design - · build build=opus · verify orchestrator review · ceremony full (relay run) · ui none · mode single (ruled) · usage 7d 93%
+  
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+  You are the build agent for RUN-0040 stage 309, ticket A241, in the skillator repo. Work and commit ONLY in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0040-s309 (branch run/RUN-0040-s309). Never the main checkout, never push, never edit TICKETS.md. Read the A241 line in TICKETS.md (main checkout C:/tools/Projects/skillator2) whole first: items (1)-(8) in plugin/skills/holo-r2d2/scripts/answers.mjs and tests/answers.test.mjs.
+  Test-first, red then green, for (1)-(5) as the ticket's Done line says; (6)-(8) are small cleanups in the same file (one isRunId shared by openSets and report, the untimed predicate, lazy stat). For (2) use the run file's updated: stamp (parseRun's run.updated) instead of the file mtime.
+  Low memory: one test process at a time, timeout 300, stdin closed. Run tests/answers.test.mjs and node holo.mjs --selftest. Commit after each item goes green. Commit messages start 'A241:' and end with
+  Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+  Report in under 10 lines: shas, red then green per item, suite counts.
+  
+
+### stage 308 (dispatched 15:25Z, own worktree RUN-0040-s308)
+prompt: |
+  grade: bounded · critical no · design - · build build=opus · verify orchestrator review · ceremony full (relay run) · ui tron · mode single (ruled) · usage 7d 93%
+  
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+  You are the build agent for RUN-0040 stage 308, ticket A240, in the skillator repo. Work and commit ONLY in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0040-s308 (branch run/RUN-0040-s308). Never the main checkout, never push, never edit TICKETS.md. Read the A240 line in TICKETS.md (main checkout C:/tools/Projects/skillator2) whole first.
+  Goal: plugin/mods/ops-board/tests/assign.test.tsx passes under the current claude plugin test mock, which has no ui.focus. Reproduce first (claude plugin test on a copy of the mod, as earlier stages did), then fix the tests or the harness - stub ui.focus in the test setup, or drive focus the way the mock supports. Change product code only if the code itself is wrong; say why if so. The same ui.focus failure hits 2 tests in tests/messages.test.tsx - fix those the same way.
+  Low memory: one test process at a time, timeout 300, stdin closed. Commit after green. Commit messages start 'A240:' and end with
+  Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+  Report in under 10 lines: sha, before/after counts for assign.test.tsx and messages.test.tsx, anything not done.
+  
+
 ### stage 307 - A236 quota gate follow-ups (dispatched 11:34Z)
 prompt: |
   grade: bounded · critical yes (money: paid quota turns) · design - · build build=opus · verify orchestrator review · ceremony full (relay run) · ui none · mode single (ruled) · usage 5h 60% 7d 90%
@@ -56,3 +82,4 @@ fix round (dispatched 13:23Z) prompt: |
 ## Rulings
 - 2026-11-18T11:34Z - Ruling: A236 item 4 (one shared gate for usage-watch.sh/.ps1/status.ts) stays on the ticket; this round fixes the bugs only - 7d at 90% - cost if wrong: the three copies stay hand-synced one more release. Ruling: mode single - every item touches the same usage-watch/status files.
 - 2026-11-18T13:23Z - stage 307 back 15a0481..7d078e2 (orchestrator re-run: status+reset 25/0). Review: spare-when-unsure kill rule lets a paid turn outlive its lock on macOS, ps1 without own StartTime, Git Bash grandchildren; reset keeps the lock but kills its reader; same-second KEEP; no-node fallback loses 95%; status unknown never ages. One fix round (critical). Ruling: unreadable start time = kill (pre-A236 behaviour) - the money rule beats the reused-PID risk - cost if wrong: a reused PID's tree killed in a rare race. selftest.ps1:186 'gate: weekly fired below 97' fails on released main too -> separate ticket.
+- 2026-11-18T15:25Z - /pending-sentinel parallel 3: skipped A227/A229/A230 (owner or machine, no code); A236 holds slot 1; slots 2-3 = A240 (308), A241 (309), file-disjoint, each in its own worktree off the run branch. Ruling: B31 and A242 wait for A236 (same watch-cortana/hook files); A238/A239/A243 fill slots as they free while 7d < 97% - cost if wrong: they wait for the weekly reset.
