@@ -178,9 +178,15 @@ async function saveSetup($: EngineInterface) {
   const bad = setupError(draft, await read($, teamsCfgA))
   if (bad) { await bump($, { result: bad }); return }
   const r = await runCall($, 'team-config-save', [], setupJson(draft))
-  if (r.code !== 0) { await bump($, { result: why(r) }); return }
   const said = r.out.trim().split(/\r?\n/)[0] ?? ''
-  $.ui.toast([`✓ Teams settings saved${said ? ' - ' + said : ''}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+  // B29: only teams-uhura's 'saved: <path>' line is a save - an exit 0 that says nothing saved nothing
+  const failed = r.code !== 0 ? why(r) : said.startsWith('saved: ') ? null : 'teams-uhura did not say it saved' + (said ? ': ' + said : '')
+  if (failed) {
+    $.ui.toast([`✗ Teams settings not saved: ${failed}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+    await bump($, { result: failed })
+    return
+  }
+  $.ui.toast([`✓ Teams settings saved - ${said}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
   await closeSetup($)
   await refreshCfg($, false)
 }
