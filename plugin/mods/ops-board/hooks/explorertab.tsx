@@ -173,7 +173,8 @@ export async function openAction($: EngineInterface, kind: ActionKind): Promise<
   const to = kind === 'push' && here.branch !== 'HEAD' ? await git($, 'for-each-ref', pushToArgs(here.branch)) : null
   const gitDir = kind !== 'fetch' ? await git($, 'rev-parse', GIT_DIR_ARGS) : null
   const outgoing = kind === 'push' ? await git($, 'log', OUTGOING_ARGS) : null
-  const failed = [branches, to, gitDir, outgoing].find(r => r && !r.ok)
+  // outgoing only feeds the review: its failure (no upstream, detached HEAD) must not mask the plan's own refusal
+  const failed = [branches, to, gitDir].find(r => r && !r.ok)
   if (failed && !failed.ok) { $.ui.toast('■ ' + failed.err); return }
   let inProgress: string | null = null
   const dir = lines(gitDir)[0]

@@ -72,11 +72,12 @@ function world(on: On, files: Record<string, string>, env: Record<string, string
   })
   on('ui.close', ($, e) => { w.closes.push(e.id); return { value: undefined } })
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
+  on('ui.status', () => ({ value: undefined }))
   on('ui.scroll', ($, e) => { w.scrolls.push(e.offset); return {} })
   // The person's ring moves (select). The mod's own $.ui.focus onto a form's first
   // element is not answered by the mock engine (no ring beneath it): it is caught,
   // and the ring's landing is the owner's live check.
-  on('ui.focus', () => ({}))
+  on('ui.focus', { plugin: '*' }, () => ({ value: undefined }))
   return [w, clock]
 }
 
@@ -100,7 +101,8 @@ const SEED: Plugin = { name: 'alphabet-fixture', register(on) {
     return next(e)
   })
 } }
-const WITH = { plugins: [SEED] }
+// One test walks every tab and form: far past the kit's 5 s default.
+const WITH = { plugins: [SEED], timeoutMs: 120_000 }
 const RUN = { origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 120 } }
 const seed = async ($: Engine, ui: Ui, values: object) => {
   await $.command.run({ command: 'alphabet-seed', args: JSON.stringify(values), ...RUN }); await ui.redraw()

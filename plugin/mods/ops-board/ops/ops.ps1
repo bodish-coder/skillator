@@ -13,6 +13,20 @@ param(
   [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest = @()
 )
 if ($Rest -contains '--open') { $Open = $true; $Rest = @($Rest | Where-Object { $_ -ne '--open' }) }
+# B32: --env NAME=VALUE sets one CLI identity var here; -Open forwards those set at launch,
+# since a new Windows Terminal tab does not inherit this process's env.
+$ids = @('SKILLATOR_CLI', 'SKILLATOR_PROFILE_DIR', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'MUSE_CONFIG_DIR', 'AGY_CONFIG_DIR', 'ANTIGRAVITY_APP_DATA_DIR')
+$keep = @()
+for ($j = 0; $j -lt $Rest.Count; $j++) {
+  if ($Rest[$j] -ne '--env') { $keep += $Rest[$j]; continue }
+  $kv = @("$($Rest[$j + 1])".Split([char]'=', 2)); $j++
+  if ($kv.Count -ne 2 -or $ids -notcontains $kv[0]) {
+    [Console]::Error.WriteLine("ops: --env takes NAME=VALUE, NAME one of $($ids -join ' ')")
+    exit 2
+  }
+  [Environment]::SetEnvironmentVariable($kv[0], $kv[1])
+}
+$Rest = $keep
 # F102: -FontSize / --font-size N rewrites the installed 'skillator ops' profile's font size, then exits
 $i = [array]::IndexOf($Rest, '--font-size')
 if ($i -ge 0) { $FontSize = "$($Rest[$i + 1])" }
@@ -58,6 +72,7 @@ if ($Open) {
     $a = @('-w', '0', 'new-tab', '--title', 'ops')
     if ($env:LOCALAPPDATA -and (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\skillator\ops.json'))) { $a += @('-p', 'skillator ops') }
     $a += @('-d', $here, 'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath, '-Repo', $here) + $Rest
+    foreach ($k in $ids) { $val = [Environment]::GetEnvironmentVariable($k); if ($val) { $a += @('--env', "$k=$val") } }
     & $wt.Source @a
     exit $LASTEXITCODE
   }

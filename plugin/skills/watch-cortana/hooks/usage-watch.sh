@@ -828,8 +828,9 @@ flag="$dir/$sid"
 
 if [ "$mode" = probe ]; then
   # ponytail: regex over the raw JSON instead of walking it - catches every
-  # used_percentage (5h window, 7d window, context window) whatever the shape.
-  max=$(printf '%s' "$raw" | grep -o '"used_percentage"[[:space:]]*:[[:space:]]*[0-9.]*' \
+  # used_percentage (5h window, context window) whatever the shape. B31: not
+  # the 7-day one, as on the codex path (A98) - it has its own 97% gate.
+  max=$(printf '%s' "$raw" | sed 's/"seven_day"[[:space:]]*:[[:space:]]*{[^}]*}//g' | grep -o '"used_percentage"[[:space:]]*:[[:space:]]*[0-9.]*' \
         | grep -o '[0-9.]*$' | awk 'BEGIN{m=""} {if(m==""||$1+0>m+0)m=$1} END{if(m!="")print m}')
   [ -n "$max" ] && { mkdir -p "$dir"; printf '%s' "$max" > "$flag"; }
   # The weekly number needs its own file: the main flag is read as bare bytes
@@ -839,7 +840,7 @@ if [ "$mode" = probe ]; then
   else rm -f "$flag.weekly"; fi   # never let a stale weekly number outlive its payload
   # F31: the 5-hour window and the context on their own, for `level`. The key
   # is rate_limits.five_hour.used_percentage (verified against the statusline
-  # docs, 2026-10-10); the main flag stays the max of every window.
+  # docs, 2026-10-10); the main flag stays the max of every non-7-day window.
   for pair in five_hour:fivehour context_window:ctx; do
     v=$(printf '%s' "$raw" | tr -d ' 	' | grep -o "\"${pair%%:*}\":{[^}]*\"used_percentage\":[0-9.]*" | grep -o '[0-9.]*$' | head -1)
     if [ -n "$v" ]; then mkdir -p "$dir"; printf '%s' "$v" > "$flag.${pair#*:}"

@@ -64,14 +64,14 @@ function world(on: On, files: Record<string, string>): [World, MockClock] {
   on('fs.write', ($, e) => { w.writes.push(e.path); return { deny: 'the mod must not write files' } })
   on('process.run', ($, e) => {
     if (e.argv.join(' ') === 'git config user.email') return { value: ran('vidul@ikran.in\n') }
-    if (e.argv.some(a => /(pending|relay-morpheus)\.(sh|ps1)$/.test(a))) return { value: ran('', 1, 'not in this test') }
+    if (e.argv.some(a => /(pending|relay-morpheus)\.(sh|ps1)$/.test(a)) || e.argv.includes('--git-common-dir')) return { value: ran('', 1, 'not in this test') }
     w.runs.push(e.argv)
     return { value: w.answer(e.argv) ?? ran('', 1, 'unexpected call') }
   })
   on('ui.open', ($, e) => { w.opens.push({ id: e.id, focus: e.focus, closeOnEscape: e.closeOnEscape }); return { value: { isPlaced: true as const } } })
   on('ui.close', ($, e) => { w.closes.push(e.id); return { value: undefined } })
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
-  on('ui.focus', () => ({}))
+  on('ui.focus', { plugin: '*' }, () => ({ value: undefined }))
   return [w, clock]
 }
 

@@ -238,7 +238,7 @@ function keysOf(s: State, m: Model): Seg[][] {
     const enter = isHead(cur) ? (s.runsOpen.some(x => headKey(x) === cur) ? 'enter close' : 'enter open') : 'enter stages'
     return [move, h(enter, 'return'), h('s Start', 's'), h('Engage', 'e'), h('Rerun', 'r'), h('Push Pending', 'p'), h('Mode: ||/seq', 'm'), quit]
   }
-  if (s.tab === 'health') return [[hot('r refresh', 'r')], [hot('R resume', 'R', true)], [hot('c resume CLI', 'c')], [hot('F force resume', 'F', true)], [hot('p profiles', 'p')], quit]
+  if (s.tab === 'health') return [[hot('r refresh', 'r')], [hot('R resume', 'R', true)], [hot('c resume CLI', 'c')], [hot('F force resume', 'F', true)], [hot('p re-read status', 'p')], quit]
   if (s.tab === 'messages') return [move, h('enter open', 'return'), h('c connect', 'c'), h('d disconnect', 'd'), h('y copy URL', 'y'), h('m mark all read', 'm'), h('s setup', 's'), quit]
   if (s.tab === 'explorer' && s.explorer.action) {
     const a = s.explorer.action
@@ -679,25 +679,32 @@ function machineRows(m: Machine | null, red: boolean, now: number): Seg[][] {
   return out
 }
 
-function healthBody(s: State): Seg[][] {
+function healthBody(s: State, room: number): Seg[][] {
   const u = s.usage
+  const credit = row('Credit', [dim('not available')])
   const out: Seg[][] = [
     [{ text: 'Usage'.padEnd(15), bold: true }, dim('from watch-cortana usage-watch level')],
     profileRow(s),
     usageRow('5-hour', u?.five ?? null, FIVE_HOLD_PCT, s.now),
     usageRow('7-day', u?.seven ?? null, WEEKLY_STOP_PCT, s.now),
     relayRow(u, s.now),
-    row('Credit', [dim('not available')]),
+    credit,
   ]
   if (u?.spendLimitPct !== null && u?.spendLimitPct !== undefined) out.push(row('Spend limit', [{ text: `${u.spendLimitPct}% used` }]))
   if (u?.costUsd !== null && u?.costUsd !== undefined) out.push(row('Spent', [{ text: `$${u.costUsd.toFixed(2)} this session` }]))
   // F176: every profile with its model rows, as `ops --status` prints it
-  out.push([])
-  if (s.profiles) out.push([{ text: 'Profiles', bold: true }], ...s.profiles.trimEnd().split('\n').map(l => [{ text: '  ' + l }]))
-  else out.push(row('Profiles', [dim('p reads every profile')]))
+  let profiles: Seg[][] = s.profiles
+    ? [[{ text: 'Profiles', bold: true }], ...s.profiles.trimEnd().split('\n').map(l => [{ text: '  ' + l }])]
+    : [row('Profiles', [dim(s.profilesBusy ? 'reading every profile...' : 'p reads every profile')])]
   // F172: no in-body Actions row - the footer keys (keysOf) are the one action row.
-  out.push([], [{ text: 'Machine', bold: true }], ...machineRows(s.machine, s.watch.level === 'red', s.now))
-  return out
+  const machine: Seg[][] = [[{ text: 'Machine', bold: true }], ...machineRows(s.machine, s.watch.level === 'red', s.now)]
+  if (out.length + profiles.length + machine.length + 2 <= room) return [...out, [], ...profiles, [], ...machine]
+  // B32: too tall (80x24) - the gaps and the constant Credit row go first, then the profile
+  // table's tail behind a '+N more' line, so the Machine rows stay on screen.
+  const lean = out.filter(l => l !== credit)
+  const left = room - lean.length - machine.length
+  if (profiles.length > left && left >= 2) profiles = [...profiles.slice(0, left - 1), [dim(`  +${profiles.length - left + 1} more · ops --status lists every row`)]]
+  return [...lean, ...profiles, ...machine]
 }
 
 // --- the assign box and the Add person form, as the mock ---
@@ -1089,7 +1096,7 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
         ],
       })
     : s.tab === 'runs' ? runsBody(s, room)
-    : s.tab === 'health' ? healthBody(s)
+    : s.tab === 'health' ? healthBody(s, room)
     : s.tab === 'messages' ? messagesBody(s, room)
     : s.tab === 'explorer' ? explorerBody(s, room)
     : s.tab === 'run' ? windowOf(runTabLines(s), s.runForm ? null : s.runSel, room, 'run')
