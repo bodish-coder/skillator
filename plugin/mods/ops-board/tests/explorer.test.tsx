@@ -91,7 +91,7 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('ui.status', () => ({ value: undefined }))
   on('ui.scroll', () => ({}))
-  on('ui.focus', () => ({}))
+  on('ui.focus', { plugin: '*' }, () => ({ value: undefined }))
   return [w, clock]
 }
 
@@ -577,7 +577,7 @@ test('F133 commit: staging and committing working tree files with drafted messag
   expect((await ui.find({ key: 'xa:title' }))?.text).toBe('git commit?  Esc cancels')
   expect((await ui.find({ key: 'xa:msg' }))?.text).toContain('message feat: update app')
   expect((await ui.find({ key: 'xa:warn:0' }))?.text).toContain('staging 1 sensitive/unwanted file(s): .env')
-  await go(ui, clock, 'key:commit')
+  await ui.press({ key: 'xa:go' }); await clock.settle()   // the confirm is already up
   expect(w.actions.some(a => a[0] === 'commit')).toBe(true)
   await ui.unmount()
 })
