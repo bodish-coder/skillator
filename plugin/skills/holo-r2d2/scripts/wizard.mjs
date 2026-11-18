@@ -147,9 +147,15 @@ export function setFromRun(run, runPath) {
 // A page's set against its run file now: the page's set (the run's own when the page is another set's
 // or unreadable), less what the run has settled, which joins the settled reference as setFromRun lists it.
 // live: the run's set now; gone: the decision ids the run has settled.
+// One run, however spelled: RUN-1 and RUN-0001 are the same set.
+export const sameSet = (a, b) => {
+  const k = (id) => { const m = /^RUN-(\d+)$/i.exec(str(id)); return m ? `RUN-${BigInt(m[1])}` : str(id); };
+  return k(a) === k(b);
+};
+
 export function reconcile(pageSet, run, runPath) {
   const live = setFromRun(run, runPath), gone = settledIn(run);
-  const base = pageSet && String(pageSet.id) === String(live.id) ? pageSet : live;
+  const base = pageSet && sameSet(pageSet.id, live.id) ? pageSet : live;
   const have = new Set((base.settled || []).map((x) => x && x.id));
   const set = Array.isArray(base.decisions)
     ? { ...base, decisions: base.decisions.filter((d) => !gone.has(d && d.id)), settled: [...(base.settled || []), ...live.settled.filter((x) => !have.has(x.id))] }

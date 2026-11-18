@@ -122,10 +122,11 @@ async function openSets(root, holo) {
       if (path) {
         if (!parsed.has(path)) parsed.set(path, parseRun(await readFile(path, "utf8")));
         const r = reconcile(set, parsed.get(path), relative(root, path).replace(/\\/g, "/")), live = r.live;
-        set = r.set;
-        openNow.set(String(set.id), new Set(live.decisions.map((d) => d.id)));
-        gone.set(String(set.id), r.gone);
-        if (!live.decisions.length) done.set(String(set.id), (await stat(path)).mtimeMs);
+        // Keyed by the page's id, never the run heading's spelling of it (RUN-1 vs RUN-0001).
+        set = { ...r.set, id };
+        openNow.set(id, new Set(live.decisions.map((d) => d.id)));
+        gone.set(id, r.gone);
+        if (!live.decisions.length) done.set(id, (await stat(path)).mtimeMs);
       }
       if (set && set.decisions && (path || set.decisions.length)) sets.set(String(set.id), set);
     } catch { /* not a readable wizard page */ }
