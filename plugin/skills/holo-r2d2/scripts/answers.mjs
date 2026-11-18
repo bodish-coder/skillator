@@ -26,6 +26,8 @@ const DOWNLOADS_GUID = "{374DE290-123F-4565-9164-39C4925E467B}";
 const CTRL_G = new RegExp(CTRL.source, "g");
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/;
 const show = (v) => JSON.stringify(clean(v));
+const minute = (t) => Math.floor(t / 60000);
+const UNTIMED = ["moot", "same-as", "replanned"];
 
 const tryRead =(p) => { try { return readFileSync(p, "utf8"); } catch { return null; } };
 const tryDir = (p) => { try { return readdirSync(p); } catch { return []; } };
@@ -100,7 +102,8 @@ export function downloadDirs({ home = homedir(), env = process.env, platform = p
 // embeds (a --next-wizard page is round 2+). A RUN set's run file is found by that set's id (by the page's
 // file name only when the page is unreadable - the set is then rebuilt from the run). openNow: a RUN
 // set's decisions still open or asked in the run file now - only those may get a command; gone: the ones settled there.
-// done: a fully settled RUN set - its newest answered/ruled time, else (none recorded) its run file's mtime.
+// done: a fully settled RUN set - its newest answered/ruled time (the run file's mtime when later and a moot,
+// same-as or replanned decision carries no time), else (none recorded) its run file's mtime.
 // Every map is keyed by runKey (RUN-1, RUN-0001 and run-1 are one set).
 async function openSets(root, holo) {
   const sets = new Map(), openNow = new Map(), gone = new Map(), done = new Map();
@@ -108,7 +111,8 @@ async function openSets(root, holo) {
   for (const n of tryDir(holo).filter((n) => n.endsWith(".wizard.html"))) {
     try {
       const p = join(holo, n), stem = n.slice(0, -".wizard.html".length), set = pageSet(await readFile(p, "utf8")), id = runKey(set?.id ?? stem);
-      pages.push({ set, id, own: pageFile(runKey(stem)) === pageFile(id), mtime: (await stat(p)).mtimeMs });
+      // own: 2 the canonical page, 1 another spelling of the same run (RUN-0001 for RUN-1), 0 a copy.
+      pages.push({ set, id, own: n === pageFile(id) ? 2 : pageFile(runKey(stem)) === pageFile(id) ? 1 : 0, mtime: (await stat(p)).mtimeMs });
     } catch { /* not a readable wizard page */ }
   }
   // Several pages carry one set id (a leftover copy): the set's own page, else the newest.
@@ -118,15 +122,21 @@ async function openSets(root, holo) {
     // Only a page that yields a set claims the id: an unreadable own page never blocks a readable copy.
     if (set) seen.add(id);
     try {
-      const path = runFilesFor(id, runs)?.[0];
+      // Only a RUN- id is a run: a --decisions set "12" keeps its own set beside run-0012-*.md.
+      const path = /^RUN-/i.test(id) ? runFilesFor(id, runs)?.[0] : undefined;
       if (path) {
         if (!parsed.has(path)) parsed.set(path, parseRun(await readFile(path, "utf8")));
         const run = parsed.get(path), r = reconcile(set, run, relative(root, path).replace(/\\/g, "/"));
         set = r.set;
         openNow.set(id, new Set(r.live.decisions.map((d) => d.id)));
         gone.set(id, r.gone);
-        const answered = Math.max(0, ...run.qs.map((x) => Date.parse(x.f.answered || x.f.ruled) || 0));
-        if (!r.live.decisions.length) done.set(id, answered ? { answered } : { mtime: (await stat(path)).mtimeMs });
+        const time = (x) => Date.parse(x.f.answered || x.f.ruled) || 0;
+        let answered = Math.max(0, ...run.qs.map(time));
+        if (!r.live.decisions.length) {
+          const mtime = (await stat(path)).mtimeMs;
+          if (answered && run.qs.some((x) => r.gone.has(x.id) && !time(x) && UNTIMED.some((k) => x.state === k || x.f[k]))) answered = Math.max(answered, mtime);
+          done.set(id, answered ? { answered } : { mtime });
+        }
       }
       if (set && set.decisions && (path || set.decisions.length)) sets.set(id, set);
     } catch { /* not a readable wizard page */ }
@@ -171,13 +181,16 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
     return (c.verified ??= c.ans && c.ans.nonce ? !!pageNonce && c.ans.nonce === pageNonce : searched[c.folder].why === "page folder");
   };
   const when = (c) => Date.parse(c.ans && c.ans.finalizedAt) || 0;
+  const validAt = (c) => ISO.test(c.ans.finalizedAt) && !!Date.parse(c.ans.finalizedAt);
   // A fully settled run stays open only while a verified FINAL for it was finalized after the run's last
   // answer (no answer time in the run file: while the FINAL file is newer than the run file).
-  const newer = (c, d) => (d.answered ? when(c) > d.answered : c.mtime > d.mtime);
+  // Answer stamps carry minutes: a FINAL counts as newer only in a later minute.
+  const newer = (c, d) => (d.answered ? minute(when(c)) > minute(d.answered) : c.mtime > d.mtime);
   for (const [id, d] of done) if (!cands.some((c) => c.id === id && isFinalized(c.ans) && newer(c, d) && verify(c))) sets.delete(id);
   for (const c of cands) {
     if (sets.has(c.id)) continue;
     const d = done.get(c.id);
+    if (isFinalized(c.ans) && !validAt(c)) { r.refused.push({ path: c.path, why: "finalizedAt is not an ISO 8601 time" }); continue; }
     const why = !isFinalized(c.ans) ? "this file is a draft" : newer(c, d) ? "this file is unverified"
       : d.answered ? "its run file answered after this file was finalized" : "its run file is newer than this file";
     r.ignored.push({ path: c.path, why: `"${c.id}" is settled - ${why}` });
@@ -192,7 +205,7 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
   for (const c of cands) {
     if (!isFinalized(c.ans)) { if (!r.drafts.some((d) => d.id === c.id)) r.drafts.push(c); continue; }
     try {
-      if (!ISO.test(c.ans.finalizedAt) || !Date.parse(c.ans.finalizedAt)) throw new Error("finalizedAt is not an ISO 8601 time");
+      if (!validAt(c)) throw new Error("finalizedAt is not an ISO 8601 time");
       if (typeof c.ans.owner !== "string" || c.ans.owner.trim().length > 200 || CTRL.test(c.ans.owner)) throw new Error("owner is not one short line");
       nextWizardSet(sets.get(c.id), without(c.ans, gone.get(c.id) || new Set()));
     } catch (e) { r.refused.push({ path: c.path, why: e.message }); continue; }

@@ -871,6 +871,69 @@ test("A237-10: a lowercase set id never crashes report - one case rule", async (
   assert.match(report(await findAnswers(s.opts)), / answer Q1 /);
 });
 
+// ------------------------------------------------------- A237 fix round ----
+test("A237-r1: only a RUN- id is a run - a --decisions set '12' keeps its own set beside run-0012-*.md", async () => {
+  const s = sandbox();
+  writeFileSync(join(s.holo, "12.wizard.html"), wizardPage({ ...SET, id: "12" }));
+  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replace("# RUN-1 ", "# RUN-12 ");
+  writeFileSync(join(s.root, ".skillator", "run-0012-shelf-export.md"), md);
+  put(s.holo, "12-decisions-FINAL.json", { ...answers(), set: "12" }, 0);
+  const r = await findAnswers(s.opts), text = report(r);
+  assert.equal(r.picked && r.picked.id, "12", text);
+  assert.equal(r.picked.openNow, undefined, text);
+  assert.match(text, /Q1: answered - "SQLite"/);
+});
+
+function stampedRun(s, q2 = "### Q2 answered") {
+  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replace("### Q1 open", "### Q1 answered")
+    .replace("answer: -", "answer: JSON\nanswered: 2026-11-17T11:00Z").replace("### Q2 open", q2);
+  writeFileSync(RUN1(s), md);
+  at(RUN1(s), "2026-11-17T13:00:00Z");
+  writeFileSync(join(s.holo, "RUN-1.wizard.html"), "<!doctype html>");
+}
+const finalAt = (s, iso) => put(s.holo, "RUN-1-decisions-FINAL.json", { ...answers({ finalizedAt: iso }), set: "RUN-1" }, 0);
+
+test("A237-r2: a FINAL is newer than the run's last answer only in a later minute", async () => {
+  const s = sandbox();
+  stampedRun(s);
+  finalAt(s, "2026-11-17T11:00:30Z");
+  assert.ok(!(await findAnswers(s.opts)).sets.includes("RUN-1"), "same minute as the answered stamp: not newer");
+  finalAt(s, "2026-11-17T11:01:00Z");
+  assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"), "a later minute: newer");
+});
+
+test("A237-r3: a settled decision with no time (moot) - judged by the later of the answer time and the run file's mtime", async () => {
+  const s = sandbox();
+  stampedRun(s, "### Q2 moot");
+  writeFileSync(RUN1(s), readFileSync(RUN1(s), "utf8").replace(/(### Q2 moot[\s\S]*?)answer: -/, "$1moot: covered by F5"));
+  at(RUN1(s), "2026-11-17T13:00:00Z");
+  finalAt(s, "2026-11-17T12:00:00Z");
+  assert.ok(!(await findAnswers(s.opts)).sets.includes("RUN-1"), "finalized after the 11:00 answer but before the 13:00 run file");
+  finalAt(s, "2026-11-17T13:01:00Z");
+  assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"));
+});
+
+test("A237-r4: the canonical page is the set's own page; another RUN spelling only when it is missing or unreadable", async () => {
+  const s = sandbox();
+  const set = run1(s), ans = run1Answers(s, set), A = "a".repeat(32), B = "b".repeat(32);
+  at((writeFileSync(join(s.holo, "RUN-1.wizard.html"), wizardPage(set, A)), join(s.holo, "RUN-1.wizard.html")), "2026-11-17T09:00:00Z");
+  writeFileSync(join(s.holo, "RUN-0001.wizard.html"), wizardPage(set, B));
+  put(s.dl, "RUN-1-decisions-FINAL.json", { ...ans, nonce: A }, 0);
+  assert.equal((await findAnswers(s.opts)).picked.verified, true, "canonical RUN-1 page beats a newer RUN-0001 page");
+  writeFileSync(join(s.holo, "RUN-1.wizard.html"), "<!doctype html>");
+  put(s.dl, "RUN-1-decisions-FINAL.json", { ...ans, nonce: B }, 0);
+  assert.equal((await findAnswers(s.opts)).picked.verified, true, "canonical unreadable: the RUN-0001 page");
+});
+
+test("A237-r5: a settled-run FINAL with no valid finalizedAt is refused as such", async () => {
+  const s = sandbox();
+  stampedRun(s);
+  const p = finalAt(s, "yesterday");
+  const r = await findAnswers(s.opts);
+  assert.equal(r.refused.find((x) => x.path === p)?.why, "finalizedAt is not an ISO 8601 time", report(r));
+  assert.ok(!r.ignored.some((x) => x.path === p), report(r));
+});
+
 // B30: the plugin cache is reached through a link (~/.claude-<profile>/plugins -> ~/.claude/plugins).
 // argv[1] kept the link's spelling, import.meta.url the real path: main never ran, output was empty.
 test("B30: holo.mjs --selftest and answers.mjs still run when started through a linked directory", (t) => {
