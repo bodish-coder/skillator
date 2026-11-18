@@ -182,11 +182,11 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
   };
   const when = (c) => Date.parse(c.ans && c.ans.finalizedAt) || 0;
   const validAt = (c) => ISO.test(c.ans.finalizedAt) && !!Date.parse(c.ans.finalizedAt);
-  // A fully settled run stays open only while a verified FINAL for it was finalized after the run's last
+  // A fully settled run stays open only while a verified FINAL with a valid finalizedAt for it was finalized after the run's last
   // answer (no answer time in the run file: while the FINAL file is newer than the run file).
   // Answer stamps carry minutes: a FINAL counts as newer only in a later minute.
   const newer = (c, d) => (d.exact ? when(c) > d.exact : d.answered ? minute(when(c)) > minute(d.answered) : c.mtime > d.mtime);
-  for (const [id, d] of done) if (!cands.some((c) => c.id === id && isFinalized(c.ans) && newer(c, d) && verify(c))) sets.delete(id);
+  for (const [id, d] of done) if (!cands.some((c) => c.id === id && isFinalized(c.ans) && validAt(c) && newer(c, d) && verify(c))) sets.delete(id);
   for (const c of cands) {
     if (sets.has(c.id)) continue;
     const d = done.get(c.id);

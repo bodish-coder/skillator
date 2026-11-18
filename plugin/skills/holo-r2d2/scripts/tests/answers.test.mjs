@@ -972,6 +972,15 @@ test("A241-4: an answered decision with no stamp (legacy) is untimed, not time 0
   assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"));
 });
 
+test("A241-5: an invalid finalizedAt never keeps a settled run listed (file-time gate too)", async () => {
+  const s = sandbox();
+  settledRun(s); // no answer times: judged by file times
+  const p = put(s.holo, "RUN-1-decisions-FINAL.json", { ...answers({ finalizedAt: "yesterday" }), set: "RUN-1" }, 0);
+  const r = await findAnswers(s.opts);
+  assert.ok(!r.sets.includes("RUN-1"), report(r));
+  assert.equal(r.refused.find((x) => x.path === p)?.why, "finalizedAt is not an ISO 8601 time", report(r));
+});
+
 // B30: the plugin cache is reached through a link (~/.claude-<profile>/plugins -> ~/.claude/plugins).
 // argv[1] kept the link's spelling, import.meta.url the real path: main never ran, output was empty.
 test("B30: holo.mjs --selftest and answers.mjs still run when started through a linked directory", (t) => {
