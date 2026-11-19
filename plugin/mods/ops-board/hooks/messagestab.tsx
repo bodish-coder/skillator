@@ -4,7 +4,7 @@ import type { Msg, SetupView, TeamsCfgView } from '../types'
 import { copyHost, gitBin, runCall } from './lib/host'
 import { loginMessage, loginStatus } from './lib/calls'
 import { inboxDirOfCommonGitDir, INBOX_FILE, messageLines, parseInbox, plainText, READ_FILE, unreadCount } from './lib/inbox'
-import { armLines, armToast, parseArm } from './lib/teamsarm'
+import { armCommandToast, armLines, armToast, parseArm } from './lib/teamsarm'
 import { CLEARED_LINE, freshSetup, parseCfgView, resultLine, SAVED_LINE, setupError, setupJson, unmask, urlShown } from './lib/teamsconfig'
 import type { SetupValues } from './lib/teamsconfig'
 
@@ -259,7 +259,7 @@ async function runArm($: EngineInterface, call: 'team-arm' | 'team-disarm' | 'te
     // an arm or disarm in flight, or started after this read, is the newer view
     if (quiet && (armBusy || seq !== armSeq)) return
     // a toast never carries the URL: the ack's argument is replaced by value
-    const said = (s: string) => args.filter(Boolean).reduce((t, a) => t.split(a).join('<url>'), [s, ran(r.argv)].join('\n'))
+    const said = (s: string) => armCommandToast(s, ran(r.argv), args)
     const v = parseArm(r.out)
     if (!v) { if (!quiet) $.ui.toast(said(`✗ Teams: ${r.code === 0 ? 'unexpected output from teams-uhura' : why(r)}`), { timeoutMs: 8000 }); return }
     await update($, armA, () => v)

@@ -237,6 +237,20 @@ test('A235 1: y sends --ack with the URL copied; under c in flight it waits, the
   assert.match(failed.toast ?? '', /^✗ Teams: no tunnel URL to remember\nran: .* --ack <url>$/)
 })
 
+test('A243: a clipboard completion does not acknowledge a replacement tunnel URL', () => {
+  const snapshot = (url: string, changed: string) => parseArm(KV({ ...ARMED, url, url_changed: changed }))
+  for (const previousChanged of ['0', '1']) {
+    const y = reduce({ ...onTab.state, teamsArm: snapshot(U1, previousChanged) }, { name: 'y' })
+    const copy = y.effects.find((e): e is Extract<Effect, { kind: 'copy' }> => e.kind === 'copy')!
+    for (const armBusy of [false, true]) {
+      const current = { ...y.state, armBusy, teamsArm: snapshot(U2, '1') }
+      const done = afterRun({ then: copy.then! }, ok(''), current, NOW)
+      assert.deepEqual(runs(done.effects), [])
+      assert.equal(done.state.ackAfter, null)
+    }
+  }
+})
+
 test('A235 1: a reply parseArm cannot read toasts unexpected output from teams-uhura', () => {
   const c = reduce(onTab.state, { name: 'c' })
   const done = afterRun(runs(c.effects)[0]!, ok('result=armed\nresult=armed\n'), c.state, NOW).state
