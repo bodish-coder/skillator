@@ -50,9 +50,8 @@ test('A236: reset keeps a refresh lock younger than the 90 s stale age', async (
   }
 })
 
-// A236 fix round (4): on Windows reset kills the refresh readers (with their trees), so their
-// locks go too - a young lock is never left behind a killed reader, nor a reader behind a lock.
-test('A246: reset kills only the selected fixture reader and removes its young lock', { skip: process.platform !== 'win32' }, async () => {
+// The Windows scan reports PIDs, so a successful kill cannot prove which profile owns a lock.
+test('A250: reset kills only the selected fixture reader and keeps unassociated young locks', { skip: process.platform !== 'win32' }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'ops-reset-')).replace(/\\/g, '/')
   const startReader = () => spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)', 'usage-watch.ps1', '-Mode', 'refresh'], { stdio: 'ignore', windowsHide: true })
   const reader = startReader()
@@ -70,7 +69,7 @@ test('A246: reset kills only the selected fixture reader and removes its young l
     assert.notEqual(reader.exitCode ?? reader.signalCode, null, 'the reader was killed')
     assert.equal(unrelated.exitCode ?? unrelated.signalCode, null, 'another matching reader stays alive')
     assert.match(report, /Terminated 1 orphaned background process/)
-    assert.ok(!existsSync(lock), 'its lock was removed')
+    assert.ok(existsSync(lock), 'a PID alone does not establish ownership of this lock')
   } finally {
     reader.kill()
     unrelated.kill()

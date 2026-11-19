@@ -41,18 +41,16 @@ export async function reset(env: Record<string, string | undefined> = process.en
   }
 
   // 2. Process cleanup (Windows): terminate usage-watch / ops background refresh readers, each
-  // with its tree (taskkill /T) so no paid turn outlives its lock - their locks go in step 3.
+  // with its tree (taskkill /T) so no paid turn outlives its lock.
   // Never this query itself: its own command line matches.
-  let readersKilled = false
   // A fixture can narrow the query to its own child, or skip it with 0.
   const readerPid = env.SKILLATOR_RESET_READER_PID
   if (process.platform === 'win32' && (readerPid === undefined || /^[1-9][0-9]{0,9}$/.test(readerPid))) {
     try {
       const filter = readerPid === undefined ? '' : ` -Filter 'ProcessId = ${readerPid}'`
       const cmd = `Get-CimInstance Win32_Process${filter}` + " | Where-Object { $_.ProcessId -ne $PID -and ($_.CommandLine -like '*usage-watch.ps1*refresh*' -or $_.CommandLine -like '*ops.ps1*refresh*') } | ForEach-Object { & taskkill.exe /T /F /PID $_.ProcessId 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $_.ProcessId } }"
-      const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-NonInteractive', '-Command', cmd], { timeout: 15000 })   // a loaded machine runs this query slowly: a timeout keeps young locks
+      const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-NonInteractive', '-Command', cmd], { timeout: 15000 })
       result.killedProcesses += stdout.trim().split(/\r?\n/).filter(Boolean).length
-      readersKilled = readerPid === undefined || result.killedProcesses > 0
     } catch {
       // Ignore process query issues
     }
@@ -67,14 +65,12 @@ export async function reset(env: Record<string, string | undefined> = process.en
     `${home}/.skillator/profiles.lock`,
   ]
 
-  // A refresh lock goes when its readers were just killed, else only past the 90 s
-  // stale age shared with Start-QuotaRefresh in usage-watch.ps1 and start_quota_refresh
-  // in usage-watch.sh. A younger one belongs to a read that may still be live, and freeing it lets a
-  // `p` start a second turn.
+  // The process scan returns PIDs without a profile association. Keep young locks
+  // until the 90 s stale age shared with both usage-watch refresh entry points.
   try {
     for (const p of discover(home)) {
       const lk = `${p.dir}/quota-cache.json.refreshing`
-      try { if (!readersKilled && Date.now() - statSync(lk).mtimeMs < 90_000) continue } catch { continue }
+      try { if (Date.now() - statSync(lk).mtimeMs < 90_000) continue } catch { continue }
       lockCandidates.push(lk)
     }
   } catch {
