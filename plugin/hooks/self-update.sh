@@ -46,8 +46,9 @@ put() {
   case $p3 in ''|*[!0-9]*) p3=0 ;; esac
   # strings: tr only when one holds a quote, backslash or newline (forks cost on Windows)
   c() { printf '%s' "$1" | tr -d '"\\\r\n'; }
+  cr=$(printf "\r")
   q4=$4 q5=$5 q6=$6
-  case $4$5$6 in *[\"\\]*|*"
+  case $4$5$6 in *[\"\\]*|*"$cr"*|*"
 "*) q4=$(c "$4") q5=$(c "$5") q6=$(c "$6") ;; esac
   [ -d "${S%/*}" ] || mkdir -p "${S%/*}" 2>/dev/null || return 0
   printf '{"lastCheck":%s,"startedAt":%s,"skipAt":%s,"lastResult":"%s","lastVersion":"%s","notice":"%s"}\n' \
@@ -63,36 +64,79 @@ due() {
   [ $((now - lc)) -ge $((H * 3600)) ]
 }
 
-# lock: one run at a time; a lock older than 30 min is a dead run's and is taken over.
+# Serialize state transactions and updates. Live subprocesses are bounded below.
 lock() {
-  mkdir -p "${S%/*}" 2>/dev/null
-  mkdir "$K" 2>/dev/null || {
+  mkdir -p "${S%/*}" 2>/dev/null || return 1
+  if ! mkdir "$K" 2>/dev/null; then
     a=$(cat "$K/at" 2>/dev/null)
     case $a in
-      ''|*[!0-9]*) [ -n "$(find "$K" -maxdepth 0 -mmin +30 2>/dev/null)" ] || return 1 ;;
-      *) [ $(($(date +%s) - a)) -ge 1800 ] || return 1 ;;
+      ''|*[!0-9]*) stale=$(find "$K" -maxdepth 0 -mmin +45 2>/dev/null) ;;
+      *) stale=''; [ $(($(date +%s) - a)) -lt 2700 ] || stale=1 ;;
     esac
-    # shortcut: two runs racing for one stale lock can both win, a rename-based takeover if it bites
-    rm -rf "$K" && mkdir "$K" 2>/dev/null || return 1
-  }
-  date +%s > "$K/at"
+    [ -n "$stale" ] || return 1
+    mkdir "$K/takeover" 2>/dev/null || return 1
+    if [ "$(cat "$K/at" 2>/dev/null)" != "$a" ]; then rmdir "$K/takeover"; return 1; fi
+    rm -f "$K/at" "$K/owner"
+    rmdir "$K/takeover" "$K" 2>/dev/null && mkdir "$K" 2>/dev/null || return 1
+  fi
+  at=$(date +%s)
+  owner="$$-$at"
+  printf '%s\n' "$at" > "$K/at"
+  printf '%s\n' "$owner" > "$K/owner"
 }
 
-# kv <names>: JSON string fields as `name value` lines, in document order (no jq).
-kv() {
-  tr -d '\r\n' | grep -oE "\"($1)\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
-    | sed -E 's/^"([^"]*)"[[:space:]]*:[[:space:]]*"(.*)"$/\1 \2/; s#\\\\#/#g'
+unlock() {
+  mkdir "$K/takeover" 2>/dev/null || return 0
+  if [ "$(cat "$K/owner" 2>/dev/null)" = "$owner" ]; then
+    rm -f "$K/at" "$K/owner"
+    rmdir "$K/takeover" "$K" 2>/dev/null || :
+  else
+    rmdir "$K/takeover" 2>/dev/null || :
+  fi
 }
 
-# plist: `claude plugin list --json` as `id<TAB>version<TAB>installPath` lines (node).
-plist() {
-  claude plugin list --json </dev/null 2>/dev/null | node -e '
+# Cap the CLI and installer even when one never returns. GNU timeout is present
+# in Git Bash; macOS uses the already-required Node runtime.
+call_limit=120
+bounded() {
+  if command -v timeout >/dev/null 2>&1 && timeout --version >/dev/null 2>&1; then
+    timeout -k 1 "$call_limit" "$@"
+  else
+    node -e '
+const {spawn} = require("node:child_process");
+const [seconds, cmd, ...args] = process.argv.slice(1);
+const p = spawn(cmd, args, {detached: true, stdio: "inherit"});
+const timer = setTimeout(() => {
+  try { process.kill(-p.pid, "SIGKILL") } catch {}
+  process.exit(124);
+}, Number(seconds) * 1000);
+p.on("error", () => { clearTimeout(timer); process.exitCode = 127 });
+p.on("exit", code => { clearTimeout(timer); process.exitCode = code ?? 1 });
+' -- "$call_limit" "$@"
+  fi
+}
+
+# Read one of the three Claude metadata shapes with the same JSON parser.
+json() {
+  node -e '
 let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
-  let a; try { a = JSON.parse(s) } catch (e) { return }
-  if (!Array.isArray(a)) return
-  for (const p of a) if (p && typeof p.id === "string")
-    console.log([p.id, p.version, p.installPath].map(x => String(x == null ? "" : x).replace(/[\t\r\n]/g, " ").replace(/\\/g, "/")).join("\t"))
-})' 2>/dev/null
+  let a; try { a = JSON.parse(s) } catch { return }
+  const [field, name] = process.argv.slice(1);
+  const clean = x => String(x ?? "").replace(/[\t\r\n]/g, " ").replace(/\\/g, "/");
+  if (field === "plugins") {
+    if (Array.isArray(a)) for (const p of a) if (p && typeof p.id === "string")
+      console.log([p.id, p.version, p.installPath].map(clean).join("\t"));
+  } else {
+    const value = field === "location" ? (Array.isArray(a) ? a.find(p => p?.name === name)?.installLocation : "")
+      : field === "marketVersion" ? (Array.isArray(a?.plugins) ? a.plugins.find(p => p?.name === "skillator")?.version : "")
+      : a?.version;
+    if (typeof value === "string") console.log(clean(value));
+  }
+})' -- "$@" 2>/dev/null
+}
+
+plist() {
+  bounded claude plugin list --json </dev/null 2>/dev/null | json plugins
 }
 
 # pf <id> <column>: 1 id, 2 version, 3 installPath of plugin <id> in L.
@@ -146,12 +190,31 @@ inflight() {
   END { if (f) print 1; else if (u) print 2 }' "$1"
 }
 
+# Only checkout pointers and registered worktrees are trusted Git targets.
+dirty_checkout() {
+  checkout=$1
+  set -- -c core.fsmonitor=false -c "core.hooksPath=$hp" -c core.untrackedCache=false -c diff.external=
+  filters=$(git -C "$checkout" config --name-only --get-regexp '^filter\..*\.(clean|smudge|process|required)$' 2>/dev/null)
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case $f in *.required) set -- "$@" -c "$f=false" ;; *) set -- "$@" -c "$f=" ;; esac
+  done <<EOF
+$filters
+EOF
+  # Porcelain status can flag a CRLF-only stat change before checking filters.
+  git --no-optional-locks "$@" -C "$checkout" diff --quiet --no-ext-diff --no-textconv --ignore-submodules=all -- plugin 2>/dev/null
+  [ "$?" -ne 1 ] || return 0
+  git --no-optional-locks "$@" -C "$checkout" diff --cached --quiet --no-ext-diff --no-textconv --ignore-submodules=all -- plugin 2>/dev/null
+  [ "$?" -ne 1 ] || return 0
+  [ -n "$(git "$@" -C "$checkout" ls-files --others --exclude-standard -- plugin 2>/dev/null)" ]
+}
+
 # why_skip: a reason not to touch the install, or nothing.
 why_skip() {
   r=$PWD
   until [ -e "$r/.git" ]; do
     n=${r%/*}
-    { [ -n "$n" ] && [ "$n" != "$r" ]; } || return 0
+    { [ -n "$n" ] && [ "$n" != "$r" ]; } || break
     r=$n
   done
   now=$(date +%s)
@@ -164,12 +227,25 @@ why_skip() {
     esac
     echo "a relay run is in flight (${f##*/})"; return 0
   done
-  # git runs only in the owner's own clone (a source pointer's checkout), never in a repo
-  # that merely looks like skillator - and even there its config (fsmonitor, hooks) does not run.
-  rp=$(real "$r"); [ -n "$rp" ] && clones | grep -qxF "$rp" || return 0
   case $(uname -s 2>/dev/null) in MINGW*|MSYS*) hp=NUL ;; *) hp=/dev/null ;; esac
-  [ -n "$(GIT_CONFIG_NOSYSTEM=1 git -c core.fsmonitor= -c core.hooksPath="$hp" -c core.untrackedCache=false \
-    -C "$r" status --porcelain -- plugin 2>/dev/null)" ] && echo 'uncommitted plugin edits'
+  while IFS= read -r checkout; do
+    [ -n "$checkout" ] || continue
+    if dirty_checkout "$checkout"; then echo 'uncommitted plugin edits'; return 0; fi
+    worktrees=$(git -C "$checkout" -c core.quotePath=false worktree list --porcelain 2>/dev/null)
+    while IFS= read -r row; do
+      case $row in
+        'worktree '*) tree=${row#worktree } ;;
+        *) continue ;;
+      esac
+      if [ "$tree" != "$checkout" ] && dirty_checkout "$tree"; then
+        echo 'uncommitted plugin edits'; return 0
+      fi
+    done <<EOF
+$worktrees
+EOF
+  done <<EOF
+$C
+EOF
   return 0
 }
 
@@ -177,6 +253,7 @@ why_skip() {
 check() {
   m='' old='' new='' L=''
   [ "${SKILLATOR_AUTO_UPDATE:-1}" = 0 ] && { RES='skipped: SKILLATOR_AUTO_UPDATE=0'; return; }
+  C=$(clones)
   w=$(why_skip)
   [ -n "$w" ] && { RES="skipped: $w"; return; }
   command -v claude >/dev/null 2>&1 || { RES='skipped: no claude on PATH - Claude Code not checked'; return; }
@@ -186,11 +263,9 @@ check() {
   [ -n "$m" ] || { RES='skipped: skillator is not a Claude Code plugin here'; return; }
   old=$(pf "skillator@$m" 2)
   plain "$old" || { old=''; RES='skipped: unexpected version'; return; }
-  claude plugin marketplace update "$m" </dev/null >/dev/null 2>&1 || { RES=offline; return; }
-  loc=$(claude plugin marketplace list --json </dev/null 2>/dev/null | kv 'name|installLocation' \
-    | awk -v m="$m" '$1 == "name" { n = $2; next } $1 == "installLocation" && n == m { sub(/^[^ ]* /, ""); print; exit }')
-  new=$(cat "$loc/.claude-plugin/marketplace.json" 2>/dev/null | kv 'name|version' \
-    | awk '$1 == "name" { n = $2; next } $1 == "version" && n == "skillator" { print $2; exit }')
+  bounded claude plugin marketplace update "$m" </dev/null >/dev/null 2>&1 || { RES=offline; return; }
+  loc=$(bounded claude plugin marketplace list --json </dev/null 2>/dev/null | json location "$m")
+  new=$(json marketVersion 2>/dev/null < "$loc/.claude-plugin/marketplace.json")
   [ -n "$new" ] || { RES="failed: no skillator version in marketplace $m"; return; }
   plain "$new" || { new=''; RES='skipped: unexpected version'; return; }
   if newer "$old" "$new"; then RES="newer $old -> $new"
@@ -200,7 +275,7 @@ check() {
 
 # cc <plugin>: claude plugin update, stdin closed so a confirmation prompt fails.
 cc() {
-  o=$(claude plugin update "$1" </dev/null 2>&1) && return 0
+  o=$(bounded claude plugin update "$1" </dev/null 2>&1) && return 0
   if printf '%s' "$o" | grep -qiE 'confirm|shownCommand|--yes'; then
     RES='skipped: needs confirmation'
   else
@@ -215,7 +290,7 @@ update() {
   L=$(plist)
   nv=$(pf "skillator@$m" 2)
   ip=$(pf "skillator@$m" 3)
-  sv=$(cat "$ip/.claude-plugin/plugin.json" 2>/dev/null | kv version | awk '{ print $2; exit }')
+  sv=$(json version 2>/dev/null < "$ip/.claude-plugin/plugin.json")
   plain "$nv" && { [ -z "$sv" ] || plain "$sv"; } || { nv=''; RES='skipped: unexpected version'; return; }
   for v in "$nv" $sv; do
     newer "$old" "$v" || {
@@ -225,12 +300,12 @@ update() {
   done
   RES="updated $old -> $nv"
   # a pointer to a clone: /skillator-update pulls it and installs from there
-  [ -n "$(clones)" ] && { NOTE="skillator $old -> $nv for Claude Code - run /skillator-update to update the other hosts"; return; }
+  [ -n "$C" ] && { NOTE="skillator $old -> $nv for Claude Code - run /skillator-update to update the other hosts"; return; }
   ih=''
   if [ -f "$ip/install.sh" ] && [ -f "$ip/install.ps1" ]; then
     case $(uname -s 2>/dev/null) in
-      MINGW*|MSYS*|CYGWIN*) powershell -NoProfile -ExecutionPolicy Bypass -File "$ip/install.ps1" -Force ;;
-      *) sh "$ip/install.sh" --force ;;
+      MINGW*|MSYS*|CYGWIN*) bounded powershell -NoProfile -ExecutionPolicy Bypass -File "$ip/install.ps1" -Force ;;
+      *) bounded sh "$ip/install.sh" --force ;;
     esac </dev/null >/dev/null 2>&1 || ih=' (other hosts: installer failed - run /skillator-update)'
   else
     ih=' (other hosts: no installer in the plugin - run /skillator-update)'
@@ -240,17 +315,22 @@ update() {
 
 run() {
   lock || { echo 'skipped: another update run is in progress'; return; }
-  trap 'rm -rf "$K"' EXIT
+  trap unlock EXIT
   NOTE='' nv=''
   check
   case $RES in newer*) update ;; esac
   load; now=$(date +%s); sk=$(get skipAt)
   case $sk in ''|*[!0-9]*) sk=0 ;; esac
+  [ "$RES" = "$(get lastResult)" ] || sk=0
   case $RES in
     offline|failed*) [ -n "$NOTE" ] || NOTE="skillator update check: $RES - next try in $H h" ;;
     # skips that repeat every check: one notice a day, not one per check
-    'skipped: a relay run is in flight'*|'skipped: needs confirmation'|'skipped: would downgrade'*|'skipped: unexpected version')
-      [ $((now - sk)) -ge 86400 ] && { NOTE="skillator update $RES"; sk=$now; } ;;
+    'skipped: a relay run is in flight'*|'skipped: needs confirmation'|'skipped: would downgrade'*|'skipped: unexpected version'|'skipped: no node to read plugin list')
+      if [ $((now - sk)) -ge 86400 ]; then
+        NOTE="skillator update $RES"
+        [ "$RES" != 'skipped: needs confirmation' ] || NOTE="$NOTE ($old -> $new) - run /skillator-update"
+        sk=$now
+      fi ;;
   esac
   [ -n "$NOTE" ] || NOTE=$(get notice)
   put "$now" "$(get startedAt)" "$sk" "$RES" "${nv:-$old}" "$NOTE"
@@ -258,6 +338,8 @@ run() {
 }
 
 due_run() {
+  lock || return 0
+  trap unlock EXIT
   load; g n notice; g sa startedAt; g lc lastCheck; go=''
   [ -n "$n" ] && printf '%s\n' "$n"
   if [ "${SKILLATOR_AUTO_UPDATE:-1}" != 0 ]; then now=${EPOCHSECONDS:-$(date +%s)}; due && go=1 sa=$now; fi
@@ -266,6 +348,8 @@ due_run() {
     g sk skipAt; g lr lastResult; g lv lastVersion
     put "$lc" "$sa" "$sk" "$lr" "$lv" ''
   fi
+  unlock
+  trap - EXIT
   [ -n "$go" ] && ( sh "$0" run </dev/null >/dev/null 2>&1 & )
   return 0
 }
@@ -298,7 +382,8 @@ EOS
 #!/bin/sh
 echo "git $* nosys=${GIT_CONFIG_NOSYSTEM:-}" >> "$SU_D/log"
 [ -n "$SU_REALGIT" ] && exec "$SU_REALGIT" "$@"
-case "$*" in *status*) printf '%s' "$SU_DIRTY" ;; esac
+case "$*" in *"diff --quiet"*) [ -z "$SU_DIRTY" ] || exit 1 ;; esac
+exit 0
 EOS
   printf '#!/bin/sh\necho "installer sh $*" >> "$SU_D/log"\n' > "$d/inst/install.sh"
   printf 'Add-Content -LiteralPath "%s/log" -Value ("installer ps1 " + ($args -join " "))\n' "$lw" > "$d/inst/install.ps1"
@@ -368,6 +453,12 @@ claude plugin list --json'
   t 'repeated skip: a notice' '[ "$(sh "$me" due-run)" = "skillator update skipped: a relay run is in flight (run-0001-x.md)" ]'
   sh "$me" run > /dev/null
   t 'repeated skip: the notice once per 24 h' '[ -z "$(sh "$me" due-run)" ]'
+  rm -f "$rf"
+  SU_CONFIRM=1 sh "$me" run > /dev/null
+  t 'different skip: notify within the same day' '[ "$(sh "$me" due-run)" = "skillator update skipped: needs confirmation (4.29.0 -> 4.30.0) - run /skillator-update" ]'
+  put 1 0 0 result version "$(printf "before\rafter")"
+  load
+  t 'bare carriage return: valid JSON notice' '[ "$(get notice)" = beforeafter ]'
 
   # 1: never git in a repo that only looks like skillator; only in the pointer's own clone
   reset; r3="$d/fake"; rm -rf "$r3"; mkdir -p "$r3/plugin/.claude-plugin"
@@ -381,7 +472,7 @@ claude plugin list --json'
   o=$(cd "$r3" && SU_REALGIT="$rg" sh "$me" check)
   t 'lookalike repo with a hostile filter: no git call, no marker' '[ ! -e "$r3/filter-marker" ] && ! lg | grep -q ^git && [ "$o" = "newer 4.29.0 -> 4.30.0" ]'
   reset; mkdir -p "$d/repo/plugin"; ptr "$lw/repo/plugin"
-  t 'owner clone (pointer) dirty: skipped' '[ "$(SU_DIRTY=" M plugin/x" sh "$me" check)" = "skipped: uncommitted plugin edits" ] && ! lg | grep -q ^claude && lg | grep -q "^git .*nosys=1$"'
+  t 'owner clone (pointer) dirty: skipped' '[ "$(SU_DIRTY=" M plugin/x" sh "$me" check)" = "skipped: uncommitted plugin edits" ] && ! lg | grep -q ^claude && lg | grep -q "^git .*diff .*nosys=$"'
 
   reset; r2="$d/repo2"; rm -rf "$r2"; mkdir -p "$r2/plugin/.claude-plugin"
   "$rg" init -q "$r2" && "$rg" -C "$r2" config core.fsmonitor 'touch fsmon-marker; false'
@@ -389,6 +480,24 @@ claude plugin list --json'
   r2w=$(cd "$r2" && { pwd -W 2>/dev/null || pwd; }); ptr "$r2w/plugin"
   o=$(cd "$r2" && SU_REALGIT="$rg" sh "$me" check)
   t 'hostile core.fsmonitor in the owner clone: never runs' '[ ! -e "$r2/fsmon-marker" ] && [ "$o" = "skipped: uncommitted plugin edits" ]'
+
+  # A242: use Git's checkout normalization and inspect a registered linked tree.
+  reset; r4="$d/normal"; wt4="$d/linked tree"; gc="$d/system.gitconfig"
+  mkdir -p "$r4/plugin"
+  "$rg" init -q "$r4"
+  printf 'alpha\n' > "$r4/plugin/x"
+  "$rg" -C "$r4" -c core.autocrlf=false add -- plugin
+  "$rg" -C "$r4" -c user.name=t -c user.email=t@t commit -qm x
+  ptr "$lw/normal/plugin"
+  printf '[core]\n\tautocrlf = true\n' > "$gc"
+  printf 'alpha\r\n' > "$r4/plugin/x"
+  o=$(GIT_CONFIG_SYSTEM="$gc" SU_REALGIT="$rg" sh "$me" check)
+  t 'system line endings: CRLF copy is clean' '[ "$o" = "newer 4.29.0 -> 4.30.0" ]'
+  printf 'alpha\n' > "$r4/plugin/x"
+  "$rg" -C "$r4" worktree add --detach --quiet "$wt4"
+  printf 'dirty\n' > "$wt4/plugin/x"
+  o=$(SU_REALGIT="$rg" sh "$me" check)
+  t 'linked worktree: dirty plugin blocks update from elsewhere' '[ "$o" = "skipped: uncommitted plugin edits" ]'
 
   reset
   t 'opt-out: check skipped' '[ "$(SKILLATOR_AUTO_UPDATE=0 sh "$me" check)" = "skipped: SKILLATOR_AUTO_UPDATE=0" ]'
@@ -398,7 +507,7 @@ claude plugin list --json'
   reset
   o=$(SU_CONFIRM=1 sh "$me" run)
   t 'confirmation prompt: skipped, never -y' '[ "$o" = "skipped: needs confirmation" ] && ! lg | grep -qE -- "(^| )(-y|--yes)( |$)"'
-  t 'confirmation prompt: the skip notice' '[ "$(sh "$me" due-run)" = "skillator update skipped: needs confirmation" ]'
+  t 'confirmation prompt: the skip notice' '[ "$(sh "$me" due-run)" = "skillator update skipped: needs confirmation (4.29.0 -> 4.30.0) - run /skillator-update" ]'
 
   # 2: decide before installing; an update that did not land is never "updated"
   reset; cat_v 4.28.0
@@ -425,10 +534,29 @@ claude plugin list --json'
   sh "$me" run > /dev/null
   t 'pointer not a git checkout: installer from installPath' 'lg | grep -q "^installer"'
 
+  # A242: the bounded process and run/state lock are independent of one another.
+  reset; call_limit=1
+  bounded sh -c 'sleep 4' </dev/null >/dev/null 2>&1; rc=$?
+  call_limit=120
+  t 'hung process: bounded call times out' '[ "$rc" -eq 124 ]'
+  lock
+  printf '%s\n' next-owner > "$K/owner"
+  unlock
+  t 'lock takeover: old process preserves successor' '[ "$(cat "$K/owner")" = next-owner ]'
+  reset
+  printf '{"plugins":[{"version":"4.30.0","name":"skillator"}]}\n' > "$d/mkt/.claude-plugin/marketplace.json"
+  t 'JSON metadata: field order does not affect version lookup' '[ "$(sh "$me" check)" = "newer 4.29.0 -> 4.30.0" ]'
+
   # 6: one run at a time
   reset; mkdir -p "$HOME/.skillator/self-update.lock"; echo "$now" > "$HOME/.skillator/self-update.lock/at"
   o=$(sh "$me" run)
   t 'lock held: run skipped, no claude call' '[ "$o" = "skipped: another update run is in progress" ] && ! lg | grep -q ^claude'
+  echo $((now - 2000)) > "$HOME/.skillator/self-update.lock/at"
+  o=$(sh "$me" run)
+  t 'lock lasts beyond the due grace period' '[ "$o" = "skipped: another update run is in progress" ]'
+  ws 1 0
+  o=$(sh "$me" due-run)
+  t 'due-run does not rewrite state held by run' '[ -z "$o" ] && st | grep -q startedAt.:0'
   echo $((now - 3600)) > "$HOME/.skillator/self-update.lock/at"
   o=$(sh "$me" run)
   t 'stale lock: taken, released' '[ "$o" = "updated 4.29.0 -> 4.30.0" ] && [ ! -e "$HOME/.skillator/self-update.lock" ]'
@@ -441,6 +569,10 @@ claude plugin list --json'
       reset
       o=$(PATH=$p2 sh "$me" check)
       t 'no node: skipped' '[ "$o" = "skipped: no node to read plugin list" ]'
+      PATH=$p2 sh "$me" run > /dev/null
+      t 'no node: report once per day' '[ "$(PATH=$p2 sh "$me" due-run)" = "skillator update skipped: no node to read plugin list" ]'
+      PATH=$p2 sh "$me" run > /dev/null
+      t 'no node: repeat is quiet' '[ -z "$(PATH=$p2 sh "$me" due-run)" ]'
     fi
   fi
 
