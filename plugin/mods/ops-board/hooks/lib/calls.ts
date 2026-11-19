@@ -199,7 +199,11 @@ export function argvFor(call: Call, win: boolean, skillsDir: string, args: strin
   if (n) return [bin, norm(skillsDir) + '/' + n.script, ...n.args(args)]
   const t = TABLE[call as ScriptCall]
   const base = norm(skillsDir) + '/' + t.script
+  // Windows PowerShell's -File parser rejects the ticket-meta clear sentinel.
+  const psArgs = win && (call === 'meta-assign-session' || call === 'meta-team-lead')
+    ? args.map(a => a === '-' ? '-clear' : a)
+    : args
   return win
-    ? [bin, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', base + '.ps1', ...t.ps(args)]
+    ? [bin, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', base + '.ps1', ...t.ps(psArgs)]
     : [bin, base + '.sh', ...t.sh(args)]
 }

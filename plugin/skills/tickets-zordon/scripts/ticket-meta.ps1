@@ -8,6 +8,7 @@
 #   ticket-meta.ps1 tag <ID> | selftest
 #   ticket-meta.ps1 team add @handle "Name" email[,email...] | team remove @handle | team list
 #   ticket-meta.ps1 team lead @handle|- | whoami | claim <ID>... | pick [ID...]   (F80)
+#   With powershell -File, use -clear for assign-session and team lead; its host rejects a bare -.
 #   ticket-meta.ps1 iam @handle   (F92: this session's owner; whoami reads it first)
 #   ticket-meta.ps1 stamp <ID> | session   (F109: the (@sid:owner:mode) tag; `<sid> <mode>`)
 #   ticket-meta.ps1 reconcile [ID...] | unblock <ID> | start <ID>   (F81)
@@ -2031,10 +2032,22 @@ function Invoke-Selftest {
     if (-not (Refused assign-session F70 '@@cc-x')) { Write-Output 'FAIL: assign-session took a code with two @'; $script:fail = 1 }
     Eq 'assign-session clears' (Run assign-session F70 '-') "- [ ] F70 $dash Tag order [app: web] [decide: @asha] [owner: @vidul] [tester: @neo] [by: @vidul]"
     Eq 'assign-session clear, none' (Run assign-session F70 '-') "- [ ] F70 $dash Tag order [app: web] [decide: @asha] [owner: @vidul] [tester: @neo] [by: @vidul] no change: F70 has no [session:]"
+    # A238: exercise the Windows -File argument parser against this fixture.
+    $winPS = if ([Environment]::OSVersion.Platform -eq 'Win32NT') { Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe' }
+    if ($winPS -and (Test-Path -LiteralPath $winPS -PathType Leaf)) {
+      $null = Run assign-session F70 'cc-2abc'
+      & $winPS -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath assign-session F70 -clear | Out-Null
+      Eq 'assign-session -File clear exit' $LASTEXITCODE 0
+      Eq 'assign-session -File cleared the tag' ([IO.File]::ReadAllText($board).Contains('[session: cc-2abc]')) $false
+    }
     Eq 'hand-over' (AsMe '@vidul' { Run team lead 'asha' }) 'lead: @asha'
     Eq 'one lead line' @(([System.IO.File]::ReadAllText($tf)) -split "`n" | Where-Object { $_ -match '^lead:' }).Count '1'
     Eq 'team lead same' (Run team lead '@asha') 'no change: @asha is already the lead'
     Eq 'team lead - by the lead' (Run team lead '-') 'lead cleared'
+    if ($winPS -and (Test-Path -LiteralPath $winPS -PathType Leaf)) {
+      Eq 'team lead set for -File clear' (Run team lead '@asha') 'lead: @asha'
+      Eq 'team lead -File clear' (& $winPS -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath team lead -clear) 'lead cleared'
+    }
     if ([System.IO.File]::ReadAllText($tf) -match '(?m)^lead:') { Write-Output 'FAIL: team lead - left a lead line'; $script:fail = 1 }
     # review: the lead matched without case; a lead line naming no member is no lead
     W $tf "# Team`nlead: @Vidul`n`n- @vidul: vidul@ikran.in`n- @asha: Asha@X.com`n"
@@ -2228,6 +2241,10 @@ if ($args.Count -lt 1) {
 $cmd = [string]$args[0]
 $rest = @()
 if ($args.Count -gt 1) { $rest = @($args[1..($args.Count - 1)] | ForEach-Object { [string]$_ }) }
+# A238: powershell -File cannot bind a bare "-". Translate the clear alias
+# only for these positional arguments, keeping script calls with "-" valid.
+if ($rest.Count -eq 2 -and $rest[1] -ieq '-clear' -and
+    ($cmd -ceq 'assign-session' -or ($cmd -ceq 'team' -and $rest[0] -ceq 'lead'))) { $rest[1] = '-' }
 if ($cmd -ceq 'selftest') { Invoke-Selftest; exit 0 }
 try {
   $out = Invoke-Cmd $cmd $rest

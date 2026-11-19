@@ -366,7 +366,19 @@ function Normalize-MusePath([string]$path) {
   try {
     $long = $false
     try { $path = [IO.Path]::GetFullPath($path) } catch [IO.PathTooLongException] { $long = $true }
-    if ($win) {
+    if (-not $win) {
+      # Compare the resolved path, including symlinks in ancestor directories.
+      $step = 'realpath'
+      $real = $null
+      $node = Get-Command node -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+      if ($node) {
+        $real = & $node.Source -e "try { console.log(require('fs').realpathSync.native(process.argv[1])) } catch { process.exit(1) }" -- $path
+      } else {
+        $realpath = Get-Command realpath -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($realpath) { $real = & $realpath.Source $path 2>$null }
+      }
+      if ($real -and $LASTEXITCODE -eq 0) { $path = $real }
+    } else {
       $step = 'Add-Type'
       if ($script:MuseFailed[$step]) { throw }
       # the name is versioned: an older type compiled earlier in this session cannot be replaced
@@ -727,11 +739,14 @@ function Invoke-SelfTest([string]$T) {
   }
   Remove-Item -LiteralPath $fixture -Recurse -Force
   # A231: Muse may record the link-resolved, \\?\-prefixed spelling of the installer's source
-  $real = Join-Path $T 'a231\real'; $lnk = Join-Path $T 'a231\lnk'
+  $real = Join-Path $T 'a231/real'; $lnk = Join-Path $T 'a231/lnk'
   New-Item -ItemType Directory -Force (Join-Path $real 'src') | Out-Null
   try {
-    try { New-Item -ItemType Junction -Path $lnk -Target $real -ErrorAction Stop | Out-Null } catch { Write-Host "skip  A231 link case (no junction: $($_.Exception.Message))" }
-    if ((Test-Path -LiteralPath $lnk) -and (Normalize-MusePath ('\\?\' + $real.ToUpperInvariant() + '\src')) -cne (Normalize-MusePath (Join-Path $lnk 'src'))) { return 'A231 Muse source through a junction compared unequal' }
+    $windowsLink = [Environment]::OSVersion.Platform -eq 'Win32NT'
+    $linkType = if ($windowsLink) { 'Junction' } else { 'SymbolicLink' }
+    try { New-Item -ItemType $linkType -Path $lnk -Target $real -ErrorAction Stop | Out-Null } catch { Write-Host "skip  Muse link case ($($_.Exception.Message))" }
+    $expected = if ($windowsLink) { '\\?\' + $real.ToUpperInvariant() + '\src' } else { Join-Path $real 'src' }
+    if ((Test-Path -LiteralPath $lnk) -and (Normalize-MusePath $expected) -cne (Normalize-MusePath (Join-Path $lnk 'src'))) { return 'A231/A238 Muse source through a link compared unequal' }
   } finally {
     # the link alone, never recursive, then its target; cleanup never fails the selftest
     try { if (Test-Path -LiteralPath $lnk) { [IO.Directory]::Delete($lnk) } } catch {}

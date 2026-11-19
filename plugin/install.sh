@@ -36,11 +36,22 @@ for a in "$@"; do
   esac
 done
 # F102: the ops tab's Windows Terminal font size, 6..72
+font_number() {
+  _number=$(printf '%s' "$1" | sed 's/^0*//')
+  case $_number in [6-9]|[1-6][0-9]|7[0-2]) printf '%s' "$_number" ;; *) return 1 ;; esac
+}
+write_font_fragment() {
+  _fragment=$1 _requested=$2
+  if [ -z "$_requested" ] && [ -f "$_fragment" ]; then
+    _requested=$(sed -n 's/.*"size": \([0-9]*\).*/\1/p' "$_fragment")
+  fi
+  _size=$(font_number "$_requested") || _size=11
+  sed "s/\"size\": [0-9]*/\"size\": $_size/" "$root/mods/ops-board/ops/wt-fragment.json" > "$_fragment"
+}
 [ -n "$_want_font" ] && font=none
 case "$font" in
   '') ;;
-  *) font=$(printf '%s' "$font" | sed 's/^0*//')
-     case $font in [6-9]|[1-6][0-9]|7[0-2]) ;; *) font_bad=1 ;; esac ;;
+  *) if _number=$(font_number "$font"); then font=$_number; else font_bad=1; fi ;;
 esac
 [ -n "${font_bad:-}" ] && { printf 'ops font size must be 6..72, got %s\n%s\n' "$font" "$usage" >&2; exit 2; }
 
@@ -147,25 +158,29 @@ ownership_manifest() (
   [ ! -L "$1" ] && [ -d "$1" ] || exit 1
   cd "$1" || exit 1
   _bad=$(find . -exec sh -c '
+    cr=$(printf "\r")
     for f do
       case "$f" in *"
-"*|*"$(printf "\r")"*|*\\*|*:*) echo invalid ;; esac
+"*|*"$cr"*|*\\*|*:*) echo invalid ;; esac
       if [ -L "$f" ] || { [ ! -f "$f" ] && [ ! -d "$f" ]; }; then echo invalid; fi
     done
   ' sh {} +) || exit 1
   [ -z "$_bad" ] || exit 1
   _files=$(find . -type f ! -path "./$owned" | LC_ALL=C sort) || exit 1
   printf 'skillator-owned 2\n'
-  printf '%s\n' "$_files" | while IFS= read -r _f; do
-    [ -n "$_f" ] || continue
-    if command -v sha256sum >/dev/null 2>&1; then
-      _hash=$(sha256sum < "$_f") || exit 1
-    else
-      _hash=$(shasum -a 256 < "$_f") || exit 1
-    fi
-    _hash=${_hash%% *}
-    printf 'file %s %s\n' "$_hash" "${_f#./}"
-  done
+  [ -n "$_files" ] || exit 0
+  # Filenames cannot contain CR, LF or backslashes. Hash them in sorted order
+  # with one child process instead of one process per file.
+  IFS='
+'
+  set -f
+  set -- $_files
+  if command -v sha256sum >/dev/null 2>&1; then
+    _hashes=$(sha256sum -b -- "$@") || exit 1
+  else
+    _hashes=$(shasum -a 256 -b -- "$@") || exit 1
+  fi
+  printf '%s\n' "$_hashes" | sed 's/^\([0-9a-f]*\) [ *]\.\//file \1 /'
 )
 
 write_owned() {
@@ -207,7 +222,11 @@ prune_dest() {
   fi
   printf '%s\n' "$_cands" | while read -r _nm; do
     case "$_nm" in ''|.|..|*/*|*\\*|*[*?[]*) continue ;; esac
-    if printf '%s\n' "$shipped" | grep -qxF -- "$_nm"; then continue; fi
+    case "
+$shipped
+" in *"
+$_nm
+"*) continue ;; esac
     _p="$_pd/$_nm"
     if [ -L "$_p" ]; then
       # only a link into this repo's skills/ - never a link the user made elsewhere
@@ -1048,7 +1067,7 @@ if [ -n "$selftest" ]; then
     for _font in 06 09 072 00000000000000000000000000009; do
       sh "$root/mods/ops-board/ops/ops.sh" --font-size "$_font" >/dev/null
       check_font_json "$_font"
-      HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" --ops-font-size "$_font" >/dev/null
+      write_font_fragment "$_frag" "$_font"
       check_font_json "$_font"
     done
     for _font in 000 05 073 9999999999999999999999999999; do
@@ -1060,16 +1079,16 @@ if [ -n "$selftest" ]; then
     done
     for _font in 09 72 073; do
       sed "s/\"size\": [0-9]*/\"size\": $_font/" "$root/mods/ops-board/ops/wt-fragment.json" > "$_frag"
-      HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" >/dev/null
+      write_font_fragment "$_frag" ''
       case $_font in 073) check_font_json 11 ;; *) check_font_json "$_font" ;; esac
     done
-    HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" --ops-font-size 9 >/dev/null || { echo "FAIL: font run exited $?"; exit 1; }
+    write_font_fragment "$_frag" 9
     grep -qF '"size": 9' "$_frag" || { echo "FAIL: font size 9 not written"; exit 1; }
-    HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" >/dev/null || { echo "FAIL: plain font run exited $?"; exit 1; }
+    write_font_fragment "$_frag" ''
     grep -qF '"size": 9' "$_frag" || { echo "FAIL: font size reset by a plain run"; exit 1; }
     _rc=0; HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" --ops-font-size 3 >/dev/null 2>&1 || _rc=$?
     { [ "$_rc" = 2 ] && grep -qF '"size": 9' "$_frag"; } || { echo "FAIL: font size 3 accepted"; exit 1; }
-    HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" --ops-font-size 11 >/dev/null || { echo "FAIL: font 11 run exited $?"; exit 1; }
+    write_font_fragment "$_frag" 11
     cmp -s "$root/mods/ops-board/ops/wt-fragment.json" "$_frag" || { echo "FAIL: font size 11 is not the shipped fragment"; exit 1; }
   else
     [ -e "$T/lad" ] && { echo "FAIL: Windows Terminal fragment written off Windows"; exit 1; }
@@ -1254,8 +1273,9 @@ if [ -n "$selftest" ]; then
   mkdir -p "$P/.cursor" "$P/.claude/plugins/cache/skillator" "$P/pc/mods/ops-board/ops"
   : > "$P/pc/mods/ops-board/ops/ops.sh"
   printf '{\n  "plugins": {\n    "skillator@skillator": [\n      {\n        "installPath": "%s"\n      }\n    ]\n  }\n}\n' "$P/pc" > "$P/.claude/plugins/installed_plugins.json"
-  HOME=$P CODEX_HOME=$P/.codex sh "$0" >/dev/null || { echo "FAIL: plugin install exited $?"; exit 1; }
+  HOME=$P CODEX_HOME=$P/.codex sh "$0" --ops-font-size 09 >/dev/null || { echo "FAIL: plugin install exited $?"; exit 1; }
   grep -q "exec sh \"$P/.cursor/skills/ops-board/ops/ops.sh\"" "$P/.local/bin/ops" || { echo "FAIL: shim target with the plugin installed (first dest written, not the plugin cache)"; exit 1; }
+  if command -v cygpath >/dev/null 2>&1; then check_font_json 9; fi
   echo ok; exit 0
 fi
 
@@ -1377,11 +1397,7 @@ if [ -n "$shim_src" ] && [ -n "${LOCALAPPDATA:-}" ] && command -v cygpath >/dev/
   else
     mkdir -p "$_wt"
     # F102: --ops-font-size, else the size an earlier run wrote, else the shipped 11
-    _size=$font
-    [ -z "$_size" ] && [ -f "$_wt/ops.json" ] && _size=$(sed -n 's/.*"size": \([0-9]*\).*/\1/p' "$_wt/ops.json")
-    _size=$(printf '%s' "$_size" | sed 's/^0*//')
-    case $_size in [6-9]|[1-6][0-9]|7[0-2]) ;; *) _size=11 ;; esac
-    sed "s/\"size\": [0-9]*/\"size\": $_size/" "$root/mods/ops-board/ops/wt-fragment.json" > "$_wt/ops.json"
+    write_font_fragment "$_wt/ops.json" "$font"
     _note=""; [ "$_size" = 11 ] || _note=" (font $_size)"
     echo "ops   Windows Terminal profile 'skillator ops' -> $_wt/ops.json$_note"
     echo "      remove: rm -r \"$_wt\""
