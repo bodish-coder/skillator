@@ -172,20 +172,20 @@ test('F116 status/help native prefixes occupy the Tickets chrome budget', () => 
 })
 
 test('A199: buildModel includes personalized Assigned and Decide groups, folding, and raw ticket resolution when fold state is passed', () => {
-  const mOpen = buildModel(view({ me: '@vidul', assignedFolded: false, decideFolded: false }))
+  const mOpen = buildModel(view({ me: '@asha', assignedFolded: false, decideFolded: false }))
   expect(mOpen.userGroups.map(g => [g.id, g.tickets.map(t => t.id), g.open])).toEqual([
     ['assigned', [], true],
-    ['decide', ['F1'], true],
+    ['decide', ['F3'], true],
   ])
-  expect(mOpen.items.slice(0, 4)).toEqual(['head:assigned', 'head:decide', 'decide:F1', 'head:~'])
+  expect(mOpen.items.slice(0, 4)).toEqual(['head:assigned', 'head:decide', 'decide:F3', 'head:~'])
 
-  const mSel = buildModel(view({ me: '@vidul', assignedFolded: false, decideFolded: false, selected: 'decide:F1' }))
-  expect(mSel.selected).toBe('decide:F1')
-  expect(mSel.ticket).toBe('F1')
+  const mSel = buildModel(view({ me: '@asha', assignedFolded: false, decideFolded: false, selected: 'decide:F3' }))
+  expect(mSel.selected).toBe('decide:F3')
+  expect(mSel.ticket).toBe('F3')
 
-  const mFolded = buildModel(view({ me: '@vidul', assignedFolded: false, decideFolded: true, selected: 'decide:F1' }))
+  const mFolded = buildModel(view({ me: '@asha', assignedFolded: false, decideFolded: true, selected: 'decide:F3' }))
   expect(mFolded.userGroups.find(g => g.id === 'decide')?.open).toBe(false)
-  expect(mFolded.items).not.toContain('decide:F1')
+  expect(mFolded.items).not.toContain('decide:F3')
   expect(mFolded.selected).toBe('head:decide')
   expect(mFolded.ticket).toBeNull()
 })
