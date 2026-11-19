@@ -101,3 +101,7 @@ export function armToast(v: ArmView): string {
     + (v.urlChanged ? '\n▲ the tunnel URL changed - see the Messages tab, y copies it' : '')
   return ''
 }
+
+export function armCommandToast(message: string, command: string, args: string[]): string {
+  return args.filter(Boolean).reduce((text, arg) => text.split(arg).join('<url>'), [message, command].join('\n'))
+}

@@ -72,12 +72,14 @@ function Get-Process { [pscustomobject]@{ ProcessName = 'devtunnel'; CommandLine
 $nonHostResult = TunnelHosted
 Assert-False $nonHostResult "devtunnel user show must NOT satisfy readiness"
 
-# 8. Test: Missing / unknown process identity must NOT satisfy readiness
+# 8. An uninspectable devtunnel counts as hosted, with a note and no verified PID.
 Write-Host "Testing missing/unknown process identity..."
 # Object with null/empty CommandLine
 function Get-Process { [pscustomobject]@{ ProcessName = 'devtunnel'; CommandLine = $null } }
 $unknownResult = TunnelHosted
-Assert-False $unknownResult "devtunnel process with null CommandLine must NOT satisfy readiness"
+Assert-True $unknownResult "An uninspectable devtunnel must satisfy readiness"
+Assert-True $script:Blind "An uninspectable devtunnel must set the status note flag"
+Assert-Equal @(TunnelHosted -Ids).Count 0 "An uninspectable devtunnel must not yield a stop target"
 
 # Empty process list
 function Get-Process { @() }
