@@ -1,6 +1,6 @@
 # RUN-0041 - pending parallel 4
 plan: TICKETS.md
-started: 2026-11-18T17:51Z   updated: 2026-11-18T17:57Z
+started: 2026-11-18T17:51Z   updated: 2026-11-19T15:17Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0041-pending-parallel-4
 branch: run/RUN-0041-pending-parallel-4
 
@@ -8,8 +8,8 @@ branch: run/RUN-0041-pending-parallel-4
 | # | stage | state | owner | heartbeat | landed |
 |---|-------|-------|-------|-----------|--------|
 | 314 | A242 self-update follow-ups | ~ | build:opus | 2026-11-18T17:57Z | - |
-| 315 | A243 Teams follow-ups | ~ | build:opus | 2026-11-18T17:57Z | - |
-| 316 | A245 wizard answers follow-ups | ~ | build:opus | 2026-11-18T17:57Z | - |
+| 315 | A243 Teams follow-ups | x | build:codex | 2026-11-19T15:17Z | 3352b67 |
+| 316 | A245 wizard answers follow-ups | x | build:codex | 2026-11-19T15:17Z | c7e9533 |
 | 317 | A249 model test decide group | x | build:opus | 2026-11-18T17:56Z | fe17cc3 |
 
 ## In flight
@@ -66,3 +66,6 @@ prompt: |
 - 2026-11-18T17:52Z - /pending-sentinel parallel 4 at 7d 96%. Skipped: A227/A229/A230 (owner/machine); A238/A239/A246/A247/A248 (file overlap with the picks, live agy needed, or feature-sized). Ruling: 4 file-disjoint stages A242/A243/A245/A249, each committing per item - the 97% stop is likely mid-flight and halts all agents with a handoff - cost if wrong: partial stages, resumable from these prompts.
 - 2026-11-18T17:56Z - stage 317 (A249) back c31564b, test-only: decideTickets (F128 rule) is right, the A199 test used a plain [ ] ticket; now uses [?] F3 [decide: @asha]. model 18/1 -> 19/0. Orchestrator read the 8-line diff. Landed as fe17cc3.
 - 2026-11-18T17:57Z - STOP: 7d reached 97% (standing rule). Stages 314 (A242), 315 (A243), 316 (A245) agents stopped; 314 and 316 had no commits, 315 left one partial test edit, saved as WIP 226e542 on its branch (unverified). 317 landed. Handoff: docs/handoffs/HANDOFF-2026-11-18-run0041-weekly-97.md. Resume after the weekly reset: continue RUN-0041 - redispatch 314-316 from their stored prompts.
+- 2026-11-19T15:09Z - Ruling: owner resumed pending tickets in Codex. Stage 316 resumes in its existing worktree. Stage 315 resumes from 226e542 in its existing worktree. Keep test suites serial on this PC. Stage 314 is queued. No remote publication during this run.
+- 2026-11-19T15:10Z - Ruling: resume stage 314 in its existing worktree for source analysis and implementation. Run its installer-related selftests only after stages 315 and 316 finish their focused checks.
+- 2026-11-19T15:17Z - Stage 315 (A243) verified: 112 Ops tests, PowerShell hosting fixture, and both isolated setup selftests. Stage 316 (A245) verified: 76 answer tests and Holo selftest. Both landed on the run branch.
