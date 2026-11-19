@@ -243,7 +243,6 @@ codex_level() {
 
 read_cache() {
   [ -z "$source_error$codex_session${CLAUDE_CODE_SESSION_ID:-}" ] || return 0
-  [ "$selected_host" != codex ] || return 0
   cp=""
   if fresh_file "$selected_profile/quota-cache.json"; then cp="$selected_profile/quota-cache.json"
   elif [ "$selected_host" = claude-code ] && fresh_file "$dir/quota-cache.json"; then cp="$dir/quota-cache.json"; fi
@@ -349,7 +348,7 @@ start_quota_refresh() {
 
 if [ "$mode" = refresh ]; then
   cli="$2"; target_dir="$3"
-  case $cli in agy|claude|muse) ;; *) exit 0 ;; esac
+  case $cli in agy|claude|codex|muse) ;; *) exit 0 ;; esac
   [ -n "$target_dir" ] || exit 0
   lock="$target_dir/quota-cache.json.refreshing"
   cache="$target_dir/quota-cache.json"
@@ -398,6 +397,10 @@ if [ "$mode" = refresh ]; then
       --no-session-persistence --strict-mcp-config --output-format stream-json --verbose --tools '' </dev/null
   }
   case $cli in
+    codex)
+      src_name=codex
+      parsed=$(node "$(dirname "$0")/codex-quota.cjs" "$target_dir" 2>/dev/null)
+      ;;
     agy)
       src_name=agy
       # B27: MSYS_NO_PATHCONV - Git Bash rewrites "/usage" to a path, a paid prompt.
@@ -701,7 +704,7 @@ if [ "$mode" = level ]; then
       v=$(read_fresh "$dir/$key.ctx");      [ -n "$v" ] && cx=$v
     fi
   fi
-  if [ "$src" = none ]; then
+  if [ "$src" = none ] || { [ "$src" = codex ] && [ "$h" = - ] && [ "$wk" = - ]; }; then
     cache_data=$(read_cache)
     if [ -n "$cache_data" ]; then
       set -- $cache_data
@@ -713,6 +716,7 @@ if [ "$mode" = level ]; then
     elif [ -n "${SKILLATOR_CLI:-}" ] && [ -n "${SKILLATOR_PROFILE_DIR:-}" ] && [ -z "$source_error$codex_session${CLAUDE_CODE_SESSION_ID:-}" ]; then
       case $selected_host in
         claude-code) start_quota_refresh claude "$selected_profile" ;;
+        codex) [ ! -f "$selected_profile/auth.json" ] || start_quota_refresh codex "$selected_profile" ;;
         agy|muse) start_quota_refresh "$selected_host" "$selected_profile" ;;
       esac
     fi

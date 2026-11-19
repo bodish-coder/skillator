@@ -300,7 +300,11 @@ test('F176: --refresh reads blank logged-in rows once, in the foreground, and sk
   const read: Reader = async (e, ms) => {
     const d = e.SKILLATOR_PROFILE_DIR!
     calls.push({ dir: d, wait: e.SKILLATOR_QUOTA_REFRESH_WAIT, ms })
-    if (filled.has(d)) return { code: 0, out: 'src=claude-code 5h=4.0 7d=20.0 ctx=- max=20.0\n', err: '' }
+    if (filled.has(d)) {
+      return e.SKILLATOR_CLI === 'codex'
+        ? said('src=codex 5h=- 7d=0.0 ctx=- max=0.0\n')(e, ms)
+        : said('src=claude-code 5h=4.0 7d=20.0 ctx=- max=20.0\n')(e, ms)
+    }
     if (e.SKILLATOR_QUOTA_REFRESH_WAIT === '1' && !locked.has(d)) filled.add(d)
     else locked.add(d)
     return NONE(e, 0)
@@ -308,10 +312,10 @@ test('F176: --refresh reads blank logged-in rows once, in the foreground, and sk
   const out: string[][] = []
   for (const p of discover(h)) out.push(...await profileRows(p, read, {}, false, true))
   assert.deepEqual(out.map(r => [r[0], r[1], r[2]]), [
-    ['claude-blank', '4%', '20%'], ['claude-hot', '-', '-'], ['claude-out', '-', '-'], ['codex-cx', '-', '-'],
+    ['claude-blank', '4%', '20%'], ['claude-hot', '-', '-'], ['claude-out', '-', '-'], ['codex-cx', '-', '0%'],
   ])
   const waits = calls.filter(c => c.wait === '1')
-  assert.deepEqual(waits.map(c => c.dir), [`${h}/.claude-blank`], 'one forced read: not >= 90% 7d, not logged out, not codex')
+  assert.deepEqual(waits.map(c => c.dir), [`${h}/.claude-blank`, `${h}/.codex-cx`])
   assert.ok(waits[0]!.ms >= 50000 && waits[0]!.ms < 90000, 'over the capped CLI calls, inside the 90 s refresh lock')
   assert.match(out.find(r => r[0] === 'claude-hot')![3], /7d 95% >= 90%/)
 })

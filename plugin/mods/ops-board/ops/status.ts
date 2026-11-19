@@ -78,6 +78,7 @@ function readerEnv(p: Profile, base: Env): Env {
   delete e.CLAUDE_CODE_SESSION_ID
   delete e.CODEX_THREAD_ID
   delete e.CODEX_SESSION_ID
+  delete e.SKILLATOR_QUOTA_REFRESH_WAIT
   e.SKILLATOR_CLI = p.cli
   e.SKILLATOR_PROFILE_DIR = p.dir
   const none = `${p.dir}/.ops-status-none`
@@ -372,9 +373,9 @@ const REFRESH_MS = 60_000
 // The board runs `ops --status --refresh` under a 300 s cap; forced reads stop in time
 // for every row to still be read plainly and printed.
 const BUDGET_MS = 270_000
-const FORCED = new Set(['claude', 'agy', 'muse'])
+const FORCED = new Set(['claude', 'codex', 'agy', 'muse'])
 
-// F176: a profile's row and its model rows. `refresh`: a logged-in claude/agy/muse profile
+// F176: a profile's row and its model rows. `refresh`: a supported logged-in profile
 // is first read by usage-watch level with SKILLATOR_QUOTA_REFRESH_WAIT - it reads the CLI
 // in the foreground only when the cache is blank or stale, under its lock and backoff (a
 // plain read first would take that lock for a background read); never at a last 7d >= 90%

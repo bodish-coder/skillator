@@ -210,7 +210,7 @@ function Get-CodexLevel($path) {
 }
 
 function Get-CachedQuota {
-  if ($sourceError -or $codexSession -or $env:CLAUDE_CODE_SESSION_ID -or $selectedHost -eq 'codex') { return $null }
+  if ($sourceError -or $codexSession -or $env:CLAUDE_CODE_SESSION_ID) { return $null }
   $cands = @(
     Join-Path $selectedProfile 'quota-cache.json'
     if ($selectedHost -eq 'claude-code') { Join-Path $dir 'quota-cache.json' }
@@ -364,7 +364,7 @@ function Invoke-Capped([int]$secs, [string]$call, $in) {
 }
 
 if ($Mode -eq 'refresh') {
-  if (-not $Cli -or -not $Dir -or $Cli -notin @('agy','claude','muse')) { exit 0 }
+  if (-not $Cli -or -not $Dir -or $Cli -notin @('agy','claude','codex','muse')) { exit 0 }
   $lock = Join-Path $Dir 'quota-cache.json.refreshing'
   $cache = Join-Path $Dir 'quota-cache.json'
   $oldAgy = $env:AGY_CONFIG_DIR; $oldApp = $env:ANTIGRAVITY_APP_DATA_DIR
@@ -383,7 +383,18 @@ if ($Mode -eq 'refresh') {
     }
     $turned = $false
     $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds(); $started = [DateTime]::UtcNow
-    if ($Cli -eq 'agy') {
+    if ($Cli -eq 'codex') {
+      $raw = try { & node (Join-Path $PSScriptRoot 'codex-quota.cjs') $Dir 2>$null } catch { $null }
+      if ($raw) {
+        $parsed = try { ConvertFrom-Json $raw -ErrorAction Stop } catch { $null }
+        if ($parsed -and ($null -ne $parsed.'5h' -or $null -ne $parsed.'7d')) {
+          $res = [ordered]@{ src = 'codex' }
+          foreach ($key in @('at','5h','7d','models')) {
+            if ($null -ne $parsed.$key) { $res[$key] = $parsed.$key }
+          }
+        }
+      }
+    } elseif ($Cli -eq 'agy') {
       $env:AGY_CONFIG_DIR = $Dir
       $env:ANTIGRAVITY_APP_DATA_DIR = $Dir
       try { $raw = & agy -p "/usage" --output-format json 2>$null | Out-String } catch { $raw = '' }
@@ -613,7 +624,7 @@ if ($Mode -eq 'level') {
       $v = Read-Fresh (Join-Path $dir "$key.ctx") ${function:Read-Token};       if ($null -ne $v) { $cx = $v }
     }
   }
-  if ($src -eq 'none') {
+  if ($src -eq 'none' -or ($src -eq 'codex' -and $h -eq '-' -and $wk -eq '-')) {
     $cq = Get-CachedQuota
     if ($cq) {
       $src = $cq.src
@@ -623,7 +634,8 @@ if ($Mode -eq 'level') {
       elseif ($h -ne '-' -and $wk -ne '-') { $mx = Fmt1 ([math]::Max([double]::Parse($h, $inv), [double]::Parse($wk, $inv))) }
       elseif ($h -ne '-') { $mx = $h } elseif ($wk -ne '-') { $mx = $wk }
       if ($cq.note) { $noteTag = " note=$($cq.note -replace '\s+','_')" }
-    } elseif ($env:SKILLATOR_CLI -and $env:SKILLATOR_PROFILE_DIR -and -not $sourceError -and -not $codexSession -and -not $env:CLAUDE_CODE_SESSION_ID -and $selectedHost -in @('claude-code','agy','muse')) {
+    } elseif ($env:SKILLATOR_CLI -and $env:SKILLATOR_PROFILE_DIR -and -not $sourceError -and -not $codexSession -and -not $env:CLAUDE_CODE_SESSION_ID -and
+              ($selectedHost -in @('claude-code','agy','muse') -or ($selectedHost -eq 'codex' -and (Test-Path -LiteralPath (Join-Path $selectedProfile 'auth.json') -PathType Leaf)))) {
       $refreshCli = if ($selectedHost -eq 'claude-code') { 'claude' } else { $selectedHost }
       Start-QuotaRefresh $refreshCli $selectedProfile
     }
