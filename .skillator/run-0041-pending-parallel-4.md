@@ -1,13 +1,13 @@
 # RUN-0041 - pending parallel 4
 plan: TICKETS.md
-started: 2026-11-18T17:51Z   updated: 2026-11-19T15:17Z
+started: 2026-11-18T17:51Z   updated: 2026-11-19T15:51Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0041-pending-parallel-4
 branch: run/RUN-0041-pending-parallel-4
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
 |---|-------|-------|-------|-----------|--------|
-| 314 | A242 self-update follow-ups | ~ | build:opus | 2026-11-18T17:57Z | - |
+| 314 | A242 self-update follow-ups | x | build:codex | 2026-11-19T15:51Z | a8bdc68 |
 | 315 | A243 Teams follow-ups | x | build:codex | 2026-11-19T15:17Z | 3352b67 |
 | 316 | A245 wizard answers follow-ups | x | build:codex | 2026-11-19T15:17Z | c7e9533 |
 | 317 | A249 model test decide group | x | build:opus | 2026-11-18T17:56Z | fe17cc3 |
@@ -69,3 +69,4 @@ prompt: |
 - 2026-11-19T15:09Z - Ruling: owner resumed pending tickets in Codex. Stage 316 resumes in its existing worktree. Stage 315 resumes from 226e542 in its existing worktree. Keep test suites serial on this PC. Stage 314 is queued. No remote publication during this run.
 - 2026-11-19T15:10Z - Ruling: resume stage 314 in its existing worktree for source analysis and implementation. Run its installer-related selftests only after stages 315 and 316 finish their focused checks.
 - 2026-11-19T15:17Z - Stage 315 (A243) verified: 112 Ops tests, PowerShell hosting fixture, and both isolated setup selftests. Stage 316 (A245) verified: 76 answer tests and Holo selftest. Both landed on the run branch.
+- 2026-11-19T15:51Z - Stage 314 (A242) passed both isolated updater selftests and landed as a8bdc68. All four stages are complete on local main; final merge 38010c0.
