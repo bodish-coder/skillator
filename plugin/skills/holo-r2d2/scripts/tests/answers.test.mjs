@@ -737,7 +737,8 @@ test("A233-3: a leftover page copy with the same set id never displaces the set'
 });
 
 function settledRun(s) {
-  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("### Q1 open", "### Q1 answered").replaceAll("### Q2 open", "### Q2 answered");
+  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8")
+    .replace("### Q1 open", "### Q1 answered").replace("### Q2 open", "### Q2 answered").replace(/ *updated: \S+/, "");
   writeFileSync(RUN1(s), md);
   at(RUN1(s), "2026-11-17T11:00:00Z");
   writeFileSync(join(s.holo, "RUN-1.wizard.html"), "<!doctype html>");
@@ -806,7 +807,7 @@ test("A233-8: only a verified FINAL keeps a settled run listed", async () => {
 test("A237-1: a settled run with answer times in its run file is judged by finalizedAt, not file times", async () => {
   const s = sandbox();
   settledRun(s);
-  writeFileSync(RUN1(s), readFileSync(RUN1(s), "utf8").replace("answer: -", "answer: JSON\nanswered: 2026-11-17T11:00Z"));
+  writeFileSync(RUN1(s), readFileSync(RUN1(s), "utf8").replaceAll("answer: -", "answer: JSON\nanswered: 2026-11-17T11:00Z"));
   at(RUN1(s), "2026-11-17T13:00:00Z"); // relay-morpheus rewrote run.md later
   const p = at(put(s.holo, "RUN-1-decisions-FINAL.json", { ...answers({ finalizedAt: "2026-11-17T12:00:00Z" }), set: "RUN-1" }, 0), "2026-11-17T12:00:00Z");
   assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"), "a FINAL finalized after the last answer stays listed though the run file is newer");
@@ -896,6 +897,7 @@ const finalAt = (s, iso) => put(s.holo, "RUN-1-decisions-FINAL.json", { ...answe
 test("A237-r2: a FINAL is newer than the run's last answer only in a later minute", async () => {
   const s = sandbox();
   stampedRun(s);
+  writeFileSync(RUN1(s), readFileSync(RUN1(s), "utf8").replace(/updated: \S+/, "updated: 2026-11-17T11:00Z"));
   finalAt(s, "2026-11-17T11:00:30Z");
   assert.ok(!(await findAnswers(s.opts)).sets.includes("RUN-1"), "same minute as the answered stamp: not newer");
   finalAt(s, "2026-11-17T11:01:00Z");
@@ -956,10 +958,45 @@ test("A241-2: an untimed settled decision is bounded by the run's updated: stamp
 test("A241-3: no updated: stamp - the millisecond file mtime bounds it, with no minute flooring", async () => {
   const s = sandbox();
   mootQ2(s, null, "2026-11-17T13:00:30.000Z");
-  finalAt(s, "2026-11-17T13:00:15Z");
-  assert.ok(!(await findAnswers(s.opts)).sets.includes("RUN-1"), "before the mtime");
-  finalAt(s, "2026-11-17T13:00:45Z");
+  const final = at(finalAt(s, "2026-11-17T13:00:45Z"), "2026-11-17T13:00:15Z");
+  const before = await findAnswers(s.opts);
+  assert.ok(!before.sets.includes("RUN-1"), "FINAL file before the run file");
+  assert.match(before.ignored.find((x) => x.path === final)?.why, /run file is newer than this file/);
+  at(final, "2026-11-17T13:00:45Z");
   assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"), "after the mtime, in the same minute");
+});
+
+test("A245: updated earlier than the newest answer falls back to the run file time", async () => {
+  const s = sandbox();
+  mootQ2(s, "2026-11-17T10:55Z");
+  const final = at(finalAt(s, "2026-11-17T12:00:00Z"), "2026-11-17T12:00:00Z");
+  assert.ok(!(await findAnswers(s.opts)).sets.includes("RUN-1"));
+  at(final, "2026-11-17T14:00:00Z");
+  assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"));
+});
+
+test("A245: fully untimed settled run uses its updated stamp", async () => {
+  const s = sandbox();
+  mootQ2(s, "2026-11-17T12:00Z");
+  writeFileSync(RUN1(s), readFileSync(RUN1(s), "utf8").replace("answered: 2026-11-17T11:00Z", ""));
+  at(RUN1(s), "2026-11-17T15:00:00Z");
+  at(finalAt(s, "2026-11-17T11:30:00Z"), "2026-11-17T16:00:00Z");
+  assert.ok(!(await findAnswers(s.opts)).sets.includes("RUN-1"));
+  at(finalAt(s, "2026-11-17T12:30:00Z"), "2026-11-17T14:00:00Z");
+  assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"));
+});
+
+test("A245: canonical padded page keeps priority with different filename casing", async () => {
+  const s = sandbox(), nonce = "a".repeat(32);
+  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("@LANDED@", "abc1234").replace("# RUN-1 ", "# RUN-0001 ");
+  writeFileSync(RUN1(s), md);
+  const set = setFromRun(parseRun(md));
+  const own = join(s.holo, "run-0001.WIZARD.HTML");
+  writeFileSync(own, wizardPage(set, nonce));
+  at(own, "2026-11-17T09:00:00Z");
+  writeFileSync(join(s.holo, "RUN-1.wizard.html"), wizardPage(set, "b".repeat(32)));
+  put(s.dl, "RUN-1-decisions-FINAL.json", { ...run1Answers(s, set), nonce }, 0);
+  assert.equal((await findAnswers(s.opts)).picked?.verified, true);
 });
 
 test("A241-4: an answered decision with no stamp (legacy) is untimed, not time 0", async () => {

@@ -19,7 +19,7 @@ import { continuePrompt, engageOf, orderRuns, parseFollowupOut, RUNS_SECTIONS, s
 export { parseFollowupOut, startRunCmd }
 import type { RunsSection } from '../hooks/lib/runlines'
 import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
-import { armToast, parseArm } from '../hooks/lib/teamsarm'
+import { armCommandToast, armToast, parseArm } from '../hooks/lib/teamsarm'
 import { CLEARED_LINE, freshSetup, parseCfgView, resultLine, SAVED_LINE, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
 import type { SetupField, SetupValues } from '../hooks/lib/teamsconfig'
 import { enterRunEffect, RUN_INITIAL, runKey } from './runtab'
@@ -1497,7 +1497,7 @@ const armThen = (call: ArmCall, args: string[] = [], seq = 0): Then => r => x =>
   const effects = call === 'team-arm' && x.ackAfter && (v?.result === 'armed' || v?.hosted) ? [ackRun(x.ackAfter, x.armSeq)] : []
   const y: State = quiet ? x : { ...x, armBusy: false, ackAfter: null }
   // a toast never carries the URL: the ack's argument is replaced by value
-  const said = (t: string) => args.filter(Boolean).reduce((m, a) => m.split(a).join('<url>'), [t, ran(r.argv)].join('\n'))
+  const said = (t: string) => armCommandToast(t, ran(r.argv), args)
   if (!v) return { state: quiet ? y : toast(y, said(`✗ Teams: ${r.code === 0 ? 'unexpected output from teams-uhura' : teamWhy(r, 'teams-uhura setup')}`)), effects }
   const t = armToast(v)
   return { state: t ? toast({ ...y, teamsArm: v }, said(t)) : { ...y, teamsArm: v }, effects }
@@ -1513,11 +1513,14 @@ function armRun(s: State, call: 'team-arm' | 'team-disarm'): Step {
 function copyUrl(s: State): Step {
   const url = s.teamsArm?.url
   if (!url) return { state: toast(s, 'no tunnel URL yet - c connects'), effects: [] }
-  const then: Then = r => x => r.code !== 0
-    ? toast(x, `✗ not copied: ${r.err.trim() || 'clipboard unavailable'} - read it on the Messages tab`)
-    // A235: the ack carries the URL copied; under a connect or disconnect in flight it waits for it
-    : { state: toast(x.teamsArm?.urlChanged && x.armBusy ? { ...x, ackAfter: url } : x, '✓ tunnel URL copied - paste it as the Teams outgoing webhook callback URL'),
-        effects: x.teamsArm?.urlChanged && !x.armBusy ? [ackRun(url, x.armSeq)] : [] }
+  const then: Then = r => x => {
+    if (r.code !== 0) return toast(x, `✗ not copied: ${r.err.trim() || 'clipboard unavailable'} - read it on the Messages tab`)
+    const shouldAck = x.teamsArm?.url === url && x.teamsArm.urlChanged
+    return {
+      state: toast(shouldAck && x.armBusy ? { ...x, ackAfter: url } : x, '✓ tunnel URL copied - paste it as the Teams outgoing webhook callback URL'),
+      effects: shouldAck && !x.armBusy ? [ackRun(url, x.armSeq)] : [],
+    }
+  }
   return { state: s, effects: [{ kind: 'copy', text: url, then }] }
 }
 
