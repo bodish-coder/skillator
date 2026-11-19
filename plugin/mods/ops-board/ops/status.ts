@@ -53,7 +53,16 @@ export function discover(home: string): Profile[] {
 export function ownProfile(env: Env): Profile | null {
   const home = norm(env.HOME || env.USERPROFILE || homedir())
   const profiles = discover(home)
-  const dir = env.SKILLATOR_PROFILE_DIR || env.CLAUDE_CONFIG_DIR || env.CODEX_HOME || env.MUSE_CONFIG_DIR || env.AGY_CONFIG_DIR || env.ANTIGRAVITY_APP_DATA_DIR
+  const dirs: Record<string, string | undefined> = {
+    claude: env.CLAUDE_CONFIG_DIR,
+    'claude-code': env.CLAUDE_CONFIG_DIR,
+    codex: env.CODEX_HOME,
+    muse: env.MUSE_CONFIG_DIR,
+    agy: env.AGY_CONFIG_DIR || env.ANTIGRAVITY_APP_DATA_DIR,
+  }
+  const dir = env.SKILLATOR_PROFILE_DIR || (env.SKILLATOR_CLI
+    ? (Object.hasOwn(dirs, env.SKILLATOR_CLI) ? dirs[env.SKILLATOR_CLI] : undefined)
+    : dirs.claude || dirs.codex || dirs.muse || dirs.agy)
   if (dir) {
     const found = profiles.find(p => key(p.dir) === key(dir))
     if (found) return found

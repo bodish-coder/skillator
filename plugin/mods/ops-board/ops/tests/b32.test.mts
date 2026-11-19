@@ -27,6 +27,12 @@ test('B32: a board started from agy (ANTIGRAVITY_APP_DATA_DIR, as usage-watch re
   const dir = join(home, '.gemini', 'antigravity-cli').replace(/\\/g, '/')
   mkdirSync(dir, { recursive: true })
   assert.equal(ownProfile({ HOME: home, ANTIGRAVITY_APP_DATA_DIR: dir })?.cli, 'agy')
+  assert.equal(ownProfile({
+    HOME: home,
+    SKILLATOR_CLI: 'agy',
+    CLAUDE_CONFIG_DIR: join(home, '.claude-work'),
+    ANTIGRAVITY_APP_DATA_DIR: dir,
+  })?.dir, dir)
 })
 
 test('B32: the board reads the profile table once at open - a plain read, never --refresh - and says so meanwhile', async () => {
