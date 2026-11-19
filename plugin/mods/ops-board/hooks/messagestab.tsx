@@ -7,6 +7,7 @@ import { inboxDirOfCommonGitDir, INBOX_FILE, messageLines, parseInbox, plainText
 import { armCommandToast, armLines, armToast, parseArm } from './lib/teamsarm'
 import { CLEARED_LINE, freshSetup, parseCfgView, resultLine, SAVED_LINE, setupError, setupJson, unmask, urlShown } from './lib/teamsconfig'
 import type { SetupValues } from './lib/teamsconfig'
+import { say } from './logtab'
 
 // F66: the Messages tab (teams-uhura's Teams inbox) and the Teams setup form, drawn in
 // the ops-board pane as the Assign / Add person forms are. Messages are data from the
@@ -182,11 +183,11 @@ async function saveSetup($: EngineInterface) {
   const said = resultLine(r.out, SAVED_LINE, 'saved')
   const failed = r.code !== 0 ? why(r) : said.bad
   if (failed) {
-    $.ui.toast([`✗ Teams settings not saved: ${failed}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+    say($, [`✗ Teams settings not saved: ${failed}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
     await bump($, { result: failed })
     return
   }
-  $.ui.toast([`✓ Teams settings saved - ${said.line}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+  say($, [`✓ Teams settings saved - ${said.line}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
   await closeSetup($)
   await refreshCfg($, false)
 }
@@ -198,7 +199,7 @@ async function clearSaved($: EngineInterface) {
   const said = resultLine(r.out, CLEARED_LINE, 'cleared')
   const failed = r.code !== 0 ? why(r) : said.bad
   if (failed) { await bump($, { result: failed, confirmClear: false }); return }
-  $.ui.toast([`✓ Teams settings cleared - ${said.line}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+  say($, [`✓ Teams settings cleared - ${said.line}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
   await closeSetup($)
   await refreshCfg($, false)
 }
@@ -237,9 +238,9 @@ async function markRead($: EngineInterface) {
   const focus = await read($, actionFocusA)
   const msgs = await read($, messagesA)
   const id = msgs.at(-1)?.id
-  if (!id) { $.ui.toast('no team messages to mark read'); return }
+  if (!id) { say($, 'no team messages to mark read'); return }
   const r = await runCall($, 'team-mark-read', [id])
-  if (r.code !== 0) { $.ui.toast(`✗ not marked read: ${why(r)}\n${ran(r.argv)}`, { timeoutMs: 8000 }); return }
+  if (r.code !== 0) { say($, `✗ not marked read: ${why(r)}\n${ran(r.argv)}`, { timeoutMs: 8000 }); return }
   await update($, msgReadA, () => id)
 }
 
@@ -250,7 +251,7 @@ let ackAfter: string | null = null                 // the URL y copied while an 
 let armSeq = 0                                     // bumped as each arm / disarm starts; a read started before is stale
 async function runArm($: EngineInterface, call: 'team-arm' | 'team-disarm' | 'team-arm-status' | 'team-url-ack', args: string[] = []) {
   const quiet = call === 'team-arm-status' || call === 'team-url-ack'
-  if (armBusy) { if (!quiet) $.ui.toast('Teams: still working - one moment'); return }
+  if (armBusy) { if (!quiet) say($, 'Teams: still working - one moment'); return }
   if (!quiet) { armBusy = true; armSeq++ }
   const seq = armSeq
   let landed = false                               // an arm reply armed (or hosted): the deferred ack may run
@@ -261,11 +262,11 @@ async function runArm($: EngineInterface, call: 'team-arm' | 'team-disarm' | 'te
     // a toast never carries the URL: the ack's argument is replaced by value
     const said = (s: string) => armCommandToast(s, ran(r.argv), args)
     const v = parseArm(r.out)
-    if (!v) { if (!quiet) $.ui.toast(said(`✗ Teams: ${r.code === 0 ? 'unexpected output from teams-uhura' : why(r)}`), { timeoutMs: 8000 }); return }
+    if (!v) { if (!quiet) say($, said(`✗ Teams: ${r.code === 0 ? 'unexpected output from teams-uhura' : why(r)}`), { timeoutMs: 8000 }); return }
     await update($, armA, () => v)
     landed = call === 'team-arm' && (v.result === 'armed' || v.hosted)
     const toast = armToast(v)
-    if (toast) $.ui.toast(said(toast), { timeoutMs: 8000 })
+    if (toast) say($, said(toast), { timeoutMs: 8000 })
   } finally {
     if (!quiet) {
       armBusy = false
@@ -277,10 +278,10 @@ async function runArm($: EngineInterface, call: 'team-arm' | 'team-disarm' | 'te
 
 async function copyUrl($: EngineInterface) {
   const v = await read($, armA)
-  if (!v?.url) { $.ui.toast('no tunnel URL yet - c connects'); return }
+  if (!v?.url) { say($, 'no tunnel URL yet - c connects'); return }
   const r = await copyHost($, v.url)
-  if (r.code !== 0) { $.ui.toast(`✗ not copied: ${r.err.trim() || 'clipboard unavailable'} - read it on the Messages tab`); return }
-  $.ui.toast('✓ tunnel URL copied - paste it as the Teams outgoing webhook callback URL')
+  if (r.code !== 0) { say($, `✗ not copied: ${r.err.trim() || 'clipboard unavailable'} - read it on the Messages tab`); return }
+  say($, '✓ tunnel URL copied - paste it as the Teams outgoing webhook callback URL')
   // the ack carries the URL copied, so a newer one is never remembered in its place; under a
   // connect or disconnect in flight it runs once that is done
   if (v.urlChanged) { if (armBusy) ackAfter = v.url; else await runArm($, 'team-url-ack', [v.url]) }

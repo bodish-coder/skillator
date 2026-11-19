@@ -11,6 +11,7 @@ import {
   withIncoming, withLog, withUpstream, withWorktree, xwItem,
 } from './lib/explorer'
 import type { Action, ActionKind, Explorer, Here, Need } from './lib/explorer'
+import { say } from './logtab'
 
 // F75: the Explorer tab - the git-tracked files as a tree, the newest commits each
 // opening to what it changed (lib/explorer.ts). git ls-files and git log, run by the
@@ -106,7 +107,7 @@ export async function toggleExplorer($: EngineInterface, item: string): Promise<
     const args = isStaged ? unstageArgs(target) : stageArgs(target)
     const res = await git($, isStaged ? 'reset' : 'add', args)
     if (!res.ok) {
-      $.ui.toast('■ ' + res.err)
+      say($, '■ ' + res.err)
       await update($, explorerA, cur => withActionNotice(withError(cur, res.err), res.err))
     }
     const st = await git($, 'status', STATUS_ARGS)
@@ -164,9 +165,9 @@ async function readHere($: EngineInterface): Promise<{ branch: string; head: str
 // git-dir markers, root), then the plan - refused in a toast, or the confirm up, Esc its Cancel.
 export async function openAction($: EngineInterface, kind: ActionKind): Promise<void> {
   const curAction = await read($, actionA)
-  if (running || isActionRunning(curAction)) { $.ui.toast(`■ git ${running ?? curAction?.kind ?? 'action'} is still running`); return }
+  if (running || isActionRunning(curAction)) { say($, `■ git ${running ?? curAction?.kind ?? 'action'} is still running`); return }
   const here = await readHere($)
-  if ('err' in here) { $.ui.toast('■ ' + here.err); return }
+  if ('err' in here) { say($, '■ ' + here.err); return }
   const branches = kind === 'merge' || kind === 'switch' ? await git($, 'branch', BRANCHES_ARGS) : null
   // push/pull/sync: the upstream read now, not as last drawn (one set by hand since counts)
   const up = kind === 'push' || kind === 'pull' || kind === 'sync' ? await git($, 'rev-parse', UPSTREAM_ARGS) : null
@@ -175,7 +176,7 @@ export async function openAction($: EngineInterface, kind: ActionKind): Promise<
   const outgoing = kind === 'push' ? await git($, 'log', OUTGOING_ARGS) : null
   // outgoing only feeds the review: its failure (no upstream, detached HEAD) must not mask the plan's own refusal
   const failed = [branches, to, gitDir].find(r => r && !r.ok)
-  if (failed && !failed.ok) { $.ui.toast('■ ' + failed.err); return }
+  if (failed && !failed.ok) { say($, '■ ' + failed.err); return }
   let inProgress: string | null = null
   const dir = lines(gitDir)[0]
   for (const m of IN_PROGRESS) if (dir && !inProgress && await $.fs.exists(dir + '/' + m)) inProgress = m
@@ -193,7 +194,7 @@ export async function openAction($: EngineInterface, kind: ActionKind): Promise<
   const p = planAction({ ...x, upstream, selected: selectedOf(x) }, kind, {
     ...here, root: (await $.session.repo())?.root ?? '', branches: lines(branches), inProgress, pushTo: { remote, ref },
     activeTicket, outgoing: outgoing?.ok ? outgoing.out : undefined })
-  if ('refused' in p) { $.ui.toast('■ ' + p.refused); return }
+  if ('refused' in p) { say($, '■ ' + p.refused); return }
 
   let action: Action = p.action
   if (kind === 'commit') {
@@ -228,10 +229,10 @@ export async function handoffConflict($: EngineInterface): Promise<void> {
   await cancelAction($)
   try {
     await $.prompt.submit({ text: plan.prompt })
-    $.ui.toast('✓ Sent conflict resolution handoff to /skillator:merge-smith')
+    say($, '✓ Sent conflict resolution handoff to /skillator:merge-smith')
     return
   } catch { /* fallback to toast */ }
-  $.ui.toast(`✓ Run in CLI: ${plan.prompt}`)
+  say($, `✓ Run in CLI: ${plan.prompt}`)
 }
 
 export async function abortConflict($: EngineInterface): Promise<void> {
@@ -241,8 +242,8 @@ export async function abortConflict($: EngineInterface): Promise<void> {
   conflictPlan = null
   await cancelAction($)
   const r = await git($, args.join(' '), args)
-  if (r.ok) $.ui.toast(`✓ git ${args.join(' ')}: aborted`)
-  else $.ui.toast(`■ ${r.err}`)
+  if (r.ok) say($, `✓ git ${args.join(' ')}: aborted`)
+  else say($, `■ ${r.err}`)
   await enterExplorer($)
 }
 
@@ -257,7 +258,7 @@ export async function actionGo($: EngineInterface): Promise<void> {
       const switchErr = canRunSwitch(a)
       if (switchErr) {
         await cancelAction($)
-        $.ui.toast(`■ ${switchErr} - nothing run`)
+        say($, `■ ${switchErr} - nothing run`)
         return
       }
     }
@@ -266,7 +267,7 @@ export async function actionGo($: EngineInterface): Promise<void> {
     // the plan as shown still stands: nothing moved while the confirm was up
     const here = await readHere($)
     const why = 'err' in here ? here.err : staleAction(a, here)
-    if (why) { $.ui.toast(`■ ${why} - nothing run`); return }
+    if (why) { say($, `■ ${why} - nothing run`); return }
     if (a.kind === 'commit' && a.stagedSig) {
       const st = await git($, 'status', STATUS_ARGS)
       const diffRes = await git($, 'diff', DIFF_CACHED_ARGS)
@@ -274,7 +275,7 @@ export async function actionGo($: EngineInterface): Promise<void> {
         const currentWt = parseStatus(st.out)
         const currentDiff = diffRes.ok ? diffRes.out : ''
         const commitErr = verifyCommitPreconditions(a, here.head, here.branch, currentWt, currentDiff)
-        if (commitErr) { $.ui.toast(`■ ${commitErr} - nothing run`); return }
+        if (commitErr) { say($, `■ ${commitErr} - nothing run`); return }
       }
     }
     const cmd = a.args.join(' ')
@@ -283,7 +284,7 @@ export async function actionGo($: EngineInterface): Promise<void> {
     const r = await git($, cmd, a.args, 120000, { GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' })
     if (r.ok) {
       conflictPlan = null
-      $.ui.toast(`✓ git ${cmd}: ${(r.out.trim() || r.said.trim()).split(/\r?\n/)[0] || 'done'}`)
+      say($, `✓ git ${cmd}: ${(r.out.trim() || r.said.trim()).split(/\r?\n/)[0] || 'done'}`)
     } else {
       const isConflict = (a.kind === 'merge' || a.kind === 'revert' || a.kind === 'pull' || a.kind === 'sync') && /CONFLICT/.test(r.err)
       const stopped = (a.kind === 'merge' || a.kind === 'revert') && /CONFLICT/.test(r.err)
@@ -291,7 +292,7 @@ export async function actionGo($: EngineInterface): Promise<void> {
       if (isConflict) {
         conflictPlan = { ...finishActionRun(a, { code: r.code, out: r.out, err: r.err, timedOut: r.timedOut }), conflictAi: true, result: r.err }
       }
-      $.ui.toast(`■ ${r.err.split(/\r?\n/).slice(0, 3).join(' ')}${stopped}`)
+      say($, `■ ${r.err.split(/\r?\n/).slice(0, 3).join(' ')}${stopped}`)
     }
   } finally {
     running = null
@@ -350,13 +351,13 @@ export async function ActionConfirm($: EngineInterface, els: Els, a: Action): Pr
     ...(a.conflictAi && !a.args.length ? [<Box key="xa:ai_note"><Text dimColor>{'/skillator:merge-smith conflict handoff available if conflicts occur.'}</Text></Box>] : []),
     ...(a.result ? [<Box key="xa:result"><Text color="error" wrap="wrap">{clean(a.result)}</Text></Box>] : []),
     ...a.warn.map((w, i) => <Box key={'xa:warn:' + i}><Text color="warning" wrap="wrap">{clean(w)}</Text></Box>),
-    ...(a.pick ?? []).map(name => <Button key={'xb:' + name} hotkey={name === current ? 'o' : undefined} plain onPress={() => { void pickAction($, name).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>{'  ' + clean(name)}</Button>),
+    ...(a.pick ?? []).map(name => <Button key={'xb:' + name} hotkey={name === current ? 'o' : undefined} plain onPress={() => { void pickAction($, name).catch(e => { say($, '■ ' + errText(e)) }) }}>{'  ' + clean(name)}</Button>),
     <Text> </Text>,
     <Box flexDirection="row" flexWrap="wrap" gap={4}>
-      {a.args.length && !a.result ? <Button key="xa:go" plain hotkey={'y'} variant="primary" onPress={() => { void actionGo($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>Run</Button> : null}
-      {a.conflictAi && a.result ? <Button key="xa:merge_smith" plain hotkey={'m'} variant="primary" onPress={() => { void handoffConflict($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>hand off to /skillator:merge-smith</Button> : null}
-      {a.conflictAi && a.result ? <Button key="xa:abort" plain hotkey={'a'} onPress={() => { void abortConflict($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>abort</Button> : null}
-      <Button key="xa:cancel" plain hotkey={'n'} onPress={() => { void cancelAction($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>Cancel</Button>
+      {a.args.length && !a.result ? <Button key="xa:go" plain hotkey={'y'} variant="primary" onPress={() => { void actionGo($).catch(e => { say($, '■ ' + errText(e)) }) }}>Run</Button> : null}
+      {a.conflictAi && a.result ? <Button key="xa:merge_smith" plain hotkey={'m'} variant="primary" onPress={() => { void handoffConflict($).catch(e => { say($, '■ ' + errText(e)) }) }}>hand off to /skillator:merge-smith</Button> : null}
+      {a.conflictAi && a.result ? <Button key="xa:abort" plain hotkey={'a'} onPress={() => { void abortConflict($).catch(e => { say($, '■ ' + errText(e)) }) }}>abort</Button> : null}
+      <Button key="xa:cancel" plain hotkey={'n'} onPress={() => { void cancelAction($).catch(e => { say($, '■ ' + errText(e)) }) }}>Cancel</Button>
     </Box>,
   ]
 }
@@ -378,8 +379,8 @@ export function ExplorerTab($: EngineInterface, els: Els, x: Explorer, cols: num
     out.push(
       <Box key="xa:conflict_banner" flexDirection="row" flexWrap="wrap" gap={2}>
         <Text color="error">{clean(`Conflict in git ${conflictPlan.kind}:`)}</Text>
-        <Button key="xa:merge_smith" plain onPress={() => { void handoffConflict($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>[m hand off to /skillator:merge-smith]</Button>
-        <Button key="xa:abort" plain onPress={() => { void abortConflict($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>[a abort]</Button>
+        <Button key="xa:merge_smith" plain onPress={() => { void handoffConflict($).catch(e => { say($, '■ ' + errText(e)) }) }}>[m hand off to /skillator:merge-smith]</Button>
+        <Button key="xa:abort" plain onPress={() => { void abortConflict($).catch(e => { say($, '■ ' + errText(e)) }) }}>[a abort]</Button>
       </Box>,
     )
   }
@@ -396,7 +397,7 @@ export function ExplorerTab($: EngineInterface, els: Els, x: Explorer, cols: num
     <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
       <Text dimColor>{sel.startsWith('xf:') ? '↑↓ move' : sel.startsWith('xw:') ? '↑↓ move · enter/space stage/unstage' : '↑↓ move · enter open/close'}</Text>
       {ACTION_KEYS.map(([kind, hotkey, label]) =>
-        <Button key={'key:' + kind} plain dimColor hotkey={hotkey} onPress={() => { void openAction($, kind).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>{label}</Button>)}
+        <Button key={'key:' + kind} plain dimColor hotkey={hotkey} onPress={() => { void openAction($, kind).catch(e => { say($, '■ ' + errText(e)) }) }}>{label}</Button>)}
       <Button key="key:reload" plain dimColor hotkey="r" onPress={() => { void enterExplorer($).catch(() => {}) }}>reload</Button>
     </Box>,
   )

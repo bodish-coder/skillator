@@ -3,6 +3,7 @@ import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, Render
 import { HELP_ITEMS, filteredSkills, helpCommand } from '../ops/state'
 import { copyHost, readSkillDocHost } from './lib/host'
 import { cutTo, UNI } from './lib/ticketsmodel'
+import { say } from './logtab'
 
 // F160 / A198 / F165: the Help tab in the Claude Code native pane - skill and command catalog,
 // filter, synopsis, bounded doc viewer, clipboard copy, and direct session invocation.
@@ -77,15 +78,15 @@ async function runSkill($: EngineInterface, skillId: string, rawArgs?: string): 
   const cmd = `/${command}${curArgs ? ' ' + curArgs : ''}`
   try {
     await $.command.run({ command, ...(curArgs ? { args: curArgs } : {}) })
-    $.ui.toast(`✓ Sent to session: ${cmd}`)
+    say($, `✓ Sent to session: ${cmd}`)
   } catch {
     try {
       await $.prompt.submit({ text: cmd })
-      $.ui.toast(`✓ Sent to session: ${cmd}`)
+      say($, `✓ Sent to session: ${cmd}`)
     } catch {
       const r = await copyHost($, cmd)
-      if (r.code === 0) $.ui.toast(`✓ Ready to run: ${cmd} (copied to clipboard — paste into your CLI)`)
-      else $.ui.toast(`Paste into your CLI to run: ${cmd}`)
+      if (r.code === 0) say($, `✓ Ready to run: ${cmd} (copied to clipboard — paste into your CLI)`)
+      else say($, `Paste into your CLI to run: ${cmd}`)
     }
   }
 }
@@ -171,8 +172,8 @@ export async function HelpTab($: EngineInterface, e: RenderInput<'Pane'>, els: E
           void (async () => {
             const refText = isCmd ? `/${it.id}` : `skillator:${it.id}`
             const r = await copyHost($, refText)
-            if (r.code === 0) $.ui.toast(`✓ Copied reference: ${refText}`)
-            else $.ui.toast(`✗ Copy failed: ${r.err || 'clipboard unavailable'} (reference: ${refText})`)
+            if (r.code === 0) say($, `✓ Copied reference: ${refText}`)
+            else say($, `✗ Copy failed: ${r.err || 'clipboard unavailable'} (reference: ${refText})`)
           })()
         }}
       >

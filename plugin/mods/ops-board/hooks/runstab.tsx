@@ -12,6 +12,7 @@ import { treeLines } from './lib/agents'
 import { diagnose } from './lib/diagnose'
 import type { ShaState } from './lib/diagnose'
 export { continuePrompt, eligibleRunTickets, parseFollowupOut, runLines, startRunCmd, waves } from './lib/runlines'
+import { say } from './logtab'
 
 // F50, design §8: the Runs tab (mock m-plan). relay-morpheus list, then resume (F85: the
 // run file whole) for each run not all done; a planned run shows its stage table, what runs
@@ -98,7 +99,7 @@ export async function openEngage($: EngineInterface, id: string): Promise<void> 
   const run = (await read($, runsA)).find(r => r.id === id)
   if (!run) return
   const e = engageOf(run, await $.clock.now())
-  if ('refused' in e) { $.ui.toast(e.refused); return }
+  if ('refused' in e) { say($, e.refused); return }
   await update($, engageA, () => ({ id, ...e }))
   await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
   void $.ui.focus({ requestId: PANE, key: 'engage:go' }).catch(() => {})
@@ -112,23 +113,23 @@ export async function engageGo($: EngineInterface): Promise<void> {
   if (!g) return
   const run = (await read($, runsA)).find(r => r.id === g.id)
   const e = run ? engageOf(run, await $.clock.now()) : { refused: `■ ${g.id} is no longer an open run` }
-  if ('refused' in e) { $.ui.toast(e.refused); return }
+  if ('refused' in e) { say($, e.refused); return }
   if (!e.queue) {
     // a slash command is run as one, never submitted as a prompt (the host refuses that)
     const [command, ...args] = e.text.slice(1).split(' ')
-    $.ui.toast(`✓ ${g.id} engaged: ${e.text}`)
+    say($, `✓ ${g.id} engaged: ${e.text}`)
     void $.command.run({ command: command!, args: args.join(' ') })
-      .catch(err => { $.ui.toast(`■ ${g.id} not engaged: ${e.text} - ${err instanceof Error ? err.message : String(err)}`) })
+      .catch(err => { say($, `■ ${g.id} not engaged: ${e.text} - ${err instanceof Error ? err.message : String(err)}`) })
     return
   }
   const r = await runCall($, 'relay-queue-add', [g.id])
   const ran = r.argv.length ? `\nran: ${r.argv.join(' ')}` : ''
   const said = r.out.trim() || r.err.trim()
   if (r.code !== 0) {
-    $.ui.toast(`■ ${g.id} not queued: ${r.err.trim() || r.out.trim() || `exit ${r.code}`}${ran}`)
+    say($, `■ ${g.id} not queued: ${r.err.trim() || r.out.trim() || `exit ${r.code}`}${ran}`)
     return
   }
-  $.ui.toast(`✓ ${g.id} queued${said ? ` - ${said}` : ''}. Its continue prompt runs as the next turn.${ran}`)
+  say($, `✓ ${g.id} queued${said ? ` - ${said}` : ''}. Its continue prompt runs as the next turn.${ran}`)
   void $.prompt.submit({ text: continuePrompt(g.id) })
   void pollRuns($).catch(() => {})
 }
@@ -258,7 +259,7 @@ const closeLine = (script: string, id: string, n: number, sha: string) => script
 // its sha when on HEAD, else `<sha>`. F104: and Close, when shaFor finds its sha. Git that cannot be asked is said.
 export async function openDiagnose($: EngineInterface, id: string): Promise<void> {
   const r = await readDiagnosis($, id)
-  if (r.refused !== undefined) { $.ui.toast(`■ ${id} not diagnosed: ${r.refused}`); return }
+  if (r.refused !== undefined) { say($, `■ ${id} not diagnosed: ${r.refused}`); return }
   const { l, resume, run, shas, d, g } = r
   const script = l.argv.find(a => /relay-morpheus\.(sh|ps1)$/.test(a))
   const byHand = !script ? [] : d.closable.map(cl => {   // no script in the argv: no line, never `sh "undefined"`
@@ -300,7 +301,7 @@ async function closeOnce($: EngineInterface): Promise<void> {
   if (!v || !want) return
   await closeConfirm($, null)
   const n = want.n
-  const no = (why: string) => { $.ui.toast(`■ stage ${n} of ${v.id} not closed: ${why}`) }
+  const no = (why: string) => { say($, `■ stage ${n} of ${v.id} not closed: ${why}`) }
   const r = await readDiagnosis($, v.id, true)
   if (r.refused !== undefined) { no(r.refused); return }
   const s = r.run.stages.find(x => x.n === n)
@@ -315,7 +316,7 @@ async function closeOnce($: EngineInterface): Promise<void> {
   const w = await runCall($, 'relay-stage-landed', [v.id, String(n), f.sha])
   const ran = w.argv.length ? `\nran: ${w.argv.join(' ')}` : ''
   if (w.code !== 0) { no(`${w.err.trim() || w.out.trim() || `exit ${w.code}`}${ran}`); return }
-  $.ui.toast(`✓ stage ${n} of ${v.id} landed ${f.sha.slice(0, 7)}${ran}`)
+  say($, `✓ stage ${n} of ${v.id} landed ${f.sha.slice(0, 7)}${ran}`)
   await openDiagnose($, v.id)
   void pollRuns($).catch(() => {})
 }
@@ -392,18 +393,18 @@ export async function startRunGo($: EngineInterface): Promise<void> {
   if (sr.tickets.length === 0) {
     const msg = '■ Select at least 1 ticket before starting a run'
     await update($, startRunA, cur => cur && { ...cur, result: msg })
-    $.ui.toast(msg)
+    say($, msg)
     return
   }
   const cmd = startRunCmd(sr.runner, sr.mode, sr.tickets)
   try {
     await $.prompt.submit({ text: cmd })
     await closeStartRun($)
-    $.ui.toast(`✓ Sent to session: ${cmd}`)
+    say($, `✓ Sent to session: ${cmd}`)
   } catch (err) {
     const msg = `■ Start Run not submitted: ${err instanceof Error ? err.message : String(err)}`
     await update($, startRunA, cur => cur && { ...cur, result: msg })
-    $.ui.toast(msg)
+    say($, msg)
   }
 }
 
@@ -412,17 +413,17 @@ export async function pushPendingRunNative($: EngineInterface, id?: string): Pro
   const runs = await read($, runsA)
   const open = openRuns(runs)
   const r0 = (id ? runs.find(r => r.id === id) : open[0]) ?? runs[0]
-  if (!r0) { $.ui.toast('no run available to push pending stages'); return }
+  if (!r0) { say($, 'no run available to push pending stages'); return }
   const pending = r0.stages.filter(s => s.state !== 'x' && s.state !== '~' && s.state !== '>')
-  if (pending.length === 0) { $.ui.toast(`${r0.id}: no eligible pending stages (all completed or in-flight)`); return }
+  if (pending.length === 0) { say($, `${r0.id}: no eligible pending stages (all completed or in-flight)`); return }
   const mode = r0.mode === 'parallel' ? 'parallel' : 'sequential'
   const r = await runCall($, 'relay-push-pending', [r0.id, mode])
   const parsed = r.code === 0 ? parseFollowupOut(r.out) : null
   if (r.code !== 0 || !parsed) {
-    $.ui.toast(`■ push pending failed: ${(r.err || r.out).trim() || `exit ${r.code}`}`)
+    say($, `■ push pending failed: ${(r.err || r.out).trim() || `exit ${r.code}`}`)
     return
   }
-  $.ui.toast(`✓ pushed ${parsed.moved} pending stage(s) from ${parsed.from} → ${parsed.id} (${parsed.mode})`)
+  say($, `✓ pushed ${parsed.moved} pending stage(s) from ${parsed.from} → ${parsed.id} (${parsed.mode})`)
   void pollRuns($).catch(() => {})
 }
 

@@ -5,7 +5,7 @@ import { copyText, logLines, pushLog } from './lib/log'
 
 // The Log tab (design 2026-11-02): every popup the board shows, recorded so it
 // can be read in full and copied. say() is the one place a popup is made: it
-// records, then toasts - the 8 hook files say through it, never $.ui.toast
+// records, then toasts - the pane hooks say through it, never $.ui.toast
 // directly. The log is session state ($.state), never a repo file: popups can
 // carry machine facts and paths. Session only; nothing persists.
 
@@ -14,9 +14,9 @@ const actionFocusA = atom({ plugin: 'ops-board', key: 'actionFocus' } as const, 
 
 // Say a popup: record it in the log, then toast it. The record is
 // fire-and-forget - a failed log update never swallows the popup itself.
-export function say($: EngineInterface, text: string, opts?: ToastOptions): void {
+export function say($: EngineInterface, text: string, opts?: ToastOptions) {
   void update($, logA, xs => pushLog(xs, text, Date.now())).catch(() => {})
-  $.ui.toast(text, opts)
+  return $.ui.toast(text, opts)
 }
 
 export async function readLog($: EngineInterface): Promise<LogEntry[]> {
@@ -36,9 +36,8 @@ function copyEntry($: EngineInterface, entry: LogEntry, surface: Parameters<Engi
 // The tab body: entries newest first, each a Button drawing its whole text
 // wrapped (never truncated) - pressing it copies that entry. The pane's own
 // scroll windows the list; y copies the selected entry, C clears the log.
-export async function LogTab($: EngineInterface, els: Els, cols: number, ascii: boolean): Promise<RenderElement[]> {
+export async function LogTab($: EngineInterface, els: Els, cols: number, ascii: boolean, entries: LogEntry[]): Promise<RenderElement[]> {
   const { Box, Text, Button } = els
-  const entries = await read($, logA)
   const focus = await read($, actionFocusA)
   const current = entries.findIndex((_, i) => 'log:' + i === focus)
   const sel = current >= 0 ? current : 0

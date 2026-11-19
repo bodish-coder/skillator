@@ -4,6 +4,7 @@ import { clean } from './lib/bandlines'
 import { runCall, isWindows } from './lib/host'
 import { argvText, entryNote, findBins, jobStatus, keepTail, outLines, parseRunFile, planEntry, RUN_FILE } from './lib/runentries'
 import type { Bins, Job, RunEntry, RunFile, RunForm } from './lib/runentries'
+import { say } from './logtab'
 
 // F79: the Run tab (id 'run') - the repo's build / run / installer entry points from
 // .skillator/run.json. Not the Workflows tab (id 'runs', runstab.tsx). The first open in
@@ -61,12 +62,12 @@ export async function rescan($: EngineInterface, quiet = false) {
   const r = await runCall($, 'run-scan', [])
   if (r.code !== 0) {
     const text = `✗ run-entries scan failed: ${why(r)}${r.argv.length ? '\n' + ran(r.argv) : ''}`
-    $.ui.toast(text, { timeoutMs: 8000 })
+    say($, text, { timeoutMs: 8000 })
     const f = await load($)
     await update($, runFileA, () => (f.missing ? { ...f, error: text } : f))
     return
   }
-  if (!quiet) $.ui.toast([`✓ ${r.out.trim()}`, ran(r.argv)].join('\n'), { timeoutMs: 6000 })
+  if (!quiet) say($, [`✓ ${r.out.trim()}`, ran(r.argv)].join('\n'), { timeoutMs: 6000 })
   const f = await load($)
   await update($, runFileA, () => f)
 }
@@ -199,7 +200,7 @@ async function saveName($: EngineInterface) {
   if (!name) { await update($, runFormA, x => (x ? { ...x, result: 'a name cannot be empty' } : x)); return }
   const r = await runCall($, 'run-rename', [f.id, name])
   if (r.code !== 0) { await update($, runFormA, x => (x ? { ...x, result: why(r) } : x)); return }
-  $.ui.toast([`✓ ${r.out.trim()}`, ran(r.argv)].join('\n'), { timeoutMs: 6000 })
+  say($, [`✓ ${r.out.trim()}`, ran(r.argv)].join('\n'), { timeoutMs: 6000 })
   const file = await load($)
   await update($, runFileA, () => file)
   await closeRunForm($)

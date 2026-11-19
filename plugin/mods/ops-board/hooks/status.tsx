@@ -5,6 +5,7 @@ import { STATE_NAME } from './lib/board'
 import { decideQuestionsPrompt, holoTicketCmd } from './lib/calls'
 import { runCall } from './lib/host'
 import { openAssign } from './assign'
+import { say } from './logtab'
 
 const statusA = atom({ plugin: 'ops-board', key: 'status' } as const, null)
 const flightA = atom({ plugin: 'ops-board', key: 'statusFlight' } as const, null)
@@ -25,7 +26,7 @@ const fresh = (id: string, t: Ticket | null, mode: StatusDraft['mode']): StatusD
 export async function clearStatus($: EngineInterface) { await update($, statusA, () => null) }
 export async function openStatus($: EngineInterface, shown: string | null, canType = true, mode: StatusDraft['mode'] = 'status') {
   const t = shown ? await resolveTicket($, shown) : null
-  if (!t && !canType) { $.ui.toast(mode === 'decide' ? 'ops board: select a ticket first' : 'Select a ticket first; typing an ID needs a keyboard surface.'); return }
+  if (!t && !canType) { say($, mode === 'decide' ? 'ops board: select a ticket first' : 'Select a ticket first; typing an ID needs a keyboard surface.'); return }
   await update($, actionFocusA, () => (mode === 'decide' && t ? 'decide:assign' : null))
   await update($, assignA, () => null)
   await update($, personA, () => null)
@@ -83,7 +84,7 @@ export async function applyStatus($: EngineInterface): Promise<boolean> {
       await finish($, d, (r.err.trim() || r.out.trim() || `exit ${r.code}`) + '\nCheck the board before retrying; reopen to capture a new snapshot.'); return false
     }
     await update($, flightA, () => null)
-    $.ui.toast(r.out.trim() || `${t.id}: status updated`, { timeoutMs: 8000 })
+    say($, r.out.trim() || `${t.id}: status updated`, { timeoutMs: 8000 })
     // Completion only clears its own generation, even if update retries. It must
     // not reset focus or reopen the pane: another form may now own that UI.
     await update($, statusA, x => x?.generation === d.generation ? null : x)
@@ -100,7 +101,7 @@ export async function generateStatusHelp($: EngineInterface): Promise<void> {
     const path = r.code === 0 ? / -> (.+?)(?: \(standalone page\))?\s*$/.exec(r.out)?.[1]?.trim() : null
     if (!path) { await finish($, d, r.err.trim() || r.out.trim() || `holo exited ${r.code}`); return }
     await finish($, d, 'Read-only decision support generated.', path)
-    $.ui.toast(path, { timeoutMs: 10000 })
+    say($, path, { timeoutMs: 10000 })
   } catch (err) { await finish($, d, String(err)) }
 }
 export async function decideStatusAssign($: EngineInterface): Promise<void> {
@@ -122,7 +123,7 @@ export async function decideStatusQuestions($: EngineInterface): Promise<void> {
   try {
     await $.prompt.submit({ text })
     await update($, flightA, () => null)
-    $.ui.toast(`✓ Sent to session: ${text}`, { timeoutMs: 8000 })
+    say($, `✓ Sent to session: ${text}`, { timeoutMs: 8000 })
     await cancel($)
   } catch (err) { await finish($, d, String(err)) }
 }

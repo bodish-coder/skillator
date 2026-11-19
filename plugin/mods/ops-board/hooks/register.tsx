@@ -24,6 +24,7 @@ import { pendingHandoffOf } from './lib/inbox'
 import { closeRunForm, dropRunForm, enterRun, isRunFormUp } from './runtab'
 import { arrowExplorer, cancelAction, dropAction, enterExplorer, focusExplorer, isActionUp, isExplorerItem } from './explorertab'
 import { arrowHelp, enterHelp, focusHelp, isHelpItem } from './helptab'
+import { say } from './logtab'
 
 // Wiring only (design §4): /ops, the 2 s TICKETS.md poll, team and me, the pane
 // and its keys; the 60 s machine / relay / usage poll, the band, the watchdog hold on
@@ -153,7 +154,7 @@ async function poll($: EngineInterface, force = false) {
 async function refresh($: EngineInterface) {
   await poll($, true)
   const b = await read($, boardA)
-  $.ui.toast(b?.error ? `ops board: ${b.error}`
+  say($, b?.error ? `ops board: ${b.error}`
     : `ops board: refreshed - ${b?.tickets.length ?? 0} tickets, ${(await read($, teamA)).length} people`)
 }
 
@@ -199,7 +200,7 @@ async function applyMachine($: EngineInterface, m: Machine) {
       await writeMute($, '')
       const { mute: _, ...rest } = m
       m = rest
-      $.ui.toast('watchdog unmuted - memory reads green; memory red holds again')
+      say($, 'watchdog unmuted - memory reads green; memory red holds again')
     } catch { /* the next reading tries again */ }
   }
   const w = classify(m)
@@ -212,9 +213,9 @@ async function applyMachine($: EngineInterface, m: Machine) {
     const why = r.code === 0 ? '' : r.err.trim() || r.out.trim() || `exit ${r.code}`
     if (why !== holdOutcome) {
       if (!why) {
-        $.ui.toast(`■ HOLD - ${w.reasons.join('. ')}. New relay stages and GREEN runs are held. ${redFix(w)}, then /ops resume.${ran}`)
+        say($, `■ HOLD - ${w.reasons.join('. ')}. New relay stages and GREEN runs are held. ${redFix(w)}, then /ops resume.${ran}`)
       } else {
-        $.ui.toast(`■ ${w.reasons.join('. ')} - the watchdog hold could not be set: ${why}${ran}`)
+        say($, `■ ${w.reasons.join('. ')} - the watchdog hold could not be set: ${why}${ran}`)
         await addNotes($, [`■ watchdog hold not set: ${why}${ran.replace('\n', ' - ')}`])
       }
     }
@@ -420,13 +421,13 @@ async function openPane($: EngineInterface, asked: boolean) {
   return r
 }
 
-const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', explorer: 'Explorer', run: 'Build', help: 'Help' }
+const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', explorer: 'Explorer', run: 'Build', help: 'Help', log: 'Log' }
 // F76: /ops workflows opens the Workflows tab (id runs) with its Workflows section open; /ops runs is
 // an alias that opens it with its Runs section open. F93: /ops agents opens it with its Agents section
 // open; /ops build opens tab run, /ops run an alias. F160: /ops help and /ops guide open tab help.
-const WORDS = ['tickets', 'workflows', 'runs', 'health', 'messages', 'agents', 'explorer', 'build', 'run', 'help', 'guide']
+const WORDS = ['tickets', 'workflows', 'runs', 'health', 'messages', 'agents', 'explorer', 'build', 'run', 'help', 'guide', 'log']
 const SECTION_OF: Record<string, 'runs' | 'workflows' | 'agents'> = { runs: 'runs', workflows: 'workflows', agents: 'agents' }
-const USAGE = 'usage: /ops [tickets|workflows|health|messages|explorer|build|help|resume [force]|watchdog on] - runs and agents open Workflows too, run opens Build, guide opens Help;'
+const USAGE = 'usage: /ops [tickets|workflows|health|messages|explorer|build|log|help|resume [force]|watchdog on] - runs and agents open Workflows too, run opens Build, guide opens Help;'
   + ' resume force releases the hold whatever the reading and mutes memory red until it reads green once (watchdog on unmutes)'
 
 export const register: Register = on => {
@@ -436,8 +437,8 @@ export const register: Register = on => {
     await update($, asciiA, () => ['1', 'true', 'yes'].includes(env) || stored === true)
     await $.command.register({
       name: 'ops',
-      description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs, Workflow runs and agents), health, Teams messages, the explorer, build entries and the skills help guide',
-      argumentHint: '[tickets|workflows|health|messages|explorer|build|help|resume [force]|watchdog on]',
+      description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs, Workflow runs and agents), health, Teams messages, the explorer, build entries, popup log and the skills help guide',
+      argumentHint: '[tickets|workflows|health|messages|explorer|build|log|help|resume [force]|watchdog on]',
     })
     await $.command.register({
       name: 'list-tickets',
@@ -481,7 +482,7 @@ export const register: Register = on => {
       await update($, asciiA, () => value)
       await $.store.set('ascii', value)
       const text = value ? 'ops board: ASCII glyphs on - /ops ascii again for Unicode' : 'ops board: Unicode glyphs on'
-      await $.ui.toast(text)
+      await say($, text)
       return { text }
     }
     if (word === 'resume') return { text: await resume($) }
@@ -499,7 +500,7 @@ export const register: Register = on => {
       void slowPoll($).catch(() => {})
       await openPane($, true)
       const text = 'ops board reset - forms cleared and polls restarted.'
-      await $.ui.toast(text)
+      await say($, text)
       return { text }
     }
     if (word && !WORDS.includes(word)) return { text: USAGE }
@@ -690,7 +691,7 @@ export const register: Register = on => {
     const toastMsg = (u?.five?.pct !== null && u?.five?.pct !== undefined) || (u?.seven?.pct !== null && u?.seven?.pct !== undefined)
       ? `↻ Usage & health refreshed: 5h ${u?.five?.pct ?? '-'}% · 7d ${u?.seven?.pct ?? '-'}%`
       : '↻ Usage & health refreshed (usage unobservable)'
-    $.ui.toast(toastMsg)
+    say($, toastMsg)
     return { element: e.element }
   })
 
@@ -704,16 +705,16 @@ export const register: Register = on => {
       started = !(cur?.busy && now - (cur.at ?? 0) < 310_000)
       return started ? { text: cur?.text ?? null, busy: true, at: now } : cur
     })
-    if (!started) { $.ui.toast('profiles: a read is already running'); return { element: e.element } }
+    if (!started) { say($, 'profiles: a read is already running'); return { element: e.element } }
     const r = await runCall($, 'ops-status', [])
     const ok = r.code === 0 && r.out.trim() !== ''
     await update($, profilesA, cur => ({ text: ok ? r.out : (cur?.text ?? null), busy: false }))
-    $.ui.toast(ok ? '↻ profiles read' : `profiles not read: ${(r.err.trim() || `exit ${r.code}`).split(/\r?\n/)[0]}`)
+    say($, ok ? '↻ profiles read' : `profiles not read: ${(r.err.trim() || `exit ${r.code}`).split(/\r?\n/)[0]}`)
     return { element: e.element }
   })
 
   on('ui.press', { plugin: 'ops-board', element: 'key:resume' }, async ($, e) => {
-    $.ui.toast(await resume($))
+    say($, await resume($))
     return { element: e.element }
   })
 
@@ -735,13 +736,13 @@ export const register: Register = on => {
     }
     void $.prompt.submit({ text: cmd })
     const redNote = m?.hold && w.level === 'red' ? ` (still red: ${w.reasons.join('; ')} - not released)` : ''
-    $.ui.toast(`✓ Resume sent to CLI: ${cmd}${redNote}`)
+    say($, `✓ Resume sent to CLI: ${cmd}${redNote}`)
     return { element: e.element }
   })
 
   // F87: the Health tab's `f` - /ops resume force, answered in a toast.
   on('ui.press', { plugin: 'ops-board', element: 'key:force' }, async ($, e) => {
-    $.ui.toast(await forceResume($))
+    say($, await forceResume($))
     return { element: e.element }
   })
 

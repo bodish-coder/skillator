@@ -24,6 +24,7 @@ import { enterMessages, MessagesTab, renderSetup, unreadOf } from './messagestab
 import { enterRun, isRunFormUp, RunTab } from './runtab'
 import { ActionConfirm, enterExplorer, ExplorerTab, readExplorer, readExplorerAction } from './explorertab'
 import { enterHelp, HelpTab } from './helptab'
+import { LogTab, readLog, say } from './logtab'
 
 // The ops board pane (design §5): tab bar, the Tickets tab with its filter row,
 // status rails, a yielding list, and wrapping footer keys.
@@ -34,7 +35,7 @@ export const PANE_TITLE = 'ops board'
 // F76: one tab, id 'runs', labelled Workflows (owner: relay runs and workflows are one thing):
 // a Runs section and a Workflows section. /ops workflows opens it; /ops runs is an alias.
 // F93: its Agents section is the old Agents tab; tab 'run' is labelled Build.
-export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run' | 'help'
+export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run' | 'help' | 'log'
 // Each file names the atoms it reads or writes as its own consts: the engine's scan
 // lists state access from those, not from an import (register.tsx repeats them).
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
@@ -238,8 +239,8 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
       <Button key="key:questions" plain dimColor hotkey="u" onPress={() => {
         const text = decideQuestionsPrompt()
         void $.prompt.submit({ text }).then(
-          () => { $.ui.toast(`✓ Sent to session: ${text}`, { timeoutMs: 8000 }) },
-          err => { $.ui.toast(`✗ ${String(err)}`, { timeoutMs: 8000 }) },
+          () => { say($, `✓ Sent to session: ${text}`, { timeoutMs: 8000 }) },
+          err => { say($, `✗ ${String(err)}`, { timeoutMs: 8000 }) },
         )
       }}>ask</Button>
       <Button key="key:status" plain dimColor hotkey="s" onPress={() => { void openStatus($, m.ticket, els.canType, 'status') }}>status</Button>
@@ -267,6 +268,7 @@ const TABS: { id: Tab; label: string }[] = [{ id: 'tickets', label: 'Tickets' },
   { id: 'health', label: 'Health' }, { id: 'messages', label: 'Messages' },
   { id: 'explorer', label: 'Explorer' },   // F75: git-tracked files and recent commits (explorertab.tsx)
   { id: 'run', label: 'Build' },            // F79: the repo's entry points (runtab.tsx) - not Workflows (id 'runs')
+  { id: 'log', label: 'Log' },
   { id: 'help', label: 'Help' }]            // F160 / A198: the Skills & Help guide (helptab.tsx)
 
 // F76: the Workflows tab (id 'runs') - a Runs section (relay runs, F50) and a Workflows section (F53),
@@ -308,6 +310,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   const ascii = await read($, asciiA)
   const glyphs = ascii ? ASCII : UNI
   const unread = await unreadOf($)          // F66: the unread count rides on the Messages tab
+  const log = await readLog($)
   const bar = (   // B14: whole tabs wrap to a second row in a narrow pane, never cut mid-word
     <Box key="tabs" flexDirection="row" flexWrap="wrap" gap={1}>
       {TABS.map(x => (
@@ -321,7 +324,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
             if (x.id === 'explorer') void enterExplorer($).catch(() => {})        // F75: read on entering the tab
             if (x.id === 'run') void enterRun($).catch(() => {})            // F79: first open scans
             if (x.id === 'help') void enterHelp($).catch(() => {})          // F160 / A198: load selected skill doc
-          }}>{ascii ? (x.id === tab ? '[' : ' ') : x.id === tab ? glyphs.active : ''}{x.id === 'messages' && unread ? `${x.label} ${unread}` : x.label}{ascii ? (x.id === tab ? ']' : ' ') : ''}</Button>
+          }}>{ascii ? (x.id === tab ? '[' : ' ') : x.id === tab ? glyphs.active : ''}{x.id === 'messages' && unread ? `${x.label} ${unread}` : x.id === 'log' && log.length ? `${x.label} ${log.length}` : x.label}{ascii ? (x.id === tab ? ']' : ' ') : ''}</Button>
       ))}
     </Box>
   )
@@ -334,6 +337,15 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
         {bar}
         <Text> </Text>
         {await HelpTab($, e, els, cols)}
+      </Box>
+    )
+  }
+  if (tab === 'log') {
+    return (
+      <Box flexDirection="column">
+        {bar}
+        <Text> </Text>
+        {await LogTab($, els, cols, ascii, log)}
       </Box>
     )
   }

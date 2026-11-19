@@ -9,6 +9,7 @@ import { sameHandle } from './lib/team'
 import type { Call } from './lib/host'
 import { clearStatus } from './status'
 import { paint } from './paint'
+import { say } from './logtab'
 
 // F47: the assign / decide form, the Decided button's call and the Add person
 // form. Every write is a ticket-meta run; the mod writes no file.
@@ -116,7 +117,7 @@ function startHandle(t: Ticket | null, kind: AssignDraft['kind'], team: Member[]
 export async function openAssign($: EngineInterface, kind: AssignDraft['kind'], shown: string | null, canType = true) {
   await update($, actionFocusA, () => null)
   const t = shown ? ((await read($, boardA))?.tickets.find(x => x.id === shown) ?? null) : null
-  if (!t && !canType) { $.ui.toast('ops board: select a ticket first'); return }
+  if (!t && !canType) { say($, 'ops board: select a ticket first'); return }
   const sessions = await liveSessions($)
   const draft: AssignDraft = { id: t?.id ?? '', kind, handle: startHandle(t, kind, await read($, teamA), await read($, meA)), result: null,
     sessions, session: t?.assignedSession ?? sessions[0]?.code ?? null }
@@ -178,7 +179,7 @@ async function confirm($: EngineInterface) {
   const head = d.kind === 'tester'
     ? `✓ ${t.id} tester assigned ${role}: ${t.title}`
     : `✓ ${t.id} ${closed ? 'reopened as' : 'now'} ${state}, ${role}: ${t.title}`
-  $.ui.toast([head, ...notes(r.out), ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+  say($, [head, ...notes(r.out), ran(r.argv)].join('\n'), { timeoutMs: 8000 })
   await closeForm($)
 }
 
@@ -192,7 +193,7 @@ async function confirmSession($: EngineInterface, t: Ticket, d: AssignDraft) {
     return
   }
   await refreshBoardTicket($, t.id, tk => ({ ...tk, assignedSession: code === '-' ? null : code }))
-  $.ui.toast([`✓ ${t.id} ${code === '-' ? 'session cleared' : 'assigned to session ' + code}: ${t.title}`, ...notes(r.out), ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+  say($, [`✓ ${t.id} ${code === '-' ? 'session cleared' : 'assigned to session ' + code}: ${t.title}`, ...notes(r.out), ran(r.argv)].join('\n'), { timeoutMs: 8000 })
   await closeForm($)
 }
 
@@ -201,11 +202,11 @@ export async function runDecided($: EngineInterface, id: string) {
   const t = await findTicket($, id)
   const r = await runCall($, 'meta-decided', [id])
   if (r.code !== 0) {
-    $.ui.toast([`✗ ticket-meta decided ${id} refused: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+    say($, [`✗ ticket-meta decided ${id} refused: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
     return
   }
   await refreshBoardTicket($, id, tk => ({ ...tk, box: ' ' }))
-  $.ui.toast([`✓ ${id} decided, now pending${t ? ': ' + t.title : ''}`, ...notes(r.out), ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+  say($, [`✓ ${id} decided, now pending${t ? ': ' + t.title : ''}`, ...notes(r.out), ran(r.argv)].join('\n'), { timeoutMs: 8000 })
 }
 
 // --- team: Add person (a form in the pane) and remove (from the Team view) ---
@@ -235,7 +236,7 @@ async function addPerson($: EngineInterface) {
     await update($, personA, x => (x ? { ...x, result: why } : x))
     return
   }
-  $.ui.toast([`✓ ${h} added to .skillator/team.md`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+  say($, [`✓ ${h} added to .skillator/team.md`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
   const d = await read($, assignA)
   if (p.back === 'assign' && d) {
     // Back on the assign form, the new person picked; the 2 s poll lists them.
@@ -266,22 +267,22 @@ export async function cancelPerson($: EngineInterface) {
 export async function removeMember($: EngineInterface, h: string) {
   const r = await runCall($, 'meta-team-remove', [h])
   if (r.code !== 0) {
-    $.ui.toast([`✗ ticket-meta team remove ${h} refused: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+    say($, [`✗ ticket-meta team remove ${h} refused: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
     return
   }
   const said = notes(r.out).filter(l => !/^removed:/.test(l))
-  $.ui.toast([`✓ ${h} removed from .skillator/team.md`, ...said, ran(r.argv)].join('\n'), { timeoutMs: 10000 })
+  say($, [`✓ ${h} removed from .skillator/team.md`, ...said, ran(r.argv)].join('\n'), { timeoutMs: 10000 })
 }
 
 // F80: ticket-meta decides who may (the lead hands over; none set, anyone sets the first).
 export async function makeLead($: EngineInterface, h: string) {
   const r = await runCall($, 'meta-team-lead', [h])
   if (r.code !== 0) {
-    $.ui.toast([`✗ ticket-meta team lead ${h} refused: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+    say($, [`✗ ticket-meta team lead ${h} refused: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
     return
   }
   const said = notes(r.out).filter(l => !/^lead:/.test(l))
-  $.ui.toast([`✓ ${h} is the lead`, ...said, ran(r.argv)].join('\n'), { timeoutMs: 10000 })
+  say($, [`✓ ${h} is the lead`, ...said, ran(r.argv)].join('\n'), { timeoutMs: 10000 })
 }
 
 // --- drawing ---

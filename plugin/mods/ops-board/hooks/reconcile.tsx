@@ -6,6 +6,7 @@ import { runCall } from './lib/host'
 import { appliedHead, appliedLine, applyOf, canApply, parseReconcile } from './lib/ticketsmodel'
 import { closeForm } from './assign'
 import { paint } from './paint'
+import { say } from './logtab'
 
 // F81: `c` on the Tickets tab - ticket-meta reconcile's proposals as a form in the
 // ops-board pane (B5: never a second pane): accept all, pick, or none. Each accepted
@@ -22,11 +23,11 @@ const why = (r: { code: number; out: string; err: string }) => r.err.trim() || r
 
 export async function openReconcile($: EngineInterface) {
   const r = await runCall($, 'meta-reconcile', [])
-  if (r.code !== 0) { $.ui.toast(`✗ ticket-meta reconcile refused: ${why(r)}`, { timeoutMs: 8000 }); return }
+  if (r.code !== 0) { say($, `✗ ticket-meta reconcile refused: ${why(r)}`, { timeoutMs: 8000 }); return }
   const rows = parseReconcile(r.out)
-  if (!rows.length) { $.ui.toast('ops board: reconcile - every [!] [ ] [~] row matches its evidence'); return }
+  if (!rows.length) { say($, 'ops board: reconcile - every [!] [ ] [~] row matches its evidence'); return }
   if (!rows.some(canApply)) {   // B16: nothing pressable - say what reconcile said instead of a dead form
-    $.ui.toast(['ops board: reconcile - nothing to change', ...rows.map(p => `${p.id} stays - ${p.why}`)].join('\n'), { timeoutMs: 10000 })
+    say($, ['ops board: reconcile - nothing to change', ...rows.map(p => `${p.id} stays - ${p.why}`)].join('\n'), { timeoutMs: 10000 })
     return
   }
   await update($, reconcileA, () => ({ rows, picked: [] }))
@@ -47,7 +48,7 @@ export async function applyReconcile($: EngineInterface, all: boolean) {
     lines.push(appliedLine(p, r.code === 0 ? null : why(r)))
   }
   const ok = lines.filter(l => l.startsWith('✓')).length
-  $.ui.toast([appliedHead(ok, todo.length), ...lines].join('\n'), { timeoutMs: 10000 })
+  say($, [appliedHead(ok, todo.length), ...lines].join('\n'), { timeoutMs: 10000 })
   await closeForm($)
 }
 
