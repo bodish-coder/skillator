@@ -6,6 +6,7 @@
 import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs'
 import type { Dirent } from 'node:fs'
 import { homedir } from 'node:os'
+import { createRequire } from 'node:module'
 import { argvFor, NO_SCRIPTS, NO_SH, norm, shellFor } from '../hooks/lib/calls'
 import { findSkillsDir, spawnArgv, windowsScripts } from './nodehost'
 
@@ -383,6 +384,16 @@ const REFRESH_MS = 60_000
 // for every row to still be read plainly and printed.
 const BUDGET_MS = 270_000
 const FORCED = new Set(['claude', 'codex', 'agy', 'muse'])
+const requirePolicy = createRequire(import.meta.url)
+type QuotaPolicy = {
+  WEEKLY_CAP: number
+  quotaPolicy: (record: unknown, mtime: number) => { held: number | null; unknown: boolean }
+}
+
+function loadPolicy(skills: string | null): QuotaPolicy | null {
+  if (!skills) return null
+  try { return requirePolicy(`${skills}/watch-cortana/hooks/quota-policy.cjs`) } catch { return null }
+}
 
 // F176: a profile's row and its model rows. `refresh`: a supported logged-in profile
 // is first read by usage-watch level with SKILLATOR_QUOTA_REFRESH_WAIT - it reads the CLI
@@ -391,30 +402,24 @@ const FORCED = new Set(['claude', 'codex', 'agy', 'muse'])
 // under 7 days old (a failure record's carried `last`, or a legacy `weekly`) or one that is
 // there but not a number (unknown), nor past `deadline`. A turn that gave no limits
 // (`turned_at`) holds only the paid turn - usage-watch's gate keeps it 24 h - not this read.
-export async function profileRows(p: Profile, read: Reader, base: Env, darwin: boolean, refresh: boolean, deadline = Infinity): Promise<Row[]> {
+export async function profileRows(p: Profile, read: Reader, base: Env, darwin: boolean, refresh: boolean, deadline = Infinity,
+  policy = loadPolicy(findSkillsDir(import.meta.dirname, base, existsSync, file => JSON.parse(readFileSync(file, 'utf8')))),
+): Promise<Row[]> {
   let held: number | null = null, late = false, unknown = false, cache: Cache | undefined
   if (refresh && FORCED.has(p.cli) && loggedIn(p, darwin)) {
     cache = loadCache(p)
-    const { c } = cache, now = Date.now() / 1000
-    // A reading holds for 7 days from its `at` (one that is not a number: the file's mtime);
-    // after, a reset is plausible - aged, numeric or not, so the forced read goes ahead
-    // (usage-watch's gate decides a turn).
-    const bad = (v: unknown) => v !== undefined && !isNum(v)
-    const fresh = (at: unknown) => now - (isNum(at) ? at : (cache!.mtime ?? NaN) / 1000) < 7 * 86400
-    const top = c?.['7d'] ?? c?.weekly, l = c?.last, lv = l?.['7d'] ?? l?.weekly
-    const topFresh = fresh(c?.at), lastFresh = l?.at !== undefined && fresh(l.at)   // a last with no at never holds
-    unknown = topFresh && (bad(top) || bad(c?.at)) || lastFresh && (bad(lv) || bad(l.at))
-    const last = topFresh && isNum(top) ? top : lastFresh ? lv : undefined
-    if (!unknown) {
-      if (isNum(last) && last >= 90) held = last
-      else if (Date.now() + REFRESH_MS > deadline) late = true
+    const decision = policy?.quotaPolicy(cache.c, (cache.mtime ?? NaN) / 1000)
+    unknown = decision?.unknown ?? true
+    held = decision?.held ?? null
+    if (!unknown && held === null) {
+      if (Date.now() + REFRESH_MS > deadline) late = true
       else await read({ ...readerEnv(p, base), SKILLATOR_QUOTA_REFRESH_WAIT: '1' }, REFRESH_MS)
     }
   }
   let main = await row(p, read, base, darwin)
   cache = loadCache(p)   // after row() and any forced read: via and models as they are now
   if (unknown && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', 'not refreshed: last 7d unknown']
-  else if (held !== null && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', `not refreshed: last 7d ${Math.round(held)}% >= 90%`]
+  else if (policy && held !== null && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', `not refreshed: last 7d ${Math.round(held)}% >= ${policy.WEEKLY_CAP}%`]
   else if (late && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', 'not refreshed: out of time - press p again']
   else if (!main[3] && (main[1] !== '-' || main[2] !== '-') && cache.c?.via === 'turn') main = [main[0], main[1], main[2], 'via one turn']
   return [main, ...modelRows(p, cache)]
@@ -437,6 +442,7 @@ export async function status(env: Env, appDir: string, refresh = false): Promise
     return spawnArgv(argvFor('usage-level', win, skills, [], sh), home, ms, undefined, e)
   }
   const rows: Row[] = [], deadline = Date.now() + BUDGET_MS
-  for (const p of discover(home)) rows.push(...await profileRows(p, read, env, process.platform === 'darwin', refresh, deadline))
+  const policy = loadPolicy(skills)
+  for (const p of discover(home)) rows.push(...await profileRows(p, read, env, process.platform === 'darwin', refresh, deadline, policy))
   return rows.length ? render(rows) : `ops --status: no CLI profiles found under ${home}\n`
 }

@@ -299,7 +299,8 @@ function Start-QuotaRefresh([string]$targetCli, [string]$targetDir) {
   $lock = Join-Path $targetDir 'quota-cache.json.refreshing'
   if (Test-Path -LiteralPath $lock) {
     $item = Get-Item -LiteralPath $lock -ErrorAction SilentlyContinue
-    # F176: stale at 90 s - over the refresh's capped CLI calls (20 s + 30 s), so a read
+    # F176: stale at 90 s; keep aligned with ops/reset.ts and usage-watch.sh.
+    # This is over the refresh's capped CLI calls (20 s + 30 s), so a read
     # still alive always holds it and a second reader can never start a turn beside it.
     if ($item -and $item.LastWriteTime -gt (Get-Date).AddSeconds(-90)) {
       $script:noteTag = ' note=refresh_pending'
@@ -480,24 +481,11 @@ if ($Mode -eq 'refresh') {
       # a turn that gave no limits (`turned_at`) holds turns 24 h.
       # Read only where a turn may follow; 'unread' never passes the gate.
       $gateOk = $false
-      $prev = if ($verdict -eq 'NOWINDOWS' -and $forced) { & $readPrev } else { 'unread' }
-      if ($prev -is [string]) { $gateOk = $prev -eq 'missing' }
-      elseif (-not $prev.PSObject.Properties['turned_at'] -or ((& $isNum $prev.turned_at) -and $now - $prev.turned_at -ge 86400)) {
-        $has = { param($x) $x -is [pscustomobject] -and ($x.PSObject.Properties['7d'] -or $x.PSObject.Properties['weekly']) }
-        $o = $prev
-        if (-not (& $has $o)) {
-          $o = $null
-          if ($prev.PSObject.Properties['last']) {
-            if ($null -eq $prev.last) { $gateOk = $true }
-            elseif ((& $has $prev.last) -and (& $isNum $prev.last.at) -and $now - $prev.last.at -lt 7 * 86400) { $o = $prev.last }
-          }
-        }
-        if ($o) {
-          $v = if ($o.PSObject.Properties['7d']) { $o.'7d' } else { $o.weekly }
-          $gateOk = (& $isNum $v) -and $v -ge 0 -and $v -lt 90
-        }
+      if ($verdict -eq 'NOWINDOWS' -and $forced -and (Get-Command node -ErrorAction SilentlyContinue)) {
+        & node (Join-Path $PSScriptRoot 'quota-policy.cjs') $cache 2>$null
+        $gateOk = $LASTEXITCODE -eq 0
       }
-      if ($verdict -eq 'NOWINDOWS' -and $forced -and $gateOk -and
+      if ($gateOk -and
           ((Test-Path -LiteralPath (Join-Path $Dir '.credentials.json')) -or $IsMacOS) -and
           $raw -notmatch 'session expired|Failed to authenticate') {
         # The smallest turn: no tools, no MCP, no saved session (flags from `claude --help`;

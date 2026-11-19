@@ -328,7 +328,8 @@ spawn_quota_refresh() {
 start_quota_refresh() {
   [ -n "$1" ] && [ -n "$2" ] || return 0
   lock="$2/quota-cache.json.refreshing"
-  # F176: stale at 90 s - over the refresh's capped CLI calls (20 s + 30 s), so a read
+  # F176: stale at 90 s; keep aligned with ops/reset.ts and usage-watch.ps1.
+  # This is over the refresh's capped CLI calls (20 s + 30 s), so a read
   # still alive always holds it and a second reader can never start a turn beside it.
   if fresh_file "$lock" 90; then
     note_tag=" note=refresh_pending"
@@ -529,22 +530,7 @@ except Exception:
       if [ "$parsed" = NOWINDOWS ] && [ "${SKILLATOR_QUOTA_REFRESH_WAIT:-}" = 1 ] &&
          { [ -f "$target_dir/.credentials.json" ] || [ "$(uname -s)" = Darwin ]; } &&
          ! printf '%s' "$raw" | grep -qi 'session expired\|Failed to authenticate' &&
-         node -e '
-           const fs = require("fs"); let s;
-           try { s = fs.readFileSync(process.argv[1], "utf8") } catch (e) { process.exit(e.code === "ENOENT" ? 0 : 1) }
-           let r; try { r = JSON.parse(s.replace(/^﻿/, "")) } catch (_) { process.exit(1) }
-           if (!r || typeof r !== "object" || Array.isArray(r)) process.exit(1);
-           const now = Date.now() / 1000;
-           if (Object.hasOwn(r, "turned_at") && !(typeof r.turned_at === "number" && now - r.turned_at >= 86400)) process.exit(1);
-           const has = o => o && (Object.hasOwn(o, "7d") || Object.hasOwn(o, "weekly"));
-           let o = r;
-           if (!has(r)) {
-             if (!Object.hasOwn(r, "last")) process.exit(1); if (r.last === null) process.exit(0); o = r.last; if (!has(o)) process.exit(1);
-             if (!(typeof o.at === "number" && now - o.at < 7 * 86400)) process.exit(1)
-           }
-           const v = Object.hasOwn(o, "7d") ? o["7d"] : o.weekly;
-           process.exit(typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 90 ? 0 : 1);
-         ' "$cache" 2>/dev/null; then
+         node "$(dirname "$0")/quota-policy.cjs" "$cache" 2>/dev/null; then
         turn=$(capped 30 claude_turn)
         via=$(printf '%s' "$turn" | node -e '
             try {

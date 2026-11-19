@@ -1,10 +1,21 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, delimiter, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import policy from '../hooks/quota-policy.cjs'
+
+test('A246: one policy applies the weekly cap, stale age, and paid-turn hold at their boundaries', () => {
+  const now = 10 * 86400
+  const check = record => policy.quotaPolicy(record, now, now)
+  assert.deepEqual(check({ '7d': 90 }), { unknown: false, held: 90, allowTurn: false })
+  assert.equal(check({ '7d': 89.9, at: now - 7 * 86400 + 1 }).allowTurn, true)
+  assert.equal(check({ '7d': 89.9, at: now - 7 * 86400 }).allowTurn, false)
+  assert.deepEqual(check({ last: null, turned_at: now - 86400 + 1 }), { unknown: false, held: null, allowTurn: false })
+  assert.equal(check({ last: null, turned_at: now - 86400 }).allowTurn, true)
+})
 
 const hooksDir = fileURLToPath(new URL('../hooks/', import.meta.url)).replace(/\\/g, '/')
 const shExe = ['sh', 'C:/Program Files/Git/bin/sh.exe', 'C:/Program Files/Git/usr/bin/sh.exe'].find(
@@ -35,6 +46,7 @@ function makeFixture(port) {
 
   const source = readFileSync(`${hooksDir}/usage-watch.${port}`, 'utf8')
   const script = `${root}/usage-watch.${port}`
+  copyFileSync(`${hooksDir}/quota-policy.cjs`, `${root}/quota-policy.cjs`)
 
   if (port === 'ps1') {
     const stub = [

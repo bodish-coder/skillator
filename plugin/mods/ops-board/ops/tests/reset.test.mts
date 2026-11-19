@@ -21,7 +21,7 @@ test('reset cleans up stale quota refreshing locks and reports cleanly', async (
     const old = new Date(Date.now() - 95 * 1000); utimesSync(lock, old, old)
     assert.ok(existsSync(lock))
 
-    const report = await reset({ HOME: root, USERPROFILE: root })
+    const report = await reset({ HOME: root, USERPROFILE: root, SKILLATOR_RESET_READER_PID: '0' })
     assert.ok(report.includes('ops --reset:'))
     assert.ok(report.includes('[ok] Terminal attributes'))
     assert.ok(report.includes('Cleared 1 stale lock(s)'))
@@ -33,8 +33,8 @@ test('reset cleans up stale quota refreshing locks and reports cleanly', async (
 
 // A236 (1): a refresh lock younger than usage-watch's 90 s stale age belongs to a read that
 // may still be live - removing it would let a `p` straight after the reset start a second turn.
-// Off Windows reset kills no reader, so the young lock is kept.
-test('A236: reset keeps a refresh lock younger than the 90 s stale age', { skip: process.platform === 'win32' }, async () => {
+// If process cleanup is skipped, reset keeps the young lock on every platform.
+test('A236: reset keeps a refresh lock younger than the 90 s stale age', async () => {
   const root = mkdtempSync(join(tmpdir(), 'ops-reset-')).replace(/\\/g, '/')
   try {
     const profileDir = `${root}/.claude-live`
@@ -42,7 +42,7 @@ test('A236: reset keeps a refresh lock younger than the 90 s stale age', { skip:
     const lock = `${profileDir}/quota-cache.json.refreshing`
     writeFileSync(lock, 'x')
     const t = new Date(Date.now() - 50 * 1000); utimesSync(lock, t, t)
-    const report = await reset({ HOME: root, USERPROFILE: root })
+    const report = await reset({ HOME: root, USERPROFILE: root, SKILLATOR_RESET_READER_PID: '0' })
     assert.ok(existsSync(lock), 'a live read keeps its lock')
     assert.ok(report.includes('No stale lock files found'), report)
   } finally {
@@ -52,9 +52,11 @@ test('A236: reset keeps a refresh lock younger than the 90 s stale age', { skip:
 
 // A236 fix round (4): on Windows reset kills the refresh readers (with their trees), so their
 // locks go too - a young lock is never left behind a killed reader, nor a reader behind a lock.
-test('A236: on Windows reset kills a live refresh reader and removes its young lock', { skip: process.platform !== 'win32' }, async () => {
+test('A246: reset kills only the selected fixture reader and removes its young lock', { skip: process.platform !== 'win32' }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'ops-reset-')).replace(/\\/g, '/')
-  const reader = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)', 'usage-watch.ps1', '-Mode', 'refresh'], { stdio: 'ignore', windowsHide: true })
+  const startReader = () => spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)', 'usage-watch.ps1', '-Mode', 'refresh'], { stdio: 'ignore', windowsHide: true })
+  const reader = startReader()
+  const unrelated = startReader()
   try {
     const profileDir = `${root}/.claude-live`
     mkdirSync(profileDir)
@@ -62,12 +64,16 @@ test('A236: on Windows reset kills a live refresh reader and removes its young l
     writeFileSync(lock, 'x')
     const t = new Date(Date.now() - 50 * 1000); utimesSync(lock, t, t)
     await new Promise(r => setTimeout(r, 500))
-    await reset({ HOME: root, USERPROFILE: root })
+    assert.ok(reader.pid)
+    const report = await reset({ HOME: root, USERPROFILE: root, SKILLATOR_RESET_READER_PID: String(reader.pid) })
     await new Promise(r => setTimeout(r, 500))
     assert.notEqual(reader.exitCode ?? reader.signalCode, null, 'the reader was killed')
+    assert.equal(unrelated.exitCode ?? unrelated.signalCode, null, 'another matching reader stays alive')
+    assert.match(report, /Terminated 1 orphaned background process/)
     assert.ok(!existsSync(lock), 'its lock was removed')
   } finally {
     reader.kill()
+    unrelated.kill()
     rmSync(root, { recursive: true, force: true })
   }
 })
@@ -87,7 +93,7 @@ test('app --help documents ops --reset and app.ts --reset exits 0', () => {
     const r = spawnSync(
       process.execPath,
       ['--import', pathToFileURL(join(ops, 'loader.mjs')).href, join(ops, 'app.ts'), '--reset'],
-      { encoding: 'utf8', env: { ...process.env, HOME: root, USERPROFILE: root } },
+      { encoding: 'utf8', cwd: root, env: { ...process.env, HOME: root, USERPROFILE: root, SKILLATOR_RESET_READER_PID: '0' } },
     )
     assert.equal(r.status, 0, r.stderr)
     assert.ok(r.stdout.includes('ops --reset:'))
