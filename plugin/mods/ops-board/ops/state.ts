@@ -5,6 +5,8 @@
 // it as is.
 import type { AssignDraft, Board, Box, Engage, Filter, Machine, Member, Msg, PersonDraft, Reconcile, RunView, TeamsCfgView, ArmView, Ticket, Usage, Watch } from '../types'
 import type { Call } from '../hooks/lib/calls'
+import { cleanIntakeText, draftEdit, firstDraft, intakeDetails } from '../hooks/lib/intake'
+import type { Draft } from '../hooks/lib/intake'
 import type { Model, View } from '../hooks/lib/ticketsmodel'
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
 import { NO_SCRIPTS, decideQuestionsPrompt, holoTicketCmd, loginMessage, loginStatus } from '../hooks/lib/calls'
@@ -95,7 +97,7 @@ export type PointerAction =
   | { kind: 'start-run-field'; field: StartRunField }
   | { kind: 'explorer-branch'; branch: string }       // B25: a branch in the Explorer confirm's picker
 
-export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.decide || s.reconcile || s.teamConfirm || s.engage || s.startRun || s.filterField || s.runForm || s.help?.runPrompt != null || s.help?.filtering)
+export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.decide || s.reconcile || s.intake || s.teamConfirm || s.engage || s.startRun || s.filterField || s.runForm || s.help?.runPrompt != null || s.help?.filtering)
 
 // Targets come only from the rendered frame, never from labels or terminal payloads.
 export function point(s: State, a: PointerAction): Step {
@@ -195,6 +197,7 @@ export type State = {
   teamSelected: string | null                         // the Team view's row
   teamConfirm: string | null                          // the handle the Team view asks to remove (y/n)
   reconcile: (Reconcile & { index: number }) | null   // F81: the reconcile box, its cursor row
+  intake: { draft: Draft; offset: number; busy?: boolean; edit?: { title: string; description: string; field: 'title' | 'description' } } | null
   toast: string | null; notes: string[]
   cols: number; rows: number; now: number; quit: boolean
   repo: string | null                      // the repo root's basename, for the tab bar (app.ts sets it)
@@ -247,6 +250,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   machine: null, usage: null, watch: { level: 'green', reasons: [] }, profile: null, relay: null,
   runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, runMode: 'parallel', engage: null, startRun: null,
   dialog: null, dialogIndex: 0, dialogField: 'who', decide: null, person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
+  intake: null,
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
   messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, teamsArm: null, armBusy: false, ackAfter: null, armSeq: 0, profiles: null, profilesBusy: false, setup: null, setupField: 'token',
   help: null,
@@ -714,6 +718,55 @@ function decided(s: State): Step {
     ? toast(x, [`✗ ticket-meta decided ${t.id} refused: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`, ran(r.argv)].join('\n'))
     : toast(x, [`✓ ${t.id} decided, now pending: ${t.title}`, ...notesOf(r.out), ran(r.argv)].join('\n'))
   return { state: s, effects: [run('meta-decided', [t.id], then)] }
+}
+
+function openIntake(s: State): Step {
+  return { state: s, effects: [run('meta-intake', ['list'], r => x => {
+    if (r.code !== 0) return toast(x, why(r, 'ticket-meta intake'))
+    if (x.tab !== 'tickets' || pointerModal(x)) return x
+    try {
+      const draft = firstDraft(r.out)
+      return draft ? { ...x, intake: { draft, offset: 0 }, toast: null } : toast(x, 'Intake queue is empty')
+    } catch {
+      return toast(x, 'Could not read the intake queue')
+    }
+  })] }
+}
+
+function intakeKey(s: State, k: Key): Step {
+  const v = s.intake!
+  const set = (intake: State['intake']): Step => ({ state: { ...s, intake }, effects: [] })
+  if (v.busy) return set(v)
+  if (k.name === 'escape' || (k.ctrl && k.name === 'c')) return set(v.edit ? { ...v, edit: undefined } : null)
+  const d = v.draft
+  const e = v.edit
+  let args: string[]
+  if (e) {
+    if (k.name === 'tab') return set({ ...v, edit: { ...e, field: e.field === 'title' ? 'description' : 'title' } })
+    if (k.name !== 'enter' && k.name !== 'return') {
+      const value = e[e.field]
+      const input = k.sequence && !k.ctrl && !k.meta ? cleanIntakeText(k.sequence) : ''
+      const text = k.name === 'backspace' ? [...value].slice(0, -1).join('') : value + input
+      return set({ ...v, edit: { ...e, [e.field]: text } })
+    }
+    args = ['edit', d.id, d.revision, draftEdit(e.title, e.description)]
+  } else {
+    if (k.name === 'up' || k.name === 'down') {
+      const n = intakeDetails(d).length
+      return set({ ...v, offset: Math.min(Math.max(0, n - 1), Math.max(0, v.offset + (k.name === 'up' ? -1 : 1))) })
+    }
+    if (k.name === 'e' && !d.ticketId) return set({ ...v, edit: { title: d.title, description: d.description ?? '', field: 'title' } })
+    if (k.name !== 'a' && (k.name !== 'x' || d.ticketId)) return set(v)
+    args = [k.name === 'a' ? 'accept' : 'reject', d.id, d.revision]
+  }
+  return { state: { ...s, intake: { ...v, busy: true } }, effects: [run('meta-intake', args, r => x => {
+    if (r.code !== 0) return toast({ ...x, intake: x.intake ? { ...x.intake, busy: false } : null }, why(r, 'ticket-meta intake'))
+    return {
+      state: toast({ ...x, intake: null }, e ? 'Intake draft edited. Reopen to review and approve.' :
+        args[0] === 'accept' ? 'Accepted as ' + r.out.trim() : 'Intake draft rejected'),
+      effects: args[0] === 'accept' ? [{ kind: 'poll', what: 'board' }] : [],
+    }
+  })] }
 }
 
 // --- F81: reconcile (`c`): ticket-meta reconcile's proposals; accept all / pick / none ---
@@ -1250,6 +1303,7 @@ function ticketsKey(s: State, k: Key): Step {
     case 'x': return { state: { ...s, filter: { ...s.filter, showDone: !s.filter.showDone } }, effects: [] }
     case 't': return { state: { ...s, showTeam: true }, effects: [] }
     case 'c': return openReconcile(s)
+    case 'i': return openIntake(s)
     case 'u': return { state: toast(s, `Paste into your CLI:\n${decideQuestionsPrompt()}`), effects: [] }
     case 'escape': return { state: { ...s, toast: null }, effects: [] }
     default: return same
@@ -2731,6 +2785,7 @@ export function reduce(s: State, k: Key): Step {
   if (k.ctrl && k.name === 'c') {
     if (s.help) return { state: { ...s, help: null, tab: s.tab === 'help' ? 'tickets' : s.tab }, effects: [] }
     if (s.decide) return { state: { ...s, decide: null }, effects: [] }
+    if (s.intake) return intakeKey(s, k)
     if (s.startRun) return { state: { ...s, startRun: null }, effects: [] }
     if (s.setup?.touched) return { state: { ...s, setup: null }, effects: [] }
     if (s.runForm?.mode === 'rename' && s.tab === 'run') return { state: { ...s, runForm: null }, effects: [] }
@@ -2746,6 +2801,7 @@ export function reduce(s: State, k: Key): Step {
   if (s.person) return personKey(s, k)
   if (s.dialog) return dialogKey(s, k)
   if (s.decide) return decideKey(s, k)
+  if (s.intake) return intakeKey(s, k)
   if (s.reconcile) return reconcileKey(s, k)
   if (s.teamConfirm) return teamKey(s, k)
   if (s.engage) return engageKey(s, k)          // F85

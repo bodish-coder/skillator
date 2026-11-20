@@ -91,7 +91,7 @@ export const UNI: Glyphs = { open: '▾', closed: '▸', rail: '▌ ', railDim: 
 export const ASCII: Glyphs = { open: 'v', closed: '>', rail: '| ', railDim: ': ', dot: '*', more: '...', down: 'v', up: '^', move: '^v', sep: '-', active: '', cut: '...' }
 export const STATE_WORD: Record<State, string> = { ' ': 'open', '~': 'wip ', '%': 'test', '!': 'blkd', '?': 'dec ', '>': 'defr', x: 'done', '-': 'canc' }
 export const TAB_LABELS = ['Tickets', 'Workflows', 'Health', 'Messages', 'Explorer', 'Build', 'Help']
-export const KEY_LABELS = ['move', 'a assign', 'd decide', 'f filter', 'x done', 't team', 'c reconcile', 'u ask', 's status', 'h help', 'r refresh']
+export const KEY_LABELS = ['move', 'a assign', 'd decide', 'f filter', 'x done', 't team', 'c reconcile', 'i intake', 'u ask', 's status', 'h help', 'r refresh']
 
 export function packRows(widths: number[], cols: number, gap: number): number {
   let rows = 0, used = -1

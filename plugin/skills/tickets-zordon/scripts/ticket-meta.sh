@@ -2005,14 +2005,7 @@ selftest() {
 # TEAMS_STATUS_POSTS=on, or - that unset - "statusPosts": true in the per-user config
 # (~/.skillator/teams.json, SKILLATOR_TEAMS_CONFIG overrides). Off by default. A post
 # that fails is one line on stderr; the edit stands and the exit stays 0.
-teams_post() {
-  case ${TEAMS_STATUS_POSTS:-} in
-    on) ;;
-    '') grep -Eq '"statusPosts"[[:space:]]*:[[:space:]]*true' "${SKILLATOR_TEAMS_CONFIG:-$HOME/.skillator/teams.json}" 2>/dev/null || return 0 ;;
-    *) return 0 ;;
-  esac
-  _js="$(dirname -- "$0")/../../teams-uhura/scripts/team.mjs"
-  [ -f "$_js" ] || return 0
+find_ticket_node() {
   # A151: the first node in an absolute PATH entry outside the repo - a '.' or relative
   # entry, or one inside the repo (a node_modules/.bin), could start a node the repo supplies.
   _top=$(cd "$TOP" 2>/dev/null && pwd) || _top=$TOP
@@ -2024,6 +2017,37 @@ teams_post() {
     if [ -f "$_p/node" ] && [ -x "$_p/node" ]; then _n=$_p/node; break; fi
   done
   IFS=$_o; set +f
+}
+
+cmd_intake() {
+  find_ticket_node
+  [ -n "$_n" ] || die 'intake needs Node on PATH'
+  _dir="$(dirname -- "$0")"
+  _common=$(git rev-parse --path-format=absolute --git-common-dir) || die 'cannot locate the shared git directory'
+  _git=$(command -v git) || die 'intake needs Git on PATH'
+  _allocator="${BFRESH%/*}/next-id.sh"
+  _shell=/bin/sh
+  case $(uname -s) in
+    MINGW*|MSYS*) _shell=$(cygpath -m /bin/sh.exe); _git=$(cygpath -m "$_git") ;;
+  esac
+  _board="$MAIN/TICKETS.md"
+  board_lock "$_board.lock"
+  [ "${1:-}" != accept ] || board_fresh
+  _out=$("$_n" "$_dir/intake.mjs" "$MAIN" "$_common" "$_git" "$_shell" "$_allocator" "$@") || { board_unlock; return 1; }
+  if [ "${1:-}" = accept ]; then board_commit "$_board" "board: intake $_out"; fi
+  board_unlock
+  printf '%s\n' "$_out"
+}
+
+teams_post() {
+  case ${TEAMS_STATUS_POSTS:-} in
+    on) ;;
+    '') grep -Eq '"statusPosts"[[:space:]]*:[[:space:]]*true' "${SKILLATOR_TEAMS_CONFIG:-$HOME/.skillator/teams.json}" 2>/dev/null || return 0 ;;
+    *) return 0 ;;
+  esac
+  _js="$(dirname -- "$0")/../../teams-uhura/scripts/team.mjs"
+  [ -f "$_js" ] || return 0
+  find_ticket_node
   [ -n "$_n" ] || return 0
   _e=$(TEAMS_STATUS_POSTS=on "$_n" "$_js" post-status "$@" 2>&1 > /dev/null) ||
     echo "ticket-meta: teams status post failed (the edit stands): $(printf '%s' "$_e" | tr '\r\n' '  ' | sed 's/^team: //')" >&2
@@ -2056,6 +2080,7 @@ case $c in
   defer) cmd_defer "$@" && teams_post defer "$@" ;;
   tag) cmd_tag "$@" ;;
   team) cmd_team "$@" ;;
+  intake) cmd_intake "$@" ;;
   whoami) cmd_whoami "$@" ;;
   iam) cmd_iam "$@" ;;
   stamp) cmd_stamp "$@" ;;

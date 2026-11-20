@@ -98,6 +98,40 @@ async function start($: Engine, clock: MockClock, surface: Surface): Promise<Mou
 }
 const head = async (pane: Mounted<Surface, 'Pane'>, box: string) => (await pane.find({ key: 'head:' + box }))?.text
 
+test('F185: the pane displays one draft and sends the exact edit, accept and reject decisions', WITH, async ($, on) => {
+  const [w, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  const data = { id: 'draft-id', revision: 'r1', type: 'B', title: 'Login crash', description: 'Repro', duplicates: ['B7'] }
+  let queue = [data, { ...data, id: 'other', title: 'Other draft' }]
+  w.answer = argv => {
+    if (argv[2] !== 'intake') return null
+    if (argv[3] === 'list') return ran(JSON.stringify(queue))
+    if (argv[3] === 'edit') queue = [{ ...data, revision: 'r2', title: 'Crash after login' }, queue[1]!]
+    if (argv[3] === 'accept') queue = queue.slice(1)
+    return ran(argv[3] === 'accept' ? 'B10' : '{}')
+  }
+  const pane = await start($, clock, 'terminal')
+  await pane.press({ key: 'key:intake' })
+  await clock.settle()
+  expect(w.runs).toEqual([sh('intake', 'list')])
+  expect(w.toasts).toEqual([])
+  expect(w.opens.at(-1)).toEqual({ id: 'ops-board', focus: undefined, closeOnEscape: true })
+  expect((await pane.find({ key: 'form:title' }))?.text).toBe('Intake draft')
+  expect((await pane.find({ key: 'detail:0' }))?.text).toBe('Possible duplicates: B7')
+  await pane.press({ key: 'intake:edit' })
+  await pane.input({ key: 'intake:title', text: 'Crash after login', kind: 'change' })
+  await pane.press({ key: 'intake:save' })
+  await pane.press({ key: 'key:intake' })
+  await pane.press({ key: 'intake:accept' })
+  await pane.press({ key: 'key:intake' })
+  await pane.press({ key: 'intake:reject' })
+  expect(w.runs.filter(a => a[2] === 'intake' && a[3] !== 'list')).toEqual([
+    sh('intake', 'edit', 'draft-id', 'r1', encodeURIComponent(JSON.stringify({ title: 'Crash after login', description: 'Repro' }))),
+    sh('intake', 'accept', 'draft-id', 'r2'), sh('intake', 'reject', 'other', 'r1'),
+  ])
+  expect(w.writes).toEqual([])
+  await pane.unmount()
+})
+
 for (const surface of SURFACES) {
   test(`${surface}: F81 c lists the proposals in the pane; Accept all runs each one's ticket-meta subcommand, then re-reads the board`, WITH, async ($, on) => {
     const [w, clock] = world(on, { '/r/TICKETS.md': BOARD })

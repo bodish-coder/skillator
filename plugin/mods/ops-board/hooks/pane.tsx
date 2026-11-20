@@ -11,6 +11,7 @@ import { clearForm, openAssign, renderForm, runDecided } from './assign'
 import { decideQuestionsPrompt } from './lib/calls'
 import { openDecide, openStatus, renderStatus } from './status'
 import { openReconcile, renderReconcile } from './reconcile'
+import { openIntake, renderIntake } from './intake'
 import { paint } from './paint'
 import { TeamTab } from './teamview'
 import { HealthTab, readHealth } from './health'
@@ -236,6 +237,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
       <Button key="key:done" plain dimColor hotkey="x" onPress={() => setFilter(x => ({ ...x, showDone: !x.showDone }))}>done</Button>
       <Button key="key:team" plain dimColor hotkey="t" onPress={() => { void update($, teamViewA, () => ({ selected: null, confirm: false })) }}>team</Button>
       <Button key="key:reconcile" plain dimColor hotkey="c" onPress={() => { void clearForm($).then(() => openReconcile($)) }}>reconcile</Button>
+      <Button key="key:intake" plain dimColor hotkey="i" onPress={() => { void clearForm($).then(() => openIntake($)) }}>intake</Button>
       <Button key="key:questions" plain dimColor hotkey="u" onPress={() => {
         const text = decideQuestionsPrompt()
         void $.prompt.submit({ text }).then(
@@ -421,7 +423,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   }
   // B5: an assign / decide / add person form up draws in place of the view it came
   // from (Tickets or Team); Esc or Cancel brings that view back.
-  const form = (await renderStatus($, e)) ?? (await renderForm($, e)) ?? (await renderReconcile($, e))   // F81: the reconcile form likewise
+  const form = (await renderStatus($, e)) ?? (await renderForm($, e)) ?? (await renderReconcile($, e)) ?? (await renderIntake($, e))
   if (form) return form
   const v = await readView($, cols, e.props.scroll?.bodyRows ?? null, unread)
   const tv = await read($, teamViewA)
