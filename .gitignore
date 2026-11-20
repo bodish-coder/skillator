@@ -6,6 +6,7 @@
 .skillator/holo/
 .skillator/dirty.log
 .skillator/watchdog.mute
+.skillator/watchdog.off
 Microsoft/
 
 # taskwork.sh scratch (briefs, reports, review packages)

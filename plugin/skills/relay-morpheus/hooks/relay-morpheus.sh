@@ -55,7 +55,7 @@
 #   relay-morpheus.sh chain edge <n> --after 66,67 | --independent-of Qk --why "<ruling>"
 #
 # Watchdog (F48) - one file, <main checkout>/.skillator/watchdog.hold = "<since> <reason>":
-#   relay-morpheus.sh watchdog hold "<reason>" | release | status
+#   relay-morpheus.sh watchdog hold "<reason>" | release | on | off | status
 #        a hold refuses every new `chain dispatch` (and a GREEN baseline-harness `run`), exit 2,
 #        until released; a second hold keeps its since. status: HELD <since> <reason> | CLEAR
 #        (a hold file that exists holds: an empty one is HELD ? -). RELAY_DIR overrides the
@@ -1174,7 +1174,7 @@ wd_path() {
 # R6: a file that exists holds whatever its content - a missing since reads
 # ?, a missing reason - (an empty or blank file: HELD ? -).
 wd_read() {
-  _wf=$(wd_path "${1:-}"); [ -f "$_wf" ] || return 1
+  _wf=$(wd_path "${1:-}"); [ ! -f "${_wf%.hold}.off" ] && [ -f "$_wf" ] || return 1
   _wl=$(awk 'NR == 1 { gsub(/\r/, ""); gsub(/^[ \t]+|[ \t]+$/, ""); i = index($0, " ")
                a = (i ? substr($0, 1, i - 1) : $0); b = (i ? substr($0, i + 1) : "")
                print (a == "" ? "?" : a) " " (b == "" ? "-" : b); done = 1; exit }
@@ -1184,6 +1184,7 @@ wd_read() {
   return 0
 }
 wd_hold_() {   # <reason> <file>
+  if [ -f "${2%.hold}.off" ]; then echo "watchdog: off"; return 0; fi
   _ws=$(now); if wd_read && [ "$WD_SINCE" != '?' ]; then _ws=$WD_SINCE; fi
   printf '%s %s\n' "$_ws" "$1" > "$2.tmp.$$" && mv "$2.tmp.$$" "$2"
   echo "watchdog: held $_ws $1"
@@ -1191,10 +1192,19 @@ wd_hold_() {   # <reason> <file>
 wd_release_() {   # <file>
   if [ -f "$1" ]; then rm -f "$1"; echo "watchdog: released"; else echo "watchdog: not held"; fi
 }
+wd_off_() {
+  : > "${1%.hold}.off" || return 1
+  rm -f "$1" || return 1
+  echo "watchdog: off"
+}
+wd_on_() {
+  rm -f "${1%.hold}.off" || return 1
+  echo "watchdog: on"
+}
 wd_locked() {   # <fn> <args...>: fn with the hold file appended, under its lock
   _wdf=$(wd_path)
-  # only a hold makes the folder - status and release never create one
-  if [ "$1" = wd_hold_ ]; then mkdir -p "${_wdf%/*}"
+  # Status and release never create the folder.
+  if [ "$1" != wd_release_ ]; then mkdir -p "${_wdf%/*}" || return 1
   elif [ ! -f "$_wdf" ]; then echo "watchdog: not held"; return 0; fi
   _wdsv=$LOCK; LOCK=; lock "$_wdf.lock"
   _wdrc=0; "$@" "$_wdf" || _wdrc=$?
@@ -1209,8 +1219,10 @@ cmd_watchdog() {
 "*) die "watchdog hold: the reason is one line" ;; esac
       wd_locked wd_hold_ "$_wr" ;;
     release) wd_locked wd_release_ ;;
-    status) if wd_read; then echo "HELD $WD_SINCE $WD_WHY"; else echo CLEAR; fi ;;
-    *) die 'usage: relay-morpheus.sh watchdog hold "<reason>" | release | status' ;;
+    off) wd_locked wd_off_ ;;
+    on) wd_locked wd_on_ ;;
+    status) if [ -f "$(wd_path | sed 's/\.hold$/.off/')" ]; then echo OFF; elif wd_read; then echo "HELD $WD_SINCE $WD_WHY"; else echo CLEAR; fi ;;
+    *) die 'usage: relay-morpheus.sh watchdog hold "<reason>" | release | on | off | status' ;;
   esac
 }
 

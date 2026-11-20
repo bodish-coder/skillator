@@ -380,6 +380,7 @@ function First-Line($xs) {
 function Get-HoldKv {
   $hf = "$script:Main/.skillator/watchdog.hold"
   if ($env:RELAY_DIR) { $hf = Join-Path $env:RELAY_DIR 'watchdog.hold' }
+  if (Test-Path -LiteralPath ($hf -replace '\.hold$', '.off') -PathType Leaf) { return @('HOLD=-', 'WATCHDOG_OFF=1') }
   if (-not (Test-Path -LiteralPath $hf -PathType Leaf)) { return 'HOLD=-' }
   # R6: a file that exists is held whatever its content - an empty or blank
   # one (or one that cannot be read) is `? -`; HOLD=- is only "no file".

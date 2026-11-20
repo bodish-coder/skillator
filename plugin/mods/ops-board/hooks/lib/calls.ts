@@ -6,7 +6,7 @@
 export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' | 'meta-assign-tester' | 'meta-assign-session' | 'meta-decide' | 'meta-decided'
   | 'meta-team-add' | 'meta-team-remove' | 'meta-team-lead'
   | 'meta-status' | 'holo-ticket' | 'meta-reconcile' | 'meta-unblock' | 'meta-start' | 'meta-testing' | 'meta-block'
-  | 'relay-list' | 'relay-resume' | 'relay-queue-add' | 'relay-push-pending' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
+  | 'relay-list' | 'relay-resume' | 'relay-queue-add' | 'relay-push-pending' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-watchdog-mode' | 'relay-decide'
   | 'relay-stage-landed'
   | 'usage-level' | 'ops-status'
   | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'
@@ -65,6 +65,7 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
                           ps: a => ['-Mode', 'queue-run', '-Sub', 'push-pending', '-Id', a[0] ?? '', ...(a[1] ? ['-ChainMode', a[1]] : [])] },
   'relay-hold':         { script: RELAY, sh: a => ['watchdog', 'hold', a[0] ?? ''], ps: a => ['-Mode', 'watchdog', '-Action', 'hold', '-Reason', a[0] ?? ''] },
   'relay-release':      { script: RELAY, sh: () => ['watchdog', 'release'], ps: () => ['-Mode', 'watchdog', '-Action', 'release'] },
+  'relay-watchdog-mode': { script: RELAY, sh: a => ['watchdog', a[0]!], ps: a => ['-Mode', 'watchdog', '-Action', a[0]!] },
   'relay-hold-status':  { script: RELAY, sh: () => ['watchdog', 'status'], ps: () => ['-Mode', 'watchdog', '-Action', 'status'] },
   'relay-decide':       { script: RELAY, sh: a => ['chain', 'decide', '--level', a[0] ?? ''], ps: a => ['-Mode', 'chain', '-Action', 'decide', '-Text', a[0] ?? ''] },
   // F104: no owner ('' / no -Owner), so relay's set_row keeps the cell

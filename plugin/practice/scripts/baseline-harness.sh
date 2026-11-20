@@ -2310,7 +2310,7 @@ watchdog_refuse() {   # <prefix|-> <cmd...>
     esac
     if [ -n "$_wm" ]; then _wh="$_wm/.skillator/watchdog.hold"; else _wh="$(pwd)/.skillator/watchdog.hold"; fi
   fi
-  [ -f "$_wh" ] || return 0
+  [ ! -f "${_wh%.hold}.off" ] && [ -f "$_wh" ] || return 0
   # R6: a hold file that exists holds whatever its content; no reason reads -
   _wy=$(awk 'NR == 1 { gsub(/\r/, ""); gsub(/^[ \t]+|[ \t]+$/, ""); i = index($0, " ")
                print (i && substr($0, i + 1) != "" ? substr($0, i + 1) : "-"); done = 1; exit }

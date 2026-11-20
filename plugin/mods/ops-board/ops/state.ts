@@ -838,6 +838,7 @@ export function onMachine(s: State, kv: string, now: number): Step {
   if (w.level !== 'red') state.holdOutcome = null
   else if (m.hold === null) {
     effects.push(run('relay-hold', [w.reasons.join('; ')], r => x => {
+      if (r.code === 0 && r.out.trim() === 'watchdog: off') return x
       const tail = r.argv.length ? `\nran: ${r.argv.join(' ')}` : ''
       const failed = r.code === 0 ? '' : r.err.trim() || r.out.trim() || `exit ${r.code}`
       let y: State = { ...x, holdOutcome: failed }

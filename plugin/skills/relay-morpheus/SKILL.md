@@ -17,6 +17,10 @@ the tree, which does not. Everything that matters has to be in the second one
 **while the run is still going**, because there is no guarantee you reach the
 end to write it down.
 
+## Watchdog switch
+
+Use `relay-morpheus.sh watchdog off` or `relay-morpheus.ps1 -Mode watchdog -Action off` to clear a hold and leave automatic holds disabled for this checkout. Switch back with `on`, and check with `status`. In the Claude Ops Board, use `/ops watchdog off`, `/ops watchdog on`, or `/ops watchdog status`. The setting persists across restarts and leaves quota checks enabled.
+
 ## The rule
 
 ```

@@ -32,7 +32,7 @@
 #   -Mode chain -Action edge -N <n> -After "66,67" | -IndependentOf Qk -Why "<ruling>"
 #
 # Watchdog (F48) - one file, <main checkout>/.skillator/watchdog.hold = "<since> <reason>":
-#   -Mode watchdog -Action hold -Reason "<reason>" | -Action release | -Action status
+#   -Mode watchdog -Action hold -Reason "<reason>" | -Action release | -Action on | -Action off | -Action status
 #        a hold refuses every new chain dispatch (and a GREEN baseline-harness `run`), exit 2,
 #        until released; a second hold keeps its since. status: HELD <since> <reason> | CLEAR
 #        (a hold file that exists holds: an empty one is HELD ? -). RELAY_DIR overrides the
@@ -71,7 +71,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)][ValidateSet('init','add','stage','heartbeat','status','orphans','list','resume','chain','park','answer','queue','board','queue-run','land','away','owner','watchdog','selftest')][string]$Mode,
-  [ValidateSet('plan','dispatch','hold','release','wait','status','decide','next','merge','edge')][string]$Action = 'status',
+  [ValidateSet('plan','dispatch','hold','release','wait','status','decide','next','on','off','merge','edge')][string]$Action = 'status',
   [string]$Ticket = '',
   [string]$Reason = '',
   [string]$Question = '',
@@ -1553,7 +1553,7 @@ function WdPath([string]$wdFrom = '') {
 # reads ?, a missing reason - (an empty or blank file: HELD ? -).
 function WdRead([string]$wdFrom = '') {
   $f = WdPath $wdFrom
-  if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { return $null }
+  if ((Test-Path -LiteralPath ($f -replace '\.hold$', '.off') -PathType Leaf) -or -not (Test-Path -LiteralPath $f -PathType Leaf)) { return $null }
   try { $l = [string](([IO.File]::ReadAllText($f) -split "`n")[0]) } catch { $l = '' }
   $l = $l.Replace("`r", '').Trim(" `t".ToCharArray())
   $i = $l.IndexOf(' ')
@@ -1563,8 +1563,11 @@ function WdRead([string]$wdFrom = '') {
   [pscustomobject]@{ since = $wdS; why = $wdW }
 }
 function DoWatchdog {
-  if ($Action -cnotin @('hold', 'release', 'status')) { Die 'usage: -Mode watchdog -Action hold -Reason "<reason>" | -Action release | -Action status' }
+  if ($Action -cnotin @('hold', 'release', 'on', 'off', 'status')) { Die 'usage: -Mode watchdog -Action hold -Reason "<reason>" | -Action release | -Action on | -Action off | -Action status' }
+  $f = WdPath
+  $off = $f -replace '\.hold$', '.off'
   if ($Action -ceq 'status') {
+    if (Test-Path -LiteralPath $off -PathType Leaf) { return 'OFF' }
     $wdCur = WdRead
     if ($wdCur) { return "HELD $($wdCur.since) $($wdCur.why)" }
     return 'CLEAR'
@@ -1574,15 +1577,22 @@ function DoWatchdog {
     if (-not $wdWhy) { Die 'watchdog hold: say why - the reason is what the band and every refusal show' }
     if ($wdWhy -match "[`r`n]") { Die 'watchdog hold: the reason is one line' }
   }
-  $f = WdPath
-  # only a hold makes the folder - status and release never create one
+  # Status and release never create the folder.
   if ($Action -ceq 'release' -and -not (Test-Path -LiteralPath $f -PathType Leaf)) { return 'watchdog: not held' }
   $dd = Split-Path -Parent $f
   if (-not (Test-Path -LiteralPath $dd)) { New-Item -ItemType Directory -Force $dd | Out-Null }
   $sv = $script:Lock; $script:Lock = $null
   Lock "$f.lock"
   try {
-    if ($Action -ceq 'hold') {
+    if ($Action -ceq 'off') {
+      [IO.File]::WriteAllText($off, '')
+      if (Test-Path -LiteralPath $f -PathType Leaf) { Remove-Item -LiteralPath $f -Force }
+      $wdMsg = 'watchdog: off'
+    } elseif ($Action -ceq 'on') {
+      if (Test-Path -LiteralPath $off -PathType Leaf) { Remove-Item -LiteralPath $off -Force }
+      $wdMsg = 'watchdog: on'
+    } elseif ($Action -ceq 'hold') {
+      if (Test-Path -LiteralPath $off -PathType Leaf) { return 'watchdog: off' }
       $wdCur = WdRead; $wdAt = if ($wdCur -and $wdCur.since -cne '?') { $wdCur.since } else { Now }
       [IO.File]::WriteAllText("$f.tmp.$PID", "$wdAt $wdWhy`n", (New-Object Text.UTF8Encoding($false)))
       Move-Item -Force -LiteralPath "$f.tmp.$PID" -Destination $f

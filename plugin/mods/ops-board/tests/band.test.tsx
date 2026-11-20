@@ -227,6 +227,7 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
       w.held = `2026-10-18T12:00Z ${a[4]}`
       return { value: ran(`watchdog: held ${w.held}\n`) }
     }
+    if (a[1] === RELAY && a[3] === 'on') return { value: ran('watchdog: on\n') }
     if (a[1] === RELAY && a[3] === 'release') { w.held = null; return { value: ran('watchdog: released\n') } }
     if (a[0] === 'rm') { delete w.files[a[3]!]; return { value: ran('') } }
     return { value: ran('', 1, 'unexpected call') }

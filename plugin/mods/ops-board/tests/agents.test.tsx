@@ -128,7 +128,7 @@ test('/ops agents opens the pane on Workflows and reads the list; an unknown wor
   expect((await run('agents')).text).toBe('ops board opened on Workflows, Agents open.')
   await clock.settle()
   expect(w.lists).toBe(1)
-  expect((await run('bogus')).text).toBe('usage: /ops [tickets|workflows|health|messages|explorer|build|log|help|resume [force]|watchdog on] - runs and agents open Workflows too, run opens Build, guide opens Help;'
+  expect((await run('bogus')).text).toBe('usage: /ops [tickets|workflows|health|messages|explorer|build|log|help|resume [force]|watchdog on|watchdog off|watchdog status] - runs and agents open Workflows too, run opens Build, guide opens Help;'
     + ' resume force releases the hold whatever the reading and mutes memory red until it reads green once (watchdog on unmutes)')
 })
 

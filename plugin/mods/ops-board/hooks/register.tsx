@@ -209,6 +209,7 @@ async function applyMachine($: EngineInterface, m: Machine) {
   if (w.level !== 'red') holdOutcome = null
   else if (m.hold === null) {
     const r = await runCall($, 'relay-hold', [w.reasons.join('; ')])
+    if (r.code === 0 && r.out.trim() === 'watchdog: off') return
     const ran = r.argv.length ? `\nran: ${r.argv.join(' ')}` : ''
     const why = r.code === 0 ? '' : r.err.trim() || r.out.trim() || `exit ${r.code}`
     if (why !== holdOutcome) {
@@ -427,7 +428,7 @@ const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', h
 // open; /ops build opens tab run, /ops run an alias. F160: /ops help and /ops guide open tab help.
 const WORDS = ['tickets', 'workflows', 'runs', 'health', 'messages', 'agents', 'explorer', 'build', 'run', 'help', 'guide', 'log']
 const SECTION_OF: Record<string, 'runs' | 'workflows' | 'agents'> = { runs: 'runs', workflows: 'workflows', agents: 'agents' }
-const USAGE = 'usage: /ops [tickets|workflows|health|messages|explorer|build|log|help|resume [force]|watchdog on] - runs and agents open Workflows too, run opens Build, guide opens Help;'
+const USAGE = 'usage: /ops [tickets|workflows|health|messages|explorer|build|log|help|resume [force]|watchdog on|watchdog off|watchdog status] - runs and agents open Workflows too, run opens Build, guide opens Help;'
   + ' resume force releases the hold whatever the reading and mutes memory red until it reads green once (watchdog on unmutes)'
 
 export const register: Register = on => {
@@ -438,7 +439,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'ops',
       description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs, Workflow runs and agents), health, Teams messages, the explorer, build entries, popup log and the skills help guide',
-      argumentHint: '[tickets|workflows|health|messages|explorer|build|log|help|resume [force]|watchdog on]',
+      argumentHint: '[tickets|workflows|health|messages|explorer|build|log|help|resume [force]|watchdog on|watchdog off|watchdog status]',
     })
     await $.command.register({
       name: 'list-tickets',
@@ -487,7 +488,14 @@ export const register: Register = on => {
     }
     if (word === 'resume') return { text: await resume($) }
     if (word === 'resume force') return { text: await forceResume($) }       // F87
-    if (word === 'watchdog on') return { text: await watchdogOn($) }
+    if (word === 'watchdog off' || word === 'watchdog on' || word === 'watchdog status') {
+      const mode = word.slice('watchdog '.length)
+      const r = await runCall($, 'relay-watchdog-mode', [mode])
+      if (r.code !== 0) return { text: r.err.trim() || r.out.trim() || 'watchdog command failed' }
+      if (mode === 'on') return { text: await watchdogOn($) }
+      if (mode === 'off') await pollMachine($).catch(() => {})
+      return { text: r.out.trim() }
+    }
     if (word === 'reset' || word === '--reset') {
       await clearForm($)
       await closeSetup($)

@@ -11,7 +11,7 @@ export type Member = { handle: string; emails: string[]; name?: string; lead?: t
 export type Filter = { app: string | null; who: string | null; mine: boolean; showDone: boolean }
 export type Lock = { path: string; ageMin: number; holder: string }
 export type Machine = { at: number; drive: string; diskFree: number | null; diskTotal: number | null;
-                        memFree: number | null; locks: Lock[]; hold: string | null    // bytes
+                        memFree: number | null; locks: Lock[]; hold: string | null; watchdogOff?: boolean    // bytes
                         board?: BoardFresh                                            // F82: only while behind
                         mute?: string }                                               // F87: watchdog.mute "<since> <note>", only while muted
 // F82: pending's BOARD= - the main checkout behind its upstream; refused = board-fresh's last run refused a write.

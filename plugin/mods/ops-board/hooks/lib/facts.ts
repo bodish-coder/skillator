@@ -32,6 +32,7 @@ export function parseMachine(kv: string, now: number): Machine {
       case 'DISK_TOTAL': m.diskTotal = num(val); break
       case 'MEM_FREE': m.memFree = num(val); break
       // R6: only `-` (no hold file) is no hold; any other value, an empty one too, is held.
+      case 'WATCHDOG_OFF': if (val.trim() === '1') m.watchdogOff = true; break
       case 'HOLD': m.hold = val.trim() === '-' ? null : val.trim() || HOLD_UNKNOWN; break
       // F87: MUTE= is not pending's: each host appends the mute file's first line (muteKv)
       case 'MUTE': if (val.trim()) m.mute = val.trim(); break
@@ -98,6 +99,7 @@ export function classify(m: Machine): Watch {
     if (f.level === 'red') (name === 'mem' && m.mute ? amber : red).push(`${name} ${f.text} free (below 1 GB)`)
     else if (f.level === 'amber') amber.push(`${name} ${f.text} low`)
   }
+  if (m.watchdogOff) return { level: 'amber', reasons: ['watchdog off', ...red, ...amber] }
   if (red.length) return { level: 'red', reasons: red }
   if (m.mute) amber.push(mutedWords(m.mute))
   if (m.locks.length) amber.push(`locks ${m.locks.length} stale`)

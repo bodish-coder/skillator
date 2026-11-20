@@ -355,7 +355,9 @@ board_kv() {
 # its content - an empty or blank one reads `? -` (HOLD=- is only "no file").
 hold_kv() {
   if [ -n "${RELAY_DIR:-}" ]; then _hf="$RELAY_DIR/watchdog.hold"; else _hf="$MAIN/.skillator/watchdog.hold"; fi
-  if [ -f "$_hf" ]; then
+  if [ -f "${_hf%.hold}.off" ]; then
+    printf "HOLD=-\nWATCHDOG_OFF=1\n"
+  elif [ -f "$_hf" ]; then
     _hl=$(awk 'NR == 1 { gsub(/\r/, ""); gsub(/^[ \t]+|[ \t]+$/, ""); i = index($0, " ")
                  a = (i ? substr($0, 1, i - 1) : $0); b = (i ? substr($0, i + 1) : "")
                  print (a == "" ? "?" : a) " " (b == "" ? "-" : b); done = 1; exit }
