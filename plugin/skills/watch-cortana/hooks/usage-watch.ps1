@@ -3,7 +3,7 @@
 #   -Mode gate                                            (Claude Code / codex Stop hook)
 #   -Mode check                                           (any host, no stdin - see below)
 #   -Mode level                                           (any host, no stdin; profile cache refresh)
-# Threshold: $env:CLAUDE_USAGE_HANDOFF_PCT, default 92.
+# Threshold: $env:CLAUDE_USAGE_HANDOFF_PCT, default 96.
 # State dir: $env:CLAUDE_USAGE_WATCH_DIR, else $env:CLAUDE_CONFIG_DIR/handoff-watch,
 # else ~/.claude/handoff-watch (the first override exists so tests never touch
 # a live session's flags; A130: the second keeps a profile's flags its own).
@@ -13,7 +13,7 @@
 # whatever the host leaves on disk and prints the order for the agent to follow.
 # Wired by the always-on project file grayskull-power writes, not by a hook.
 param(
-  [ValidateSet('probe','gate','check','level','refresh')][string]$Mode = 'probe',
+  [ValidateSet('probe','gate','check','level','refresh','on','off','status')][string]$Mode = 'probe',
   [string]$Then,
   [string]$Cli,
   [string]$Dir
@@ -27,7 +27,24 @@ $dir      = if ($Mode -eq 'refresh') { $Dir } # PowerShell names are case-insens
             elseif ($env:CLAUDE_USAGE_WATCH_DIR) { $env:CLAUDE_USAGE_WATCH_DIR }
             elseif ($env:CLAUDE_CONFIG_DIR) { Join-Path $env:CLAUDE_CONFIG_DIR 'handoff-watch' }
             else { Join-Path $HOME '.claude/handoff-watch' }
-$pctLimit = if ($env:CLAUDE_USAGE_HANDOFF_PCT) { [double]$env:CLAUDE_USAGE_HANDOFF_PCT } else { 92 }
+$offFile = Join-Path $(if ($dir) { $dir } else { '.' }) '.watch-cortana.off'
+if ($Mode -eq 'off') {
+  try {
+    [void][IO.Directory]::CreateDirectory($dir)
+    [IO.File]::WriteAllText($offFile, '')
+  } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }
+  'watch-cortana: off'; exit 0
+}
+if ($Mode -eq 'on') {
+  try { [IO.File]::Delete($offFile) } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }
+  'watch-cortana: on'; exit 0
+}
+if ($Mode -in @('check','gate','status')) {
+  $disabled = [IO.File]::Exists($offFile)
+  if ($Mode -eq 'status') { if ($disabled) { 'watch-cortana: off' } else { 'watch-cortana: on' }; exit 0 }
+  if ($disabled) { if ($Mode -eq 'check') { 'watch-cortana: off' }; exit 0 }
+}
+$pctLimit = if ($env:CLAUDE_USAGE_HANDOFF_PCT) { [double]$env:CLAUDE_USAGE_HANDOFF_PCT } else { 96 }
 # The 7-day window is watched separately and lower. The 5-hour window refills
 # in hours, so crossing it is a pause; the weekly one does not, so crossing it
 # ends the week's work - which is why it gets its own threshold and its own
@@ -62,13 +79,13 @@ function Read-Flag($path) {
 # the one step whose whole point is that the session must not stop on a
 # summary. The sh twin has always spliced; this is the mirror catching up.
 function Get-WeeklyReason($pct, $limit) {
-  $tail = ' Then tell the user where the file is and stop.'
-  $step4 = ' (4) This is the 7-DAY window, which does not refill for days - the work is over for now, not paused. So after the handoff, do not stop on a summary: use AskUserQuestion to put the next direction to the user as concrete options drawn from the open board and the handoff''s own next-steps, say which one you recommend and why in one line, and make the recommendation the first option.'
+  $tail = ' If Wake Cortana is armed for this run, record the saved handoff with its handoff command. Then tell the user where the file is and stop.'
+  $step4 = ' (4) This is the 7-DAY window, which does not refill for days - the work is over for now, not paused. If Wake Cortana is not armed, use AskUserQuestion after the handoff to put the next direction to the user as concrete options drawn from the open board and the handoff''s own next-steps, say which one you recommend and why in one line, and make the recommendation the first option.'
   (Get-Reason $pct $limit).Replace($tail, $step4 + $tail)
 }
 
 function Get-Reason($pct, $limit) {
-  "Usage has reached $pct% of the limit (threshold $limit%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:tickets-zordon to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff-cortana and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it. Then tell the user where the file is and stop."
+  "Usage has reached $pct% of the limit (threshold $limit%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:tickets-zordon to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff-cortana and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it. If Wake Cortana is armed for this run, record the saved handoff with its handoff command. Then tell the user where the file is and stop."
 }
 
 # Last token_count line of a codex rollout, or $null.

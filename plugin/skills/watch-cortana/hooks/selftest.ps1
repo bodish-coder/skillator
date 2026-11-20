@@ -143,6 +143,16 @@ try {
   if (Gate $stop) { throw 'gate: fired twice (done-marker ignored)' }
   if (Gate "{`"session_id`":`"$sid`",`"stop_hook_active`":true}") { throw 'gate: ignored stop_hook_active' }
 
+  # The profile switch survives separate hook invocations and does not consume the handoff.
+  $toggleStop = $stop.Replace($sid, "toggle-$sid")
+  Probe ((& $sl 96 40 55).Replace($sid, "toggle-$sid"))
+  if ((Run 'status' $null) -ne 'watch-cortana: on') { throw 'watcher should default to on' }
+  if ((Run 'off' $null) -ne 'watch-cortana: off') { throw 'watcher off failed' }
+  if (Gate $toggleStop) { throw 'disabled watcher fired' }
+  if ((Run 'check' $null) -ne 'watch-cortana: off') { throw 'disabled check did not report off' }
+  if ((Run 'on' $null) -ne 'watch-cortana: on') { throw 'watcher on failed' }
+  if ((Gate $toggleStop) -notmatch '"decision":"block"') { throw 're-enabled watcher missed the 96% boundary' }
+
   # --- F18: the 7-day window is its own gate ---------------------------------
   # The 5-hour window refills in hours, so crossing it is a pause. The 7-day
   # window does not, so crossing it ends the week's work - which is why it
@@ -239,7 +249,7 @@ try {
     if ((Get-Content $wf -Raw).Trim() -ne '97') { throw 'sh probe: weekly value wrong' }
     $r = RunSh 'gate' $h $stop
     if ($r -notmatch 'AskUserQuestion') { throw 'sh gate: weekly block has no step 4' }
-    $h = NewHome 'weekly-sh-96'   # B31: a 96% week must not reach the 92% gate
+    $h = NewHome 'weekly-sh-96'   # B31: a 96% week must not reach the 96% gate
     RunSh 'probe' $h (& $sl 40 96 55) | Out-Null
     if (RunSh 'gate' $h $stop) { throw 'sh gate: weekly fired below 97' }
   }
@@ -255,7 +265,7 @@ try {
   # codex rollout below threshold: report, do not fire, leave no .done behind.
   $h = NewHome 'codex-low'; AddCodex $h 12.0 12000 200000 | Out-Null
   $c = RunCheck $h
-  if ($c -notmatch '^watch-cortana: codex 12(\.0)?% of 92% - ok$') { throw "check codex-low: got '$c'" }
+  if ($c -notmatch '^watch-cortana: codex 12(\.0)?% of 96% - ok$') { throw "check codex-low: got '$c'" }
   if (-not (NoDoneFiles $h)) { throw 'check codex-low: wrote a .done below threshold' }
 
   # codex rollout over threshold: fire once, then be silent (one-shot .done).
@@ -270,26 +280,26 @@ try {
   # context-window fallback: no used_percent worth reading, 170k/200k = 85%.
   $h = NewHome 'codex-ctx'; AddCodex $h 1.0 170000 200000 | Out-Null
   $c = RunCheck $h
-  if ($c -notmatch '85% of 92% - ok') { throw "check codex-ctx: got '$c'" }
+  if ($c -notmatch '85% of 96% - ok') { throw "check codex-ctx: got '$c'" }
   if ($c -match '([0-9.]+)% of' -and [double]$Matches[1] -gt 100) { throw 'check: percentage over 100 - wrong token field?' }
 
   # claude-code flag, plain bytes, below threshold.
   $h = NewHome 'cc-plain'; AddFlag $h 'sess-a' '12.0' | Out-Null
   $c = RunCheck $h
-  if ($c -notmatch '^watch-cortana: claude-code 12(\.0)?% of 92% - ok$') { throw "check cc-plain: got '$c'" }
+  if ($c -notmatch '^watch-cortana: claude-code 12(\.0)?% of 96% - ok$') { throw "check cc-plain: got '$c'" }
   if (-not (NoDoneFiles $h)) { throw 'check cc-plain: wrote a .done below threshold' }
 
-  # A49: the 92-97 band. These two pin the threshold retune itself - at the old
+  # A49: the 96-97 band. These two pin the threshold retune itself - at the old
   # default of 97 the first would print "ok" and the second would not fire, so
   # anyone raising the default back without meaning to breaks this test.
-  $h = NewHome 'cc-band'; AddFlag $h 'sess-a' '95.0' | Out-Null
+  $h = NewHome 'cc-band'; AddFlag $h 'sess-a' '96.0' | Out-Null
   $c = RunCheck $h
-  if ($c -notmatch '^HANDOFF NOW \(claude-code 95(\.0)?%\)') { throw "check cc-band: got '$c'" }
+  if ($c -notmatch '^HANDOFF NOW \(claude-code 96(\.0)?%\)') { throw "check cc-band: got '$c'" }
   if (NoDoneFiles $h) { throw 'check cc-band: fired without writing the one-shot .done' }
 
   $h = NewHome 'cc-under'; AddFlag $h 'sess-a' '91.0' | Out-Null
   $c = RunCheck $h
-  if ($c -notmatch '^watch-cortana: claude-code 91(\.0)?% of 92% - ok$') { throw "check cc-under: got '$c'" }
+  if ($c -notmatch '^watch-cortana: claude-code 91(\.0)?% of 96% - ok$') { throw "check cc-under: got '$c'" }
   if (-not (NoDoneFiles $h)) { throw 'check cc-under: wrote a .done just below threshold' }
 
   # F18/finding 1: a `.weekly` file is written AFTER the main flag, so it is
@@ -323,7 +333,7 @@ try {
 
   $h = NewHome 'cc-weekly-only-under'; AddFlag $h 'sess-a.weekly' '50' | Out-Null
   $c = RunCheck $h
-  if ($c -notmatch '^watch-cortana: claude-code 50(\.0)?% of 92% - ok$') { throw "check cc-weekly-only-under: got '$c'" }
+  if ($c -notmatch '^watch-cortana: claude-code 50(\.0)?% of 96% - ok$') { throw "check cc-weekly-only-under: got '$c'" }
   if (-not (NoDoneFiles $h)) { throw 'check cc-weekly-only-under: wrote a .done below threshold' }
 
   # A12 regression, check side: same number, written the old BOM+CRLF way.
@@ -366,7 +376,7 @@ try {
     $h = NewHome "a32-fallback-$($r.n)"; AddCodex $h 98.4 12000 200000 168 | Out-Null
     AddFlag $h 'sess-a' '12.0' | Out-Null
     $c = & $r.f $h
-    if ($c -notmatch '^watch-cortana: claude-code 12(\.0)?% of 92% - ok$') { throw "$($r.n) check a32-fallback: got '$c'" }
+    if ($c -notmatch '^watch-cortana: claude-code 12(\.0)?% of 96% - ok$') { throw "$($r.n) check a32-fallback: got '$c'" }
 
     # Recursion: the rollout is one level deeper than the old */*/*/ glob.
     $h = NewHome "a32-deep-$($r.n)"
@@ -379,7 +389,7 @@ try {
   if ($shExe) {
     $h = NewHome 'sh-codex-low'; AddCodex $h 12.0 12000 200000 | Out-Null
     $c = RunSh 'check' $h $null
-    if ($c -notmatch '^watch-cortana: codex 12\.0% of 92% - ok$') { throw "sh check codex-low: got '$c'" }
+    if ($c -notmatch '^watch-cortana: codex 12\.0% of 96% - ok$') { throw "sh check codex-low: got '$c'" }
     if (-not (NoDoneFiles $h)) { throw 'sh check codex-low: wrote a .done below threshold' }
 
     $h = NewHome 'sh-codex-high'; AddCodex $h 98.4 12000 200000 | Out-Null
@@ -415,11 +425,11 @@ try {
   function ClearCx { Remove-Item "$flagCx*" -ErrorAction SilentlyContinue }
 
   # 1. transcript_path is a rollout -> gate reads it (no window_minutes: the
-  #    ordinary 92% gate applies).
+  #    ordinary 96% gate applies).
   ClearCx
-  $rp1 = AddCodex $tmp 95.0 12000 200000 0 'a99-read'
+  $rp1 = AddCodex $tmp 96.0 12000 200000 0 'a99-read'
   $r = Gate (CxStop $rp1)
-  if ($r -notmatch '"decision":"block"' -or $r -notmatch '95') { throw "gate: did not read codex rollout via transcript_path, got '$r'" }
+  if ($r -notmatch '"decision":"block"' -or $r -notmatch '96') { throw "gate: did not read codex rollout via transcript_path, got '$r'" }
   ClearCx
 
   # 2. transcript_path NOT named rollout-*.jsonl -> ignored, even though the
@@ -449,10 +459,10 @@ try {
   if ($r -notmatch '"decision":"block"' -or $r -notmatch 'AskUserQuestion') { throw "gate: codex 10080-minute window at 97% did not fire the weekly order, got '$r'" }
   ClearCx
 
-  # 5. 300-minute window at 91% -> silent (below the 92% ordinary threshold).
+  # 5. 300-minute window at 91% -> silent (below the 96% ordinary threshold).
   $rp5 = AddCodex $tmp 91.0 12000 200000 0 'a99-session' 300
   $r = Gate (CxStop $rp5)
-  if ($r) { throw "gate: codex 300-minute window at 91% fired (should need 92%), got '$r'" }
+  if ($r) { throw "gate: codex 300-minute window at 91% fired (should need 96%), got '$r'" }
   ClearCx
 
   # The sh twin must agree on all five.
@@ -462,7 +472,7 @@ try {
     function ClearCxSh { Remove-Item "$flagCxSh*" -ErrorAction SilentlyContinue }
 
     $g = RunSh 'gate' $hSh (CxStop $rp1)
-    if ($g -notmatch '"decision":"block"' -or $g -notmatch '95') { throw "sh gate: did not read codex rollout via transcript_path, got '$g'" }
+    if ($g -notmatch '"decision":"block"' -or $g -notmatch '96') { throw "sh gate: did not read codex rollout via transcript_path, got '$g'" }
     ClearCxSh
 
     $g = RunSh 'gate' $hSh (CxStop $notRoll)
@@ -478,7 +488,7 @@ try {
     ClearCxSh
 
     $g = RunSh 'gate' $hSh (CxStop $rp5)
-    if ($g) { throw "sh gate: codex 300-minute window at 91% fired (should need 92%), got '$g'" }
+    if ($g) { throw "sh gate: codex 300-minute window at 91% fired (should need 96%), got '$g'" }
     ClearCxSh
   }
 
@@ -617,7 +627,7 @@ try {
     PutFlag (Join-Path $cfg 'handoff-watch') 'live-sess' '30'; PutFlag (Join-Path $cfg 'handoff-watch') 'live-sess.weekly' '20'
     PutFlag (Join-Path $cfg 'handoff-watch') 'live-sess.fivehour' '30'
     $c = RunA130 $tw 'check' $hm $cfg 'live-sess' $null $null
-    if ($c -notmatch '^watch-cortana: claude-code 30(\.0)?% of 92% - ok$') { throw "$tw check a130: CLAUDE_CONFIG_DIR not honoured, got '$c'" }
+    if ($c -notmatch '^watch-cortana: claude-code 30(\.0)?% of 96% - ok$') { throw "$tw check a130: CLAUDE_CONFIG_DIR not honoured, got '$c'" }
     $l = RunA130 $tw 'level' $hm $cfg 'live-sess' $null $null
     if ($l -ne 'src=claude-code 5h=30 7d=20 ctx=- max=30') { throw "$tw level a130: CLAUDE_CONFIG_DIR not honoured, got '$l'" }
 
@@ -646,7 +656,7 @@ try {
     # ...and the same flags 2h old are inside the window.
     PutFlag (Join-Path $cfg5 'handoff-watch') 'any-sess' '50' 2; PutFlag (Join-Path $cfg5 'handoff-watch') 'any-sess.weekly' '40' 2
     $c = RunA130 $tw 'check' $hm $cfg5 $null $null $null
-    if ($c -notmatch '^watch-cortana: claude-code 50(\.0)?% of 92% - ok$') { throw "$tw check a130: a 2h-old flag was dropped, got '$c'" }
+    if ($c -notmatch '^watch-cortana: claude-code 50(\.0)?% of 96% - ok$') { throw "$tw check a130: a 2h-old flag was dropped, got '$c'" }
     $l = RunA130 $tw 'level' $hm $cfg5 $null $null $null
     if ($l -ne 'src=claude-code 5h=- 7d=40 ctx=- max=50') { throw "$tw level a130: a 2h-old flag was dropped, got '$l'" }
 

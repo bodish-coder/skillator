@@ -2,7 +2,7 @@
 name: watch-cortana
 description: >-
   Use when the user asks to "monitor usage limits", "auto handoff before I run
-  out", "warn me at 92%", "save the session before the limit", "hand off
+  out", "warn me at 96%", "save the session before the limit", "hand off
   automatically", or wants to install, configure or debug the usage watcher.
   Installs hooks — the monitoring is done by those hooks, not the model, and
   the handoff document itself comes from the handoff skill. NOT for reporting
@@ -25,7 +25,7 @@ only the `gate` (see **Codex** below); for cursor/antigravity see **Other hosts*
 `level` is a reading, not a gate. The 80 % hold that `relay-morpheus` places on
 a chain of ticket workflows is relay's own wait (`chain hold` / `chain wait`,
 `references/chain.md` there) and is **not** a handoff: nothing here fires, no
-document is written, and the 92 %/90 % orders below are unchanged if a running
+document is written, and the 96 %/97 % orders below are unchanged if a running
 stage reaches them.
 
 When it fires, Claude is told to do three things in order, so the saved state is
@@ -52,7 +52,7 @@ ends the week's work — it fires at **97%** (`CLAUDE_USAGE_HANDOFF_WEEKLY_PCT`,
 default 97; do not stop at 90% — when 7-day quota reaches 97%, stop all agents
 and create a handoff) and adds a **step 4** the other
 windows have no use for: after the handoff, put the next direction to the user
-with `AskUserQuestion` as concrete options drawn from the open board and the
+with `AskUserQuestion` if automatic resume is unarmed, as concrete options drawn from the open board and the
 handoff's own next-steps, with the recommendation first and its reason in one
 line. Stopping on a summary is what step 4 exists to prevent — a week is long
 enough that "what now?" needs answering while the context is still loaded.
@@ -65,6 +65,14 @@ covers both gates — the handoff is written once.
 Fires **once per session** (a `.done` marker next to the flag file), and never
 loops (`stop_hook_active` is honoured). When both gates are over, the weekly
 order is the one that fires — it is the one the session needs.
+
+## On, off, and status
+
+Watch Cortana defaults to on. On an explicit `/watch-cortana on`, `off`, or `status`, run the corresponding mode of `hooks/usage-watch.ps1 -Mode <mode>` on Windows or `sh hooks/usage-watch.sh <mode>` on POSIX, then report its output. The setting persists for the profile. Turning it off suppresses automatic handoffs. Statusline delegation and the read-only quota data used by Ops remain available.
+
+## Automatic resume
+
+When a quota handoff for an armed Relay run has been saved and its work has drained, follow the Wake Cortana handoff step. Run `node <wake-cortana>/scripts/wake.mjs handoff <RUN-id> <handoff-path>` from the repository. The command accepts only the run that was explicitly armed.
 
 ## Install
 
@@ -121,7 +129,7 @@ Same one-shot `.done` as Claude Code, keyed by the codex session id.
 
 A `rate_limits` window with `window_minutes: 10080` is the 7-day one (A98): it
 gets the same weekly gate as the Claude path (90% hard stop, step-4 question),
-while every shorter window and the live context still compare against the 92%
+while every shorter window and the live context still compare against the 96%
 threshold.
 
 ## Other hosts (cursor, antigravity)
@@ -186,7 +194,7 @@ until Cursor writes a usage number somewhere readable.
 
 ## Configure
 
-- **Threshold** — `CLAUDE_USAGE_HANDOFF_PCT` env var (default `92`). Set it in
+- **Threshold** — `CLAUDE_USAGE_HANDOFF_PCT` env var (default `96`). Set it in
   `settings.json` under `env` to make it stick.
 - **Where the handoff lands** — decided by the `handoff-cortana` skill (`docs/handoffs/`
   by default), not here.

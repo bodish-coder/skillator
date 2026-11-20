@@ -2,11 +2,12 @@ const { spawn } = require('node:child_process')
 const { createInterface } = require('node:readline')
 
 const profile = process.argv[2]
-if (!profile) process.exit(1)
+const executable = process.argv[3] || 'codex'
+if (!profile || !/^codex(?:-[a-z0-9_-]+)?$/.test(executable)) process.exit(1)
 
 const env = { ...process.env, CODEX_HOME: profile }
 delete env.SKILLATOR_QUOTA_REFRESH_WAIT
-const child = spawn('codex', ['app-server', '--listen', 'stdio://'], {
+const child = spawn(executable, ['app-server', '--listen', 'stdio://'], {
   env,
   shell: process.platform === 'win32',
   windowsHide: true,
