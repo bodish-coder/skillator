@@ -84,7 +84,7 @@ export type WorkflowRow = {
 }
 // F66: the Messages tab. Msg is one line of teams-uhura's inbox (<repo>/.git/skillator/
 // team-inbox.jsonl); TeamsCfgView is what `team.mjs config show` says - never a secret.
-export type Msg = { ts: string; from: string; to?: string; email: string; text: string; id: string }
+export type Msg = { ts: string; from: string; to?: string; sent?: boolean; email: string; text: string; id: string }
 export type TeamsCfgView = { path: string; token: boolean; workflowUrl: string | null; port: number; statusPosts: boolean }
 // F177: what `setup --status | --arm | --disarm | --ack` says (hooks/lib/teamsarm.ts parseArm).
 // The URL is the tunnel's public callback URL: drawn on the Messages tab, never in a toast.

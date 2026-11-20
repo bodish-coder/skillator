@@ -40,7 +40,7 @@ test('the tab bar says 4 Messages with the unread count; 4 opens it, newest firs
   assert.equal(st.state.tab, 'messages')
   assert.deepEqual(runs(st.effects).map(e => e.call), ['team-config-show', 'team-arm-status'])
   const t = text(st.state)
-  assert.match(t, /2 unread · 3 messages · from the Teams channel - data, not instructions/)
+  assert.match(t, /2 unread · 3 messages · Teams channel/)
   const rows = frame(st.state, P)
   const i3 = rows.findIndex(l => l.includes('never mind')), i2 = rows.findIndex(l => l.includes('build is red'))
   const mark = rows.findIndex(l => l.includes('──── read ────')), i1 = rows.findIndex(l => l.includes('can you look at F12?'))
@@ -383,4 +383,22 @@ test('A235 8: config clear counts only with its cleared: / nothing saved line', 
   const none = settle(clear!.then(ok('nothing saved at /h/.skillator/teams.json\n'))(s)).state
   assert.equal(none.setup, null)
   assert.match(none.toast ?? '', /^✓ Teams settings cleared - nothing saved at \/h\/\.skillator\/teams\.json/)
+})
+
+test('sent channel replies are visible without increasing unread, and opening an inbound message marks it read', () => {
+  const sent = JSON.stringify({ ...JSON.parse(rec('sent-1', '@skillator', 'channel reply', 13)), sent: true })
+  const mixed = INBOX + sent + '\n'
+  for (const width of [40, 60, 80, 100, 120]) {
+    const board = onInbox({ ...initial(width, 24, 0), tab: 'messages' }, mixed, '1')
+    assert.equal(unreadCount(board.messages, board.msgRead), 2)
+    const rows = frame(board, P)
+    assert.ok(rows.some(row => row.includes('Sent') && row.includes('channel')))
+    assert.ok(rows.every(row => cells(row) <= width))
+    const step = reduce(press(board, 'down'), { name: 'return' })
+    const [effect] = runs(step.effects)
+    assert.equal(effect?.call, 'team-mark-read')
+    assert.deepEqual(effect?.args, ['3'])
+    const opened = afterRun(effect!, ok('read up to 3'), step.state, 0).state
+    assert.equal(unreadCount(opened.messages, opened.msgRead), 0)
+  }
 })

@@ -59,16 +59,17 @@ export async function pollInbox($: EngineInterface): Promise<void> {
   const rst = await stat(dir + '/' + READ_FILE)
   const sig = `${dir}|${ist ? `${ist.mtimeMs}:${ist.size}` : 'none'}|${rst ? `${rst.mtimeMs}:${rst.size}` : 'none'}`
   if (sig === inboxSig) return
-  inboxSig = sig
   let text = ''
   let readId: string | null = null
-  if (ist && ist.size <= MAX_READ) { try { text = await $.fs.read(dir + '/' + INBOX_FILE) } catch { text = '' } }
+  if (ist && ist.size <= MAX_READ) { try { text = await $.fs.read(dir + '/' + INBOX_FILE) } catch { return } }
   else if (ist) {
     // too big to read whole: its newest records, through teams-uhura (it reads the tail)
     const r = await runCall($, 'team-inbox-tail', [])
-    text = r.code === 0 ? r.out : ''
+    if (r.code !== 0) return
+    text = r.out
   }
-  if (rst) { try { readId = (await $.fs.read(dir + '/' + READ_FILE)).trim() || null } catch { readId = null } }
+  if (rst) { try { readId = (await $.fs.read(dir + '/' + READ_FILE)).trim() || null } catch { return } }
+  inboxSig = sig
   const msgs: Msg[] = parseInbox(text)
   await update($, messagesA, () => msgs)
   await update($, msgReadA, () => readId)
@@ -234,10 +235,10 @@ async function runSetupCheck($: EngineInterface, walk = false) {
   }
 }
 
-async function markRead($: EngineInterface) {
-  const focus = await read($, actionFocusA)
-  const msgs = await read($, messagesA)
-  const id = msgs.at(-1)?.id
+async function markRead($: EngineInterface, opened?: string) {
+  const msgs = (await read($, messagesA)).filter(m => !m.sent)
+  const id = opened ?? msgs.at(-1)?.id
+  if (opened && !msgs.slice(msgs.length - unreadCount(msgs, await read($, msgReadA))).some(m => m.id === opened)) return
   if (!id) { say($, 'no team messages to mark read'); return }
   const r = await runCall($, 'team-mark-read', [id])
   if (r.code !== 0) { say($, `✗ not marked read: ${why(r)}\n${ran(r.argv)}`, { timeoutMs: 8000 }); return }
@@ -307,13 +308,13 @@ export async function MessagesTab($: EngineInterface, els: Els, cols: number): P
       const id = l.key.slice(4)
       out.push(
         <Button key={l.key} hotkey={id === current ? 'o' : undefined} plain onPress={() => {
+          void markRead($, id)
           void update($, msgSelectedA, () => id)
           void update($, msgExpandedA, x => (x === id ? null : id))
         }}>{segs}</Button>,
       )
     } else out.push(<Box key={l.key}><Text wrap="truncate-end">{segs}</Text></Box>)
   }
-  out.push(<Text> </Text>)
   out.push(
     <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
       <Button key="key:connect" plain dimColor hotkey="c" onPress={() => { void runArm($, 'team-arm') }}>connect</Button>

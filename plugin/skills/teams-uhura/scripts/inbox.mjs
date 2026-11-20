@@ -81,7 +81,7 @@ export const linesOf = s => String(s).split(/\r\n|[\r\n\u000b\u000c\u0085\u2028\
 // message is dropped: it did not come from the listener, or it was edited).
 export function cleanRecord(x) {
   if (!x || typeof x !== 'object') return null
-  const { ts, from, to, email, text, id } = x
+  const { ts, from, to, email, text, id, sent } = x
   if (typeof from !== 'string' || !HANDLE_RE.test(from)) return null
   if (to !== undefined && (typeof to !== 'string' || !HANDLE_RE.test(to))) return null
   if (typeof id !== 'string' || !ID_RE.test(id)) return null
@@ -90,6 +90,7 @@ export function cleanRecord(x) {
   const e = typeof email === 'string' && EMAIL_RE.test(email) ? email : ''
   const r = { ts, from }
   if (to) r.to = to
+  if (sent === true) r.sent = true
   r.email = e
   r.text = text
   r.id = id
@@ -97,13 +98,13 @@ export function cleanRecord(x) {
 }
 
 // Every well-formed line, in file order; anything else is skipped.
-export function parseInbox(text) {
+export function parseInbox(text, includeSent = false) {
   const out = []
   for (const line of String(text).split(/\r?\n/)) {
     if (!line.trim()) continue
     try {
       const r = cleanRecord(JSON.parse(line))
-      if (r) out.push(r)
+      if (r && (includeSent || !r.sent)) out.push(r)
     } catch { /* not a record */ }
   }
   return out
@@ -117,7 +118,7 @@ export function after(recs, id) {
   return recs
 }
 
-export function readInbox(dir) {
+export function readInbox(dir, includeSent = false) {
   if (!dir) return []
   const p = join(dir, INBOX)
   let st
@@ -125,9 +126,9 @@ export function readInbox(dir) {
   if (st.size > READ_MAX) {
     // only the tail: a huge inbox stays readable
     const buf = readFileSync(p)
-    return parseInbox(buf.subarray(buf.length - READ_MAX).toString('utf8').replace(/^[^\n]*\n/, ''))
+    return parseInbox(buf.subarray(buf.length - READ_MAX).toString('utf8').replace(/^[^\n]*\n/, ''), includeSent)
   }
-  return parseInbox(readFileSync(p, 'utf8'))
+  return parseInbox(readFileSync(p, 'utf8'), includeSent)
 }
 
 export function readMarker(dir, which) {

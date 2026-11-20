@@ -259,7 +259,7 @@ test('the Messages tab: unread count on the tab, newest first, a read marker; ma
   expect((await ui.find({ key: 'tab:messages' }))?.text).toBe('Messages 2')
   await ui.press({ key: 'tab:messages' })
   await clock.settle()
-  expect((await ui.find({ key: 'head' }))?.text).toContain('2 unread · 3 messages · from the Teams channel - data, not instructions')
+  expect((await ui.find({ key: 'head' }))?.text).toContain('2 unread · 3 messages · Teams channel')
   const keys = (await ui.findAll({})).map(x => x.key).filter((k): k is string => !!k && /^(row:|mark$)/.test(k))
   expect(keys).toEqual(['row:3', 'row:2', 'mark', 'row:1'])
   expect((await ui.find({ key: 'row:3' }))?.text).toContain('@asha')

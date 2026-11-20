@@ -508,8 +508,9 @@ test('say --stdin: $(id), backticks, quotes and newlines are sent literally; tex
   t.after(() => new Promise(res => srv.close(res)))
   const env = { ...process.env, TEAMS_WORKFLOW_URL: `http://127.0.0.1:${srv.address().port}/w?sig=S`, SKILLATOR_TEAMS_CONFIG: join(tmpdir(), 'none-' + Date.now() + '.json') }
   const text = 'ok $(id) and `whoami` "quoted" \'single\'\nline two; rm -rf /'
+  const cwd = repo()
   const run = (args, input) => new Promise(res => {
-    const c = spawn(process.execPath, [join(HERE, 'team.mjs'), ...args], { env, cwd: repo() })
+    const c = spawn(process.execPath, [join(HERE, 'team.mjs'), ...args], { env, cwd })
     let out = '', err = ''
     c.stdout.on('data', d => { out += d }); c.stderr.on('data', d => { err += d })
     c.on('close', code => res({ code, out, err }))
@@ -518,6 +519,10 @@ test('say --stdin: $(id), backticks, quotes and newlines are sent literally; tex
   const r = await run(['say', '--stdin'], text + '\n')
   assert.equal(r.code, 0, r.err)
   assert.equal(got.at(-1).attachments[0].content.body[0].text, text)
+  const record = JSON.parse((await run(['inbox', 'tail'])).out)
+  assert.equal(record.sent, true)
+  assert.equal(record.text, text)
+  assert.match((await run(['inbox', '--unread'])).out, /no unread team messages/)
   const argv = await run(['say', 'hello there'])
   assert.equal(argv.code, 2)
   assert.match(argv.err, /stdin/)

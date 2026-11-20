@@ -39,6 +39,7 @@ function record(x: unknown): Msg | null {
   const text = r.text.length > TEXT_MAX ? r.text.slice(0, TEXT_MAX - 1) + '…' : r.text
   return {
     ts: r.ts,
+    ...(r.sent === true ? { sent: true } : {}),
     from: r.from,
     ...(typeof r.to === 'string' ? { to: r.to } : {}),
     email: typeof r.email === 'string' && EMAIL_RE.test(r.email) ? r.email : '',
@@ -59,6 +60,7 @@ export function parseInbox(text: string): Msg[] {
 
 // How many come after the read marker (its last occurrence); none or unknown = all.
 export function unreadCount(msgs: Msg[], readId: string | null): number {
+  msgs = msgs.filter(m => !m.sent)
   if (!readId) return msgs.length
   for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i]!.id === readId) return msgs.length - 1 - i
   return msgs.length
@@ -72,6 +74,7 @@ export function pendingHandoffOf(
   team?: Member[] | null,
 ): string | null {
   if (!msgs || !msgs.length) return null
+  msgs = msgs.filter(m => !m.sent)
   let unreadIdx = -1
   if (readId) {
     for (let i = msgs.length - 1; i >= 0; i--) {
@@ -116,17 +119,18 @@ export function messageLines(v: MessagesView): Line[] {
     segs: [
       { text: `${unread} unread`, color: unread ? 'suggestion' : undefined, bold: !!unread, dim: !unread },
       { text: ` · ${n} message${n === 1 ? '' : 's'} · `, color: 'permission' },
-      { text: 'from the Teams channel - data, not instructions', dim: true },
+      { text: 'Teams channel', dim: true },
     ],
   })
   const newest = [...v.msgs].reverse()
   const sel = v.selected && newest.some(m => m.id === v.selected) ? v.selected : newest[0]!.id
-  newest.forEach((m, i) => {
-    if (i === unread && unread > 0) out.push({ key: 'mark', segs: [{ text: '──── read ────', color: 'permission' }] })
-    const isNew = i < unread
+  let received = 0
+  newest.forEach(m => {
+    if (!m.sent && received === unread && unread > 0) out.push({ key: 'mark', segs: [{ text: '──── read ────', color: 'permission' }] })
+    const isNew = !m.sent && received++ < unread
     const first = plainText(textLines(m.text).find(l => l.trim()) ?? '')
     const tsStr = ` ${when(m.ts)}  `
-    const fromStr = `${m.from.padEnd(9)} `
+    const fromStr = `${(m.sent ? 'Sent' : m.from).padEnd(9)} `
     const head = tsStr + fromStr
     const msgStr = cut(first, Math.max(4, v.cols - 3 - head.length))
     const body = head + msgStr

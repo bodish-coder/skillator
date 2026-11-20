@@ -538,7 +538,7 @@ async function cmdInbox(argv) {
   // tail: the newest 200 records, as JSONL - the ops board's read of an inbox too big to
   // read whole (readInbox reads only its last 4 MiB)
   if (argv[0] === 'tail' && argv.length === 1) {
-    for (const r of readInbox(box).slice(-200)) process.stdout.write(JSON.stringify(r) + '\n')
+    for (const r of readInbox(box, true).slice(-200)) process.stdout.write(JSON.stringify(r) + '\n')
     return 0
   }
   if (argv[0] === 'mark-read') {
@@ -834,6 +834,11 @@ export async function main(argv) {
         const r = await say(text, cfg)
         if (!r.ok) { err(r.error); return 1 }
         out('posted to the Teams channel')
+        const box = inboxDir(process.cwd())
+        if (box) {
+          try { appendRecord(box, { ts: iso(), from: '@skillator', email: '', text, id: 'sent-' + randomBytes(16).toString('hex'), sent: true }) }
+          catch { err('posted, but the local Messages history could not be saved') }
+        }
         return 0
       }
       case 'selftest': {

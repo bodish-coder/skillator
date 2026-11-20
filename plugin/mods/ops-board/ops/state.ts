@@ -18,7 +18,7 @@ import { parseRuns } from '../hooks/lib/runs'
 import { continuePrompt, engageOf, orderRuns, parseFollowupOut, RUNS_SECTIONS, stageTickets, startRunCmd } from '../hooks/lib/runlines'
 export { parseFollowupOut, startRunCmd }
 import type { RunsSection } from '../hooks/lib/runlines'
-import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
+import { moveSel, parseInbox, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { armCommandToast, armToast, parseArm } from '../hooks/lib/teamsarm'
 import { CLEARED_LINE, freshSetup, parseCfgView, resultLine, SAVED_LINE, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
 import type { SetupField, SetupValues } from '../hooks/lib/teamsconfig'
@@ -1478,8 +1478,10 @@ export function setupLines(s: State): string[] {
 }
 
 // m: everything read - teams-uhura writes the marker (the newest id).
-function markRead(s: State): Step {
-  const id = s.messages.at(-1)?.id
+function markRead(s: State, opened?: string): Step {
+  const msgs = s.messages.filter(m => !m.sent)
+  const id = opened ?? msgs.at(-1)?.id
+  if (opened && !msgs.slice(msgs.length - unreadCount(msgs, s.msgRead)).some(m => m.id === opened)) return { state: s, effects: [] }
   if (!id) return { state: toast(s, 'no team messages to mark read'), effects: [] }
   const then: Then = r => x => (r.code !== 0 ? toast(x, `✗ not marked read: ${teamWhy(r, 'teams-uhura')}`) : { ...x, msgRead: id })
   return { state: s, effects: [run('team-mark-read', [id], then)] }
@@ -1529,7 +1531,11 @@ function messagesKey(s: State, k: Key): Step {
   switch (k.name) {
     case 'up': case 'k': return { state: { ...s, msgSelected: moveSel(s.messages, s.msgSelected, -1) }, effects: [] }
     case 'down': case 'j': return { state: { ...s, msgSelected: moveSel(s.messages, s.msgSelected, 1) }, effects: [] }
-    case 'return': case 'enter': return { state: { ...s, msgSelected: cur, msgExpanded: cur && s.msgExpanded !== cur ? cur : null }, effects: [] }
+    case 'return': case 'enter': {
+      const expanded = cur && s.msgExpanded !== cur ? cur : null
+      const next = { ...s, msgSelected: cur, msgExpanded: expanded }
+      return expanded ? markRead(next, expanded) : { state: next, effects: [] }
+    }
     case 'm': return markRead(s)
     case 's': return { state: openSetup(s), effects: [showCfg(false)] }
     case 'c': case 'd': case 'y':
