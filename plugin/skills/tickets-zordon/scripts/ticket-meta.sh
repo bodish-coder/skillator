@@ -2030,6 +2030,10 @@ cmd_intake() {
   case $(uname -s) in
     MINGW*|MSYS*) _shell=$(cygpath -m /bin/sh.exe); _git=$(cygpath -m "$_git") ;;
   esac
+  if [ "${1:-}" = spreadsheet ]; then
+    "$_n" "$_dir/intake.mjs" "$MAIN" "$_common" "$_git" "$_shell" "$_allocator" "$@"
+    return $?
+  fi
   _board="$MAIN/TICKETS.md"
   board_lock "$_board.lock"
   [ "${1:-}" != accept ] || board_fresh

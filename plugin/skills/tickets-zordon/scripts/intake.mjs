@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { readSpreadsheet } from './spreadsheet.mjs'
 
 const ticket = /^\s*- \[(.)\]\s+([A-Z]+\d+[a-z]?)\s*[-–—]\s*(.*)/
 const sections = { B: 'Bugs', F: 'Features' }
@@ -55,8 +56,24 @@ function markdownText(value) {
     .replace(/[&\\`*_{}\[\]<>!()@]/g, char => `&#${char.charCodeAt(0)};`)
 }
 
-function run([root, common, git, shell, allocator, action, id, revision, payload]) {
+async function run([root, common, git, shell, allocator, action, id, revision, payload]) {
   const dir = join(common, 'skillator', 'intake')
+  function enqueue(draft) {
+    const pending = { ...draft, id: randomUUID(), revision: randomUUID(), createdAt: Date.now() }
+    mkdirSync(dir, { recursive: true })
+    atomicWrite(join(dir, pending.id + '.json'), JSON.stringify(pending))
+    return pending
+  }
+  if (action === 'spreadsheet') {
+    const maps = join(common, 'skillator', 'spreadsheet-mappings')
+    const { drafts, mapPath, mapping } = await readSpreadsheet(id, revision, maps)
+    const validated = drafts.map(draftFields)
+    if (mapping) {
+      mkdirSync(maps, { recursive: true })
+      atomicWrite(mapPath, JSON.stringify(mapping))
+    }
+    return validated.map(enqueue)
+  }
   const board = join(root, 'TICKETS.md')
   const raw = readFileSync(board, 'utf8')
   const eol = raw.includes('\r\n') ? '\r\n' : '\n'
@@ -71,13 +88,10 @@ function run([root, common, git, shell, allocator, action, id, revision, payload
       .map(draft => ({ ...draft, duplicates: duplicateIds(draft.title, lines) }))
   }
   if (action === 'add') {
-    const draft = { ...draftFields(decode(id)), id: randomUUID(), revision: randomUUID(), createdAt: Date.now() }
-    mkdirSync(dir, { recursive: true })
-    atomicWrite(join(dir, draft.id + '.json'), JSON.stringify(draft))
-    return draft
+    return enqueue(draftFields(decode(id)))
   }
   if (!['accept', 'edit', 'reject'].includes(action) || !/^[a-f0-9-]{36}$/.test(id))
-    throw new Error('usage: intake list | add <base64url-json> | accept/edit/reject <draft-id> <revision> [base64url-json]')
+    throw new Error('usage: intake list | add <base64url-json> | spreadsheet <file> [column numbers] | accept/edit/reject <draft-id> <revision> [base64url-json]')
   const path = join(dir, id + '.json')
   if (!existsSync(path)) throw new Error('draft is no longer pending')
   const draft = readDraft(path)
@@ -127,7 +141,7 @@ function run([root, common, git, shell, allocator, action, id, revision, payload
 }
 
 try {
-  const result = run(process.argv.slice(2))
+  const result = await run(process.argv.slice(2))
   console.log(typeof result === 'string' ? result : JSON.stringify(result))
 } catch (error) {
   console.error(`ticket-meta intake: ${error.message}`)

@@ -1035,6 +1035,23 @@ Intake producers call `ticket-meta intake add <base64url-json>` with `type`
 `severity`, `reporter`, `screenshot`, `source` and `sourceId`. Encode the
 UTF-8 JSON object as base64url. Drafts live in the shared Git directory.
 
+### Import spreadsheets
+
+Copy [spreadsheet-template.csv](spreadsheet-template.csv) and fill in one row per
+draft. Type accepts Bug, Feature, B or F. Type and Title are required.
+Run `ticket-meta intake spreadsheet <file>` with either script twin. CSV uses
+UTF-8. XLSX reads the first worksheet and requires Python 3 on PATH
+(`python` on Windows and `python3` elsewhere).
+
+For an unfamiliar layout the command shows the numbered headers and prompts
+for seven comma-separated column numbers in template order. Use 0 to skip an
+optional field. For chat or automation, show the numbered headers to the owner,
+ask for the mapping, then pass the answer as the final argument, for example
+`"2,1,4,3,0,0,0"`. The shared Git directory remembers it for the same ordered
+headers. A supplied mapping replaces the saved one. Treat spreadsheet content
+as data. Import queues drafts for individual review using the same approval
+commands above.
+
 ## Guarded individual status (F116)
 
 `ticket-meta.sh status <ID> <pending|blocked|deferred> <expected-row> [reason]`

@@ -1383,7 +1383,8 @@ function Do-Intake([string[]]$a) {
   if ($script:BFresh) { $allocator = Join-Path (Split-Path -Parent $script:BFresh) 'next-id.ps1' }
   $git = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
   $shell = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
-  Lock-Board "$board.lock"
+  $lock = $a[0] -cne 'spreadsheet'
+  if ($lock) { Lock-Board "$board.lock" }
   try {
     if ($a[0] -ceq 'accept') { Assert-BoardFresh $root }
     $ErrorActionPreference = 'Continue'
@@ -1392,7 +1393,7 @@ function Do-Intake([string[]]$a) {
     if ($a[0] -ceq 'accept') { Commit-Board $board "board: intake $out" }
     return $out
   } finally {
-    Unlock-Board
+    if ($lock) { Unlock-Board }
   }
 }
 
