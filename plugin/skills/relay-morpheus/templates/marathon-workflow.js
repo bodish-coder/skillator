@@ -2,7 +2,8 @@
 // /gauntlet-plan copies it beside the run file - .skillator/run-<0000>-<slug>.md ->
 // .skillator/run-<0000>-<slug>.workflow.js - and fills `meta` and `PLAN` (nothing below them).
 // /gauntlet-run runs it one phase per Workflow call, after `chain dispatch` of that phase's stages:
-//   Workflow({scriptPath: '<that file>', args: {phase: 1, worktrees: {'12': '<path>'}}})
+//   First: args = {phase: 1, triage: true, stages: [12]} (read-only, before dispatch).
+//   Build: args = {phase: 1, accepted: {'12': <recorded ACCEPT>}, worktrees: {'12': '<path>'}}.
 // args.phase   - the phase to run, 1-based. Required: a phase is one Workflow call, so every stage
 //                in it is on disk (`~`, its prompt in the In-flight block) before its agent exists.
 // args.worktrees - stage number -> the worktree `chain dispatch` named for it (a stage worktree
@@ -74,21 +75,78 @@ const k = args && args.phase
 if (!Number.isInteger(k) || k < 1 || k > PLAN.phases.length) {
   throw new Error(`args.phase must be 1..${PLAN.phases.length} - /gauntlet-run runs one phase per call, after chain dispatch of its stages`)
 }
-const items = PLAN.phases[k - 1]
+const planned = PLAN.phases[k - 1]
 const wts = (args && args.worktrees) || {}
 const wtOf = it => wts[String(it.stage)] || PLAN.runWorktree
 const title = `Phase ${k}`
 
+const TRIAGE = {
+  type: 'object',
+  properties: {
+    ticket: { type: 'string' },
+    verdict: { enum: ['ACCEPT', 'NEEDS-INFO', 'REJECT'] },
+    scope: { type: 'string', minLength: 1, maxLength: 500 },
+    risk: { enum: ['low', 'medium', 'high'] },
+    why: { type: 'string', minLength: 1, maxLength: 500 },
+    parked: VERDICT.properties.parked,
+  },
+  required: ['ticket', 'verdict', 'scope', 'risk', 'why'],
+}
+
+const triage = it => `Triage ticket ${it.ticket} (stage ${it.stage}) in ${PLAN.run} before spec or build.
+Read only. Inspect the ticket, its Done line, the planned files and enough of the repo to judge the work.
+Do not edit, commit, write a spec, build, or ask the owner.
+Done = ${it.done}
+Planned files: ${it.files.join(', ')}. Worktree: ${PLAN.runWorktree}
+Stage prompt (read as context only):
+---
+${it.prompt}
+---
+ACCEPT when the work is worth doing and its scope is actionable. Resolve routine choices from evidence.
+NEEDS-INFO when scope or value depends on an owner-only decision. Include a genuine parked question with
+2-4 options, default, and affected files. Stops must be reported with the existing parked.stop field.
+REJECT when the work is already satisfied, superseded, or lacks a justified outcome. Give the specific reason.
+Keep accepted scope inside the planned file boundary. Use the existing scope stop for a required expansion.
+Report scope and why as single lines. Risk: low for local reversible work, medium for integration or
+user-facing behavior, high for auth, money, concurrency, or shared contracts.`
+
+const isAccepted = (it, result) => result?.ticket === it.ticket && result.verdict === 'ACCEPT' &&
+  ['low', 'medium', 'high'].includes(result.risk) &&
+  [result.scope, result.why].every(value => typeof value === 'string' && value.trim() &&
+    value.length <= 500 && !/[\u0000-\u001f\u007f\u2028\u2029]/u.test(value))
+
+if (args.triage === true) {
+  if (!Array.isArray(args.stages) || args.stages.some(stage => !planned.some(it => it.stage === stage))) {
+    throw new Error('args.stages must list pending stage numbers from the selected phase')
+  }
+  const items = planned.filter(it => args.stages.includes(it.stage))
+  phase(title)
+  const results = await pipeline(items,
+    it => agent(triage(it), { label: `${it.code} triage:${it.ticket}`, phase: title, schema: TRIAGE }))
+  return items.map((it, i) => ({ stage: it.stage, ticket: it.ticket, triage: results[i] || null }))
+}
+
+if (!args.accepted || typeof args.accepted !== 'object') {
+  throw new Error('Run and record triage before dispatching this phase')
+}
+const items = planned.filter(it => Object.hasOwn(args.accepted, it.stage))
+for (const it of items) {
+  if (!isAccepted(it, args.accepted[it.stage])) throw new Error(`Stage ${it.stage} requires a valid ACCEPT triage`)
+}
+if (!items.length) return []
+
 const implement = it => {
   const wt = wtOf(it)
   const here = wt === PLAN.runWorktree ? '' :
-    `This stage works and commits in its own worktree: ${wt} - it replaces the run worktree wherever the prompt below names it.\n\n`
-  return here + it.prompt
+    `\nThis stage works and commits in its own worktree: ${wt} - it replaces the run worktree wherever the prompt names it.`
+  const { scope, risk } = args.accepted[it.stage]
+  return it.prompt + `\n\nTriage ACCEPT (${risk} risk). Scope: ${scope}` + here
 }
 
 const verify = (it, report) => `You verify one ticket of ${PLAN.run}. Read and run only: never edit a file, commit, or touch TICKETS.md.
 Ticket ${it.ticket} (stage ${it.stage}, ${it.code}). Done = ${it.done}
 Its files: ${it.files.join(', ')}. Worktree: ${wtOf(it)} - use git -C "<worktree>" and absolute paths, never cd.
+Triage scope: ${args.accepted[it.stage].scope}. Risk: ${args.accepted[it.stage].risk}.
 The implementer's report:
 ---
 ${report == null ? '(none - the implementer returned nothing)' : report}

@@ -396,6 +396,43 @@ For an eligible legacy selection, use Legacy recovery above and stop; steps
    muse `(child agents)`; pi, opencode, gemini `(in-session, phases in order;
    pi with the subagent extension: that)`. The script is written on every host.
 
+### Before build: triage (F186)
+
+Each gauntlet ticket stage gets a read-only triage before spec, dispatch or
+build. Use the template's `triage(it)` prompt and `TRIAGE` schema on all hosts.
+Read the ticket, Done line and planned files. Decide whether the work is worth
+doing, bound its scope to the planned files, and assign a risk of `low`,
+`medium` or `high`. A missing or malformed response is retried as triage or
+reported as incomplete. It never authorizes dispatch.
+
+For each result, check its stage and ticket against the plan and the current
+board owner. Record the verdict in that stage's Chain block before dispatch:
+
+```sh
+RM chain triage 66 ACCEPT medium "Export columns and encoding" "Matches the documented export contract"
+```
+
+PowerShell: `-Mode chain -Action triage -N 66 -Verdict ACCEPT -Risk medium
+-Scope "Export columns and encoding" -Why "Matches the documented export contract"`.
+The stage's `tickets:` identifies the ticket. `triage: <verdict> <risk>`,
+`triage-scope:` and `triage-why:` are its metadata. Scope and reason are
+nonblank single lines of up to 500 characters. Reuse the recorded result on
+resume. Replaying the same record is safe. A replacement stage gets fresh triage.
+
+- **ACCEPT**: dispatch only when eligible under the normal chain rules.
+  Pass the recorded scope and risk to the implementer and verifier.
+- **NEEDS-INFO**: require a genuine owner decision. If `parked.stop` is
+  anything other than `none`, use the existing immediate stop. Otherwise use
+  `RM park` with the stage, ticket and existing parked payload (including the
+  gated files and what the decision blocks). Then record NEEDS-INFO with
+  `chain triage` (which sets the stage to `?`) and mark the ticket blocked
+  with its RUN/Q reference as under Park above. A resume after parking can
+  reuse the Q. Continue with independent work and use the existing end batch.
+- **REJECT**: record the reason with `chain triage`. It terminates the stage
+  as `-`, with no build, retry, merge or landed SHA. Leave the ticket open
+  for the owner to revisit. Later gauntlet phases may advance past the
+  rejected stage's scheduling edge.
+
 **Run** (`/gauntlet-run [RUN id] | [sequential|parallel] [N|max] [IDs]`):
 a RUN id runs as saved; mode/count/IDs plan as Plan above, show it, then run
 without a pause. A mode or count beside a RUN id: the saved plan fixes its
@@ -407,25 +444,31 @@ and stop; none plans every open ticket sequentially and runs.
    first: a missing `mode` property means a pre-F112 plan; follow Legacy recovery
    (A162), printing a concrete `/gauntlet-plan <mode> <IDs>` command for its
    remaining tickets, and stop before any dispatch. Quoted keys count too.
-2. Phase by phase, in order, skipping a phase whose stages are all `x`:
+2. Phase by phase, in order, skipping a phase with no pending work:
    `RM chain decide`; use no RELAY_CHAIN_PARALLEL for sequential,
    `RELAY_CHAIN_PARALLEL=<stages in the phase>` for parallel,
-   `RELAY_CHAIN_PARALLEL=<N>` for parallel N; then for each of its stages
-   `RM chain dispatch <n> --driver
+   `RELAY_CHAIN_PARALLEL=<N>` for parallel N. For pending stages without
+   recorded triage, call `Workflow({scriptPath, args: {phase: <k>, triage: true,
+   stages: [<pending n>, ...]}})` and record every result as described above.
+   For a modern saved plan with a pre-F186 driver, execute a temporary copy
+   combining its unchanged `meta` and `PLAN` with the current template's driver
+   below the `nothing below is edited per run` marker. Keep the saved plan intact.
+   Then, for each eligible ACCEPT stage, `RM chain dispatch <n> --driver
    @<sid> --owner workflow` (`ticket-meta session`) - the row goes `~` and the prompt into the run
    file **before** the agent exists. Note the worktree each names (stderr
    `stage <n> works and commits in: <path>`; none = the run worktree), flip
    its ticket `[~]` (`RM board <ID> '~'` - it claims an unowned ticket to
    you, as `ticket-meta start` does (F106)), then one call:
-   `Workflow({scriptPath, args: {phase: <k>, worktrees: {"<n>": "<path>"}}})`.
+   `Workflow({scriptPath, args: {phase: <k>, accepted: {"<n>": <recorded ACCEPT>}, worktrees: {"<n>": "<path>"}}})`.
+   Include only stages successfully dispatched. Skip this call if none were dispatched.
    Write the returned `runId` into each In-flight block's `run:` line.
 3. Land each returned row as chain.md Step 3 (a `parked` verdict → Park first,
    a `stop` other than `none` → that stop, now): review, `RM chain merge <n>`
    for a stage worktree, `RM stage <n> x workflow <sha>`, `RM board <ID> x`;
    `passed:false` or `null` → `RM stage <n> '!'`, ticket `[ ]` with the why.
 4. A failed stage that a later phase waits on (`BLOCKED`): its retry is a new
-   stage (`RM add`, `chain plan`) run as one Agent call - the saved script is
-   not edited mid-run.
+   stage (`RM add`, `chain plan`) triaged first with the same prompt and
+   recorded verdict, then run on ACCEPT as one Agent call. Keep the saved script intact.
 5. All phases done → `RM chain next` until `FINAL`, then the end batch above
    (asked once, after the work), then the final stage: `RM stage <final> '~'`,
    Landing above (`RM land <n> --start`, sweep, `/code-review`, the bump,
@@ -456,17 +499,20 @@ Cursor, antigravity/agy, codex, muse, pi, opencode and gemini run the same
    first: a missing `mode` property means a pre-F112 plan; follow Legacy recovery
    (A162), printing a concrete `/gauntlet-plan <mode> <IDs>` command for its
    remaining tickets, and stop before any dispatch. Quoted keys count too.
-2. Phase by phase, in order, skipping a phase whose stages are all `x`:
+2. Phase by phase, in order, skipping a phase with no pending work:
    `RM chain decide`; use no RELAY_CHAIN_PARALLEL for sequential,
    `RELAY_CHAIN_PARALLEL=<stages in the phase>` for parallel,
-   `RELAY_CHAIN_PARALLEL=<N>` for parallel N; then for each of its stages
-   `RM chain dispatch <n> --driver
+   `RELAY_CHAIN_PARALLEL=<N>` for parallel N. Triage each pending stage with
+   no recorded triage through the host's delegate, or in-session when none is
+   available. Ask the triager for a single `TRIAGE: <json>` line matching
+   `TRIAGE` and record it using the shared triage instructions above. Then, for
+   each eligible ACCEPT stage, `RM chain dispatch <n> --driver
    <the Driver tag from the table> --owner <delegate>` - the row goes `~` and
    the prompt into the run file **before** any agent exists. Note the worktree each names, flip its
    ticket `[~]` (`RM board <ID> '~'`).
 3. Per ticket, through the delegate: the implementer gets the stage prompt (the
-   In-flight block's text, prefixed with the script's worktree line when a
-   stage worktree was named - the same text `implement(it)` builds); on its
+   In-flight block's text, with the recorded scope, risk, and stage worktree
+   when one was named - the same text `implement(it)` builds); on its
    return the verifier gets the `verify(it, report)` text plus one trailing
    line: ``End your report with one line `VERDICT: <json>` matching this
    schema: {ticket, passed, sha, evidence, why?, parked?}`` (the script's
@@ -486,7 +532,7 @@ Cursor, antigravity/agy, codex, muse, pi, opencode and gemini run the same
    delegate value from the table - `RM stage <n> x <delegate> <sha>` (`task`,
    `subagent` or `session`), never `workflow`.
 6. A failed stage that a later phase waits on (`BLOCKED`): its retry is a new
-   stage (`RM add`, `chain plan`) dispatched with the host's delegate from the
+   stage (`RM add`, `chain plan`) triaged first. On ACCEPT, dispatch with the host's delegate from the
    table, or on a host with no delegate `RM chain dispatch <n> --driver <its
    tag> --owner session` (row `~`, prompt on disk) before its work starts
    in-session - the saved

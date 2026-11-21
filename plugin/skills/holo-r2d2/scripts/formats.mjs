@@ -7,7 +7,7 @@ const esc = (s) => String(s ?? "").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "").
 const clip = (s, n) => (String(s ?? "").length > n ? String(s).slice(0, n - 1) + "\u2026" : String(s ?? ""));
 const LABEL = {
   pending: "pending", inflight: "in flight", landed: "landed", failed: "failed",
-  parked: "parked", replanned: "replanned", unknown: "unknown",
+  parked: "parked", rejected: "rejected", replanned: "replanned", unknown: "unknown",
 };
 const ASKABLE = new Set(["open", "asked"]);
 
@@ -28,7 +28,7 @@ export function themeCss(theme) {
   --ground:#000000; --surface:#000000; --ink:#ffffff; --mid:#e8e8e8; --faint:#c9c9c9; --rule:#ffffff;
   --landed:#33ff99; --landed-bg:#000000; --inflight:#66ccff; --inflight-bg:#000000;
   --parked:#ff99ff; --parked-bg:#000000; --failed:#ff8888; --failed-bg:#000000;
-  --replanned:#e8e8e8; --replanned-bg:#000000; --pending:#c9c9c9; --pending-bg:#000000;
+  --rejected:#e8e8e8; --rejected-bg:#000000; --replanned:#e8e8e8; --replanned-bg:#000000; --pending:#c9c9c9; --pending-bg:#000000;
   --does:#33ff99; --does-bg:#000000; --hurts:#ff8888; --hurts-bg:#000000;
   --accent:#ffff00; --accent-bg:#000000; --focus:#ffff00;
 }`;
@@ -36,7 +36,7 @@ export function themeCss(theme) {
   --ground:#ffffff; --surface:#ffffff; --ink:#000000; --mid:#333333; --faint:#555555; --rule:#8a8a8a;
   --landed:#14532d; --landed-bg:#ffffff; --inflight:#1e3a8a; --inflight-bg:#ffffff;
   --parked:#581c87; --parked-bg:#ffffff; --failed:#7f1d1d; --failed-bg:#ffffff;
-  --replanned:#333333; --replanned-bg:#ffffff; --pending:#333333; --pending-bg:#ffffff;
+  --rejected:#333333; --rejected-bg:#ffffff; --replanned:#333333; --replanned-bg:#ffffff; --pending:#333333; --pending-bg:#ffffff;
   --does:#14532d; --does-bg:#ffffff; --hurts:#7f1d1d; --hurts-bg:#ffffff;
   --accent:#000000; --accent-bg:#ffffff; --focus:#000000;
 }`;
@@ -47,7 +47,7 @@ const DARK = `
   --ground:#121512; --surface:#191d19; --ink:#e6e9e5; --mid:#a0a79f; --faint:#6f766e; --rule:#2b302a;
   --landed:#6cc28d; --landed-bg:#16271c; --inflight:#7fb0f0; --inflight-bg:#152235;
   --parked:#c3a1ec; --parked-bg:#251c33; --failed:#f08b80; --failed-bg:#341a17;
-  --replanned:#9da19c; --replanned-bg:#222622; --pending:#a0a79f; --pending-bg:#191d19;
+  --rejected:#9da19c; --rejected-bg:#222622; --replanned:#9da19c; --replanned-bg:#222622; --pending:#a0a79f; --pending-bg:#191d19;
   --does:#6cc28d; --does-bg:#16271c; --hurts:#f08b80; --hurts-bg:#341a17; --accent:#e5a660; --accent-bg:#33240f;
 `;
 
@@ -56,7 +56,7 @@ const FORMAT_CSS = `
   --ground:#f3f4f1; --surface:#fbfbf9; --ink:#1a1d1a; --mid:#5a615a; --faint:#8a908a; --rule:#dde1db;
   --landed:#2f7d4f; --landed-bg:#e3f1e8; --inflight:#1f63b8; --inflight-bg:#e2ecf9;
   --parked:#7a4bb3; --parked-bg:#efe7f8; --failed:#b3261e; --failed-bg:#f8e3e1;
-  --replanned:#7b7f7b; --replanned-bg:#eceeeb; --pending:#5a615a; --pending-bg:#fbfbf9;
+  --rejected:#7b7f7b; --rejected-bg:#eceeeb; --replanned:#7b7f7b; --replanned-bg:#eceeeb; --pending:#5a615a; --pending-bg:#fbfbf9;
   --does:#2f7d4f; --does-bg:#e8f3ec; --hurts:#b3261e; --hurts-bg:#f9e9e7; --accent:#a8590c; --accent-bg:#fbefe2;
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
 }
@@ -76,7 +76,7 @@ h2{font-family:var(--mono);font-size:.6875rem;text-transform:uppercase;letter-sp
 .mono{font-family:var(--mono)}
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--rule);border-radius:6px;background:var(--surface);padding:.5rem}
 .dot{display:inline-block;width:.7rem;height:.7rem;border-radius:50%;flex:none}
-${["landed", "inflight", "parked", "failed", "replanned", "pending", "unknown"].map((s) => {
+${["landed", "inflight", "parked", "failed", "rejected", "replanned", "pending", "unknown"].map((s) => {
   const c = s === "unknown" ? "failed" : s;
   return `.s-${s} .dot{background:var(--${c})} .s-${s} .sst{color:var(--${c})}`;
 }).join("\n")}

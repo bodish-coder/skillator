@@ -49,16 +49,17 @@ import { createHash, randomBytes } from "node:crypto";
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 // --------------------------------------------------------------- model ----
-const STATE = { "": "pending", "~": "inflight", "x": "landed", "!": "failed", "?": "parked", ">": "replanned" };
+const STATE = { "": "pending", "~": "inflight", "x": "landed", "!": "failed", "?": "parked", "-": "rejected", ">": "replanned" };
 const LABEL = {
   pending: "pending", inflight: "in flight", landed: "landed", failed: "failed",
-  parked: "parked", replanned: "replanned", unknown: "unknown",
+  parked: "parked", rejected: "rejected", replanned: "replanned", unknown: "unknown",
 };
 const GLYPH = {
   pending: "[ ]", inflight: "[~]", landed: "[x]", failed: "[!]",
-  parked: "[?]", replanned: "[>]", unknown: "[*]",
+  parked: "[?]", rejected: "[-]", replanned: "[>]", unknown: "[*]",
 };
 const ORDER = ["landed", "inflight", "parked", "failed", "replanned", "pending", "unknown"];
+const stateOrder = (run) => run.stages.some((s) => s.state === "rejected") ? [...ORDER, "rejected"] : ORDER;
 // A decision holds its work while open, asked, answered or ruled; it lets go
 // only at replanned or moot (references/marathon.md). Cards are drawn for the
 // ones still waiting on the user: open and asked.
@@ -572,7 +573,7 @@ svg{display:block;font-family:var(--sans)}
 .nid{font-family:var(--mono);font-size:11.5px;font-weight:700;fill:var(--ink)}
 .nst{font-size:10.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em}
 .nname{font-size:12.5px;fill:var(--ink)} .nmeta{font-size:11px;fill:var(--mid);font-family:var(--mono)} .nmeta.held{fill:var(--parked)}
-${["landed", "inflight", "parked", "failed", "replanned", "pending", "unknown"].map((s) => {
+${ORDER.map((s) => {
   const c = s === "unknown" ? "failed" : s;
   return `.s-${s} rect{fill:var(--${c}-bg);stroke:var(--${c})} .s-${s} .nst{fill:var(--${c})} .srow.s-${s} .dot{background:var(--${c})} .srow.s-${s} .sst{color:var(--${c})}`;
 }).join("\n")}
@@ -693,15 +694,16 @@ export function render(run, opts = {}) {
   const title = run ? `Holo ${run.id}` : `Holo design`;
   let body = "";
   if (run) {
-    const c = Object.fromEntries(ORDER.map((s) => [s, run.stages.filter((x) => x.state === s).length]));
+    const order = stateOrder(run);
+    const c = Object.fromEntries(order.map((s) => [s, run.stages.filter((x) => x.state === s).length]));
     const askable = run.qs.filter((q) => ASKABLE.has(q.state));
-    const chips = ORDER.filter((s) => s !== "unknown" || c.unknown)
+    const chips = order.filter((s) => s !== "unknown" || c.unknown)
       .map((s) => `<div class="c-${s}"><b>${c[s]}</b><span>${LABEL[s]}</span></div>`).join("") +
       `<div class="c-q"><b>${askable.length}</b><span>open decisions</span></div>`;
     const ch = run.chain;
     const sub = [run.plan && `plan ${run.plan}`, run.updated && `updated ${run.updated}`,
       ch && `driver ${ch.driver}`, ch && `hold ${ch.hold}`, ch && `mode ${ch.mode}`].filter(Boolean).map(esc).join(" \u00b7 ");
-    const legend = ORDER.filter((s) => s !== "unknown").map((s) =>
+    const legend = order.filter((s) => s !== "unknown").map((s) =>
       `<li><i style="background:var(--${s})"></i>${LABEL[s]}</li>`).join("") +
       `<li>\u2192 after:</li><li>- - \u2192 final stage, by convention</li>`;
     const qs = askable.length
@@ -720,7 +722,10 @@ export function render(run, opts = {}) {
     `${run ? ` at ${esc(run.updated || "?")}` : ""}. It decides nothing: answers are written to the run file by the session (relay-morpheus answer).` +
     `${run && run.chain ? ` Holds: ${run.holdsFrom === "relay" ? "as relay-morpheus chain next judges them" : "estimated here - relay-morpheus could not be run"}.` : ""}</p></main>`;
   const fig = run && opts.anatomy;
-  return { title, css: (fig ? CSS + ANATOMY_CSS : CSS) + (opts.theme ? themeCss(opts.theme) : ""), body, script: fig ? CLIENT + ANATOMY_SCRIPT : CLIENT };
+  const rejectedCss = run?.stages.some((s) => s.state === "rejected")
+    ? "\n:root{--rejected:var(--replanned);--rejected-bg:var(--replanned-bg)} .s-rejected rect{fill:var(--rejected-bg);stroke:var(--rejected)} .s-rejected .nst,.srow.s-rejected .sst{fill:var(--rejected);color:var(--rejected)} .srow.s-rejected .dot{background:var(--rejected)}"
+    : "";
+  return { title, css: (fig ? CSS + ANATOMY_CSS : CSS) + rejectedCss + (opts.theme ? themeCss(opts.theme) : ""), body, script: fig ? CLIENT + ANATOMY_SCRIPT : CLIENT };
 }
 
 export const artifactPage = (r) => `<title>${esc(r.title)}</title>\n<style>${r.css}</style>\n${r.body}\n<script>${r.script}</script>\n`;
@@ -738,7 +743,7 @@ export function renderAscii(run, opts = {}) {
     out.push(`${run.id} - ${run.title}${run.holdsFrom === "estimate" && run.chain ? "  (holds estimated - relay-morpheus not run)" : ""}`);
     out.push([run.plan && `plan: ${run.plan}`, run.updated && `updated: ${run.updated}`,
       run.chain && `driver: ${run.chain.driver}  hold: ${run.chain.hold}  mode: ${run.chain.mode}`].filter(Boolean).join("   "));
-    out.push(ORDER.map((s) => `${GLYPH[s]} ${LABEL[s]} ${run.stages.filter((x) => x.state === s).length}`).join("  "));
+    out.push(stateOrder(run).map((s) => `${GLYPH[s]} ${LABEL[s]} ${run.stages.filter((x) => x.state === s).length}`).join("  "));
     const askable = run.qs.filter((q) => ASKABLE.has(q.state));
     out.push("", `DECISIONS WAITING ON YOU (${askable.length})`);
     if (!askable.length) out.push("  none");
@@ -781,7 +786,7 @@ export function renderAscii(run, opts = {}) {
 }
 
 // ------------------------------------------------------------ markdown ----
-const MERMAID_STROKE = { landed: "#2f7d4f", inflight: "#1f63b8", parked: "#7a4bb3", failed: "#b3261e", replanned: "#7b7f7b", pending: "#5a615a", unknown: "#b3261e" };
+const MERMAID_STROKE = { landed: "#2f7d4f", inflight: "#1f63b8", parked: "#7a4bb3", failed: "#b3261e", rejected: "#7b7f7b", replanned: "#7b7f7b", pending: "#5a615a", unknown: "#b3261e" };
 const mlabel = (s) => String(s).replace(/"/g, "#quot;").replace(/</g, "#lt;").replace(/>/g, "#gt;");
 // Run-file and design text is data: no raw HTML, and a line standing alone opens no fence, heading, list or quote.
 const mdx = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -809,7 +814,7 @@ export function renderMarkdown(run, opts = {}) {
     out.push("## Stage graph", "", "```mermaid", "flowchart LR");
     for (const s of run.stages) out.push(`  S${s.n}["#${s.n}${s.code ? " · " + mlabel(s.code) : ""} ${mlabel(s.name)}"]:::${s.state}`);
     for (const e of layout(run).edges) out.push(e.kind === "after" ? `  S${e.from} --> S${e.to}` : e.kind === "implicit" ? `  S${e.from} -.-> S${e.to}` : `  S${e.from} -. replaced .-> S${e.to}`);
-    for (const s of Object.keys(MERMAID_STROKE)) out.push(`  classDef ${s} stroke:${MERMAID_STROKE[s]},stroke-width:2px`);
+    for (const s of stateOrder(run)) out.push(`  classDef ${s} stroke:${MERMAID_STROKE[s]},stroke-width:2px`);
     out.push("```", "", "## Stages", "", mdTable(["#", "stage", "state", "owner", "landed", "files"], run.stages.map((s) => [String(s.n), (s.code ? s.code + " " : "") + s.name, LABEL[s.state] + (s.state === "unknown" ? ` (${s.st})` : ""), s.owner, s.landed, s.files.join(", ") || "-"])), "");
   }
   if (opts.design) {
@@ -829,13 +834,13 @@ export function renderMarkdown(run, opts = {}) {
 // ----------------------------------------------------------------- svg ----
 // Light theme, literal colours: a standalone image cannot rely on prefers-color-scheme.
 const SVG_INK = MERMAID_STROKE; // the light CSS state colours, literal
-const SVG_BG = { landed: "#e3f1e8", inflight: "#e2ecf9", parked: "#efe7f8", failed: "#f8e3e1", replanned: "#eceeeb", pending: "#fbfbf9", unknown: "#f8e3e1" };
+const SVG_BG = { landed: "#e3f1e8", inflight: "#e2ecf9", parked: "#efe7f8", failed: "#f8e3e1", rejected: "#eceeeb", replanned: "#eceeeb", pending: "#fbfbf9", unknown: "#f8e3e1" };
 export function renderSvg(run, opts = {}) {
   const lines = [];
   if (run) {
     const ch = run.chain;
     lines.push(`${run.id} - ${run.title}`, [run.plan && `plan ${run.plan}`, run.updated && `updated ${run.updated}`, ch && `driver ${ch.driver}  hold ${ch.hold}  mode ${ch.mode}`].filter(Boolean).join("   "));
-    lines.push(ORDER.map((s) => `${LABEL[s]} ${run.stages.filter((x) => x.state === s).length}`).join("   "), "");
+    lines.push(stateOrder(run).map((s) => `${LABEL[s]} ${run.stages.filter((x) => x.state === s).length}`).join("   "), "");
     const askable = run.qs.filter((q) => ASKABLE.has(q.state));
     lines.push(`DECISIONS (${askable.length})`);
     if (!askable.length) lines.push("  none");

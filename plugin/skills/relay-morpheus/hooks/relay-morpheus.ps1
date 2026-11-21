@@ -55,7 +55,7 @@
 # Any mode takes an optional -Id: `-Mode status -Id 3`.
 #
 # States: pending | '~' in flight | 'x' landed | '!' failed | '?' parked (no
-# item passed, at least one waits on a decision) | '>' re-planned (landed
+# item passed, at least one waits on a decision) | '-' rejected at triage | '>' re-planned (landed
 # names the new stage: `stage 71`)
 #
 # RUN ids and stage numbers are serial across the whole project, not per run
@@ -71,7 +71,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)][ValidateSet('init','add','stage','heartbeat','status','orphans','list','resume','chain','park','answer','queue','board','queue-run','land','away','owner','watchdog','selftest')][string]$Mode,
-  [ValidateSet('plan','dispatch','hold','release','wait','status','decide','next','merge','edge')][string]$Action = 'status',
+  [ValidateSet('plan','dispatch','hold','release','wait','status','decide','next','merge','edge','triage')][string]$Action = 'status',
   [string]$Ticket = '',
   [string]$Reason = '',
   [string]$Question = '',
@@ -89,6 +89,9 @@ param(
   [string]$After = '',
   [string]$IndependentOf = '',
   [string]$Why = '',
+  [string]$Verdict = '',
+  [string]$Risk = '',
+  [string]$Scope = '',
   [string]$Q = '',
   [string]$Text = '',
   [switch]$Ruled,
@@ -1092,6 +1095,57 @@ function DoChainPlan($n) {
 # on the file AND the claim - row `~`, In-flight block, driver stamp - happen
 # in one lock hold, so two sessions dispatching one stage at once get exactly
 # one winner and one exit 2.
+function DoChainTriage($n) {
+  if (-not $n -or $Verdict -cnotin @('ACCEPT','NEEDS-INFO','REJECT') -or $Risk -cnotin @('low','medium','high')) {
+    Die 'usage: -Mode chain -Action triage -N <n> -Verdict ACCEPT|NEEDS-INFO|REJECT -Risk low|medium|high -Scope <scope> -Why <reason>'
+  }
+  foreach ($value in @($Scope, $Why)) {
+    if (-not $value.Trim() -or $value.Length -gt 500 -or $value -match '[\x00-\x1f\x7f\u2028\u2029]') {
+      Die 'chain triage: scope and why must each be a single nonblank line of at most 500 characters'
+    }
+  }
+  NeedRun
+  Lock
+  try {
+    $code = CodeOf $n
+    if (-not $code) { Die "stage $n has no chain block - chain plan $n first" }
+    $state = switch ($Verdict) { 'REJECT' { '-' }; 'NEEDS-INFO' { '?' }; default { '' } }
+    $record = @("triage: $Verdict $Risk", "triage-scope: $Scope", "triage-why: $Why")
+    $section = ''; $inBlock = $false; $foundPrompt = $false; $previous = @(); $stamp = Now
+    $foundRow = $false; $parked = $false; $activeQuestion = $false
+    $out = foreach ($line in @(Get-Content -Encoding UTF8 $Run)) {
+      if ($line -match '^## ') { $section = $line; $inBlock = $false; $activeQuestion = $false }
+      if ($section -ceq '## Decisions' -and $line -match '^### ') {
+        $activeQuestion = $line -cmatch '^### Q[0-9]+ (open|asked|answered|ruled) '
+      }
+      if ($activeQuestion -and $line -ceq "parked: stage $n ($code)") { $parked = $true }
+      if ($section -ceq '## Chain' -and $line -match '^### ') { $inBlock = $line.StartsWith("### $code - stage $n - ") }
+      if ($inBlock -and $line -cmatch '^triage(?:-scope|-why)?: ') { $previous += $line; continue }
+      if ($inBlock -and $line -ceq 'prompt: |') {
+        $record
+        $inBlock = $false; $foundPrompt = $true
+      }
+      if ($section -ceq '## Stages' -and (RowNum $line) -eq $n) {
+        $foundRow = $true
+        $cells = $line -split '\|'
+        $cells[3] = " $state "
+        $cells[5] = " $stamp "
+        $line = $cells -join '|'
+      }
+      $line
+    }
+    if (-not $foundRow -or -not $foundPrompt) { Die "stage $n has no row or chain prompt" }
+    if ($previous.Count) {
+      if (($previous -join "`n") -ceq ($record -join "`n")) { return }
+      Refuse "stage $n already has triage - re-plan it as a new stage"
+    }
+    if ((RowCellN $n 3) -ne '') { Refuse "stage $n must be pending for triage" }
+    if ($Verdict -ceq 'NEEDS-INFO' -and -not $parked) { Refuse "stage $n needs a parked decision before NEEDS-INFO" }
+    WriteRun $out
+    StampUpdated
+  } finally { Unlock }
+}
+
 function DoChainDispatch($n) {
   if (-not $n) { Die 'usage: -Mode chain -Action dispatch -N <n> -Driver @tag [-Owner O] [-Take] [-Override] [-Confirmed]' }
   $drv = if ($Driver) { $Driver } else { $env:RELAY_CHAIN_DRIVER }
@@ -2129,7 +2183,7 @@ function ChainScan([switch]$NextOnly) {
   }
   $holding = { param($k) $qs[$k] -cin @('open', 'asked', 'answered', 'ruled') }
   $landed = $null
-  $landed = { param($s, $d) if (-not $st.ContainsKey($s) -or $st[$s] -ceq 'x') { return $true }
+  $landed = { param($s, $d) if (-not $st.ContainsKey($s) -or $st[$s] -cin @('x','-')) { return $true }
     if ($st[$s] -ceq '>' -and $rep.ContainsKey($s) -and [int]$d -lt 64) { return (& $landed $rep[$s] ([int]$d + 1)) }; $false }
   # $true when an unlanded after: stage behind d (transitively) is a failed one.
   $failBehind = $null
@@ -2167,6 +2221,7 @@ function ChainScan([switch]$NextOnly) {
     $s = $st[$n]
     if ($s -ceq '~') { $out.Add("IDLE $n inflight"); $nf++; continue }
     if ($s -ceq '?') { $out.Add("IDLE $n parked"); continue }
+    if ($s -ceq '-') { $out.Add("IDLE $n rejected"); continue }
     if ($s -cne '' -and $s -cne '!') { continue }
     if ($s -ceq '!') { $out.Add("IDLE $n failed") }
     foreach ($k in $ql) {
@@ -4016,6 +4071,7 @@ try {
     'chain'     {
       switch ($Action) {
         'plan'     { DoChainPlan $N }
+        'triage'   { DoChainTriage $N }
         'dispatch' { DoChainDispatch $N }
         'hold'     { DoChainHold }
         'release'  { DoChainRelease }

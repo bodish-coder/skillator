@@ -1531,6 +1531,58 @@ chain_plan() {
   echo "$code"
 }
 
+# The planned stage and its verdict are one ledger update.
+chain_triage() {
+  [ "$#" = 5 ] || die 'usage: chain triage <n> ACCEPT|NEEDS-INFO|REJECT low|medium|high <scope> <why>'
+  case "$1" in ''|*[!0-9]*) die 'chain triage: stage must be a number' ;; esac
+  case "$2" in ACCEPT) state= ;; NEEDS-INFO) state='?' ;; REJECT) state=- ;;
+    *) die 'chain triage: expected ACCEPT, NEEDS-INFO or REJECT' ;; esac
+  case "$3" in low|medium|high) ;; *) die 'chain triage: expected low, medium or high risk' ;; esac
+  for value in "$4" "$5"; do
+    case "$value" in *'
+'*) die 'chain triage: scope and why must be single lines' ;; esac
+    [ "${#value}" -le 500 ] && printf '%s' "$value" | grep -q '[^[:space:]]' &&
+      ! printf '%s' "$value" | grep -q '[[:cntrl:]]' ||
+      die 'chain triage: scope and why must each be a single nonblank line of at most 500 characters'
+  done
+  need_run
+  lock
+  code=$(code_of "$1")
+  [ -n "$code" ] || die "stage $1 has no chain block - chain plan $1 first"
+  rc=0
+  RELAY_TRIAGE_SCOPE="$4" RELAY_TRIAGE_WHY="$5" awk -v n="$1" -v code="$code" -v verdict="$2" -v risk="$3" -v state="$state" -v stamp="$(now)" '
+    BEGIN {
+      FS=OFS="|"
+      record="triage: " verdict " " risk "\ntriage-scope: " ENVIRON["RELAY_TRIAGE_SCOPE"] "\ntriage-why: " ENVIRON["RELAY_TRIAGE_WHY"]
+    }
+    /^## / { section=$0; block=active=0 }
+    section == "## Decisions" && /^### / { active=($0 ~ /^### Q[0-9]+ (open|asked|answered|ruled) /) }
+    active && $0 == "parked: stage " n " (" code ")" { parked=1 }
+    section == "## Chain" && /^### / { block=(index($0, "### " code " - stage " n " - ") == 1) }
+    block && /^triage(-scope|-why)?: / { previous=previous (previous == "" ? "" : "\n") $0; next }
+    block && $0 == "prompt: |" { print record; prompt=1; block=0 }
+    section == "## Stages" && /^\| *[0-9]+ *\|/ && $2 + 0 == n {
+      old=$4; gsub(/ /, "", old); row=1; $4=" " state " "; $6=" " stamp " "
+    }
+    { print }
+    END {
+      if (!row || !prompt) exit 3
+      if (previous != "") exit (previous == record ? 5 : 4)
+      if (old != "") exit 6
+      if (verdict == "NEEDS-INFO" && !parked) exit 7
+    }' "$RUN" > "$RUN.tmp.$$" || rc=$?
+  if [ "$rc" = 0 ]; then mv "$RUN.tmp.$$" "$RUN"; stamp_updated; unlock; return; fi
+  rm -f "$RUN.tmp.$$"
+  unlock
+  case "$rc" in
+    4) refuse "stage $1 already has triage - re-plan it as a new stage" ;;
+    5) return 0 ;;
+    6) refuse "stage $1 must be pending for triage" ;;
+    7) refuse "stage $1 needs a parked decision before NEEDS-INFO" ;;
+    *) die "could not record triage for stage $1" ;;
+  esac
+}
+
 # chain dispatch <n> --driver TAG [--owner O] [--take] [--override] [--confirmed]
 # The usage reading is taken first (it runs another script); then every check
 # on the file AND the claim - row `~`, In-flight block, driver stamp - happen
@@ -2108,7 +2160,7 @@ chain_scan() {
     function paths(s,  n, w, i, o) { n = split(s, w, /,/); o = ""
       for (i = 1; i <= n; i++) { w[i] = norm(w[i]); if (w[i] != "") o = o SUBSEP w[i] } return o }
     function holding(k) { return qs[k] == "open" || qs[k] == "asked" || qs[k] == "answered" || qs[k] == "ruled" }
-    function landed(s, d) { if (!(s in st) || st[s] == "x") return 1
+    function landed(s, d) { if (!(s in st) || st[s] == "x" || st[s] == "-") return 1
       if (st[s] == ">" && (s in rep) && d < 64) return landed(rep[s], d + 1); return 0 }
     # 1 when an unlanded after: stage behind d (transitively) is a failed one.
     function failbehind(d, depth,  m, a, i) { if (depth > 64) return 0; m = split(af[d], a, " ")
@@ -2164,6 +2216,7 @@ chain_scan() {
       for (r = 1; r <= nr; r++) { n = row[r]; if (!(n in code)) continue; s = st[n]
         if (s == "~") { out[++no] = "IDLE " n " inflight"; nf++; continue }
         if (s == "?") { out[++no] = "IDLE " n " parked"; continue }
+        if (s == "-") { out[++no] = "IDLE " n " rejected"; continue }
         if (s != "" && s != "!") continue
         if (s == "!") out[++no] = "IDLE " n " failed"
         for (i = 1; i <= nq; i++) { k = ql[i]; if (!holding(k)) continue
@@ -2399,6 +2452,7 @@ cmd_chain() {
   sub="${1:-}"; [ "$#" -gt 0 ] && shift || true
   case "$sub" in
     plan)     chain_plan "$@" ;;
+    triage)   chain_triage "$@" ;;
     dispatch) chain_dispatch "$@" ;;
     hold)     chain_hold "$@" ;;
     release)  chain_release "$@" ;;
@@ -2408,7 +2462,7 @@ cmd_chain() {
     next)     chain_next "$@" ;;
     merge)    chain_merge "$@" ;;
     edge)     chain_edge "$@" ;;
-    *) die "usage: relay-morpheus.sh chain plan|dispatch|hold|release|wait|status|decide|next|merge|edge ..." ;;
+    *) die "usage: relay-morpheus.sh chain plan|dispatch|hold|release|wait|status|decide|next|merge|edge|triage ..." ;;
   esac
 }
 # F49: `chain decide --level "<line>"` decides on a reading the caller already
