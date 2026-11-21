@@ -229,7 +229,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
           : (c.closed.length ? [<Text dimColor>{`${glyphs.sep} ${c.closed.reduce((s, d) => s + d.n, 0)} done hidden`}</Text>] : []))
       ]}</Box>)
   out.push(
-    <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
+    <Box key="keys" flexDirection="row" flexWrap="wrap" gap={v.cols <= 40 ? 0 : 1}>
       <Text dimColor>{glyphs.move + ' move'}</Text>
       <Button key="key:assign" plain dimColor hotkey="a" onPress={() => { void openAssign($, 'owner', m.ticket, els.canType) }}>assign</Button>
       <Button key="key:decide" plain dimColor hotkey="d" onPress={() => { void openDecide($, m.ticket, els.canType) }}>decide</Button>

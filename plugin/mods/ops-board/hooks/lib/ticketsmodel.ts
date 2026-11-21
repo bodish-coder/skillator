@@ -129,7 +129,7 @@ export function chromeRows(v: View, m: Model, g: Glyphs) {
     ...(c.closed.length ? v.filter.showDone ? [g.sep.length, ...c.closed.map(d => (g.dot + d.n).length), 6]
       : [`${g.sep} ${c.closed.reduce((s, d) => s + d.n, 0)} done hidden`.length] : [])]
   const count = packRows(countItems, v.cols, 1)
-  const keys = packRows([g.move.length + 5, ...KEY_LABELS.slice(1).map(l => l.length + 1), ...(v.me ? [v.me.length] : [])], v.cols, 2)
+  const keys = packRows([g.move.length + 5, ...KEY_LABELS.slice(1).map(l => l.length + 1), ...(v.me ? [v.me.length] : [])], v.cols, v.cols <= 40 ? 0 : 1)
   return { tabs, count, keys, total: tabs + 3 + count + keys }
 }
 
