@@ -27,9 +27,11 @@ const workflow = new Function('args', 'agent', 'phase', 'log', 'pipeline',
 
 test('Workflow triages every selected pending stage and verifies only ACCEPT with host checks', async () => {
   const calls = []
-  const agent = (prompt, { label }) => {
-    calls.push({ prompt, label })
-    return results.find(result => label.endsWith('triage:' + result.ticket))
+  let decision = 'APPROVE'
+  const agent = (prompt, { label, model }) => {
+    calls.push({ prompt, label, model })
+    if (label.includes('triage:')) return results.find(result => label.endsWith('triage:' + result.ticket))
+    return { ticket: 'F2', decision, evidence: 'Done check passes', why: 'Revise the changed file' }
   }
   const pipeline = (items, ...seats) => Promise.all(items.map(async item => {
     let previous
@@ -54,13 +56,25 @@ test('Workflow triages every selected pending stage and verifies only ACCEPT wit
   await assert.rejects(run({ ...args, checked: { 2: { gate: { status: 'blocked' } } } }), /requires the host's/)
   assert.equal(calls.length, 3)
   const checked = { 2: { report: 'Build report', gate: { status: 'pass', exit: 0, log: 'gate.log' } } }
+  await assert.rejects(run({ ...args, checked }), /requires the recorded reviewer route/)
+  checked[2].route = {
+    stage: 2, base: 'a'.repeat(40), risk: 'high', files: ['changed.tsx'],
+    reviewers: [{ seat: 'code-review', tier: 'deep' }, { seat: 'a11y-toph', tier: 'build' }],
+  }
   const reviewed = await run({ ...args, checked })
   assert.deepEqual(reviewed.map(row => row.ticket), ['F2'])
-  assert.deepEqual(calls.slice(3).map(call => call.label), ['AAA2 verify:F2'])
+  assert.equal(reviewed[0].verdict.passed, true)
+  assert.deepEqual(calls.slice(3).map(({ label, model }) => [label, model]), [
+    ['AAA2 code-review:F2', 'fable'], ['AAA2 a11y-toph:F2', 'opus'],
+  ])
   assert.match(calls[3].prompt, /Risk: high/)
+  assert.match(calls[3].prompt, /Changed files: \["changed.tsx"\]/)
   assert.match(calls[3].prompt, /Host checks: passed \(log: gate.log\)/)
   checked[2].gate = { status: 'skip', reason: 'No .skillator/checks script configured' }
-  await run({ ...args, checked })
+  decision = 'CHANGES'
+  const [rework] = await run({ ...args, checked })
+  assert.equal(rework.verdict, null)
+  assert.deepEqual(rework.changes.map(change => change.seat), ['code-review', 'a11y-toph'])
   assert.match(calls.at(-1).prompt, /No .skillator\/checks script configured/)
 })
 

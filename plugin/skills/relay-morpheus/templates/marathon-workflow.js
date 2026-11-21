@@ -4,7 +4,7 @@
 // /gauntlet-run runs it for one phase at a time:
 //   First: args = {phase: 1, triage: true, stages: [12]} (read-only, before dispatch).
 //   After dispatch: args = {phase: 1, prepare: true, accepted, worktrees}.
-//   After host build and checks: args = {phase: 1, accepted, worktrees, checked}.
+//   After host build, checks and routing: args = {phase: 1, accepted, worktrees, checked, models}.
 // args.phase   - the phase to run, 1-based.
 // args.worktrees - stage number -> the worktree `chain dispatch` named for it (a stage worktree
 //                when another stage was in flight); missing = PLAN.runWorktree.
@@ -141,35 +141,74 @@ const implement = it => {
     `\nThis stage works and commits in its own worktree: ${wt} - it replaces the run worktree wherever the prompt names it.`
   const { scope, risk } = args.accepted[it.stage]
   return it.prompt + `\n\nTriage ACCEPT (${risk} risk). Scope: ${scope}` + here +
-    '\n\nStop after implementation and local tests, before review or commit. The host runs the deterministic gate first and resumes this build session for fixes or for pre-commit review and commit.'
+    '\n\nStop after implementation and local tests, before review or commit. The host runs the deterministic gate and reviewer seats, and resumes this build session for requested changes or to commit the approved diff.'
 }
 
 const row = it => ({ stage: it.stage, code: it.code, ticket: it.ticket, worktree: wtOf(it) })
 if (args.prepare === true) return items.map(it => ({ ...row(it), prompt: implement(it) }))
 
+const focus = {
+  'code-review': 'Check correctness and scope, run the Done check, and quote its output. If the report says PARKED, verify the independent work, confirm the gated files hold no partial guess, and return the existing parked payload with the union of affected files.',
+  'design-arwen': 'Apply the design-arwen review to the visible UI states, hierarchy, interaction and consistency.',
+  'a11y-toph': 'Apply the a11y-toph review to the affected UI, including semantics, keyboard access and focus.',
+  'security-review': 'Review the diff defensively for authorization, trust-boundary validation, cryptography and secret handling. Identify corrections without developing exploits or exposing secret values.',
+}
+const models = args.models ?? { build: 'opus', deep: 'fable' }
+
 for (const it of items) {
-  const gate = args.checked?.[it.stage]?.gate
+  const { gate, route } = args.checked?.[it.stage] ?? {}
   const passed = gate?.status === 'pass' && gate.exit === 0 && typeof gate.log === 'string' && gate.log
   const skipped = gate?.status === 'skip' && typeof gate.reason === 'string' && gate.reason
   if (!passed && !skipped) throw new Error(`Stage ${it.stage} requires the host's passing or skipped check result before review`)
+  if (route?.stage !== it.stage || route.risk !== args.accepted[it.stage].risk ||
+      !Array.isArray(route.files) || !Array.isArray(route.reviewers) ||
+      route.reviewers[0]?.seat !== 'code-review' ||
+      route.reviewers.some(({ seat, tier }) => !Object.hasOwn(focus, seat) || !['build', 'deep'].includes(tier) || !models[tier])) {
+    throw new Error(`Stage ${it.stage} requires the recorded reviewer route`)
+  }
 }
 
-const verify = (it, { report, gate }) => `You verify one ticket of ${PLAN.run}. Read and run only: never edit a file, commit, or touch TICKETS.md.
+const REVIEW = {
+  ...VERDICT,
+  properties: {
+    ...VERDICT.properties,
+    decision: { enum: ['APPROVE', 'CHANGES'] },
+  },
+  required: ['ticket', 'decision', 'evidence'],
+}
+
+const verify = (it, { report, gate, route }, seat) => `You are the ${seat} reviewer for one ticket of ${PLAN.run}. Read and run only: never edit a file, commit, or touch TICKETS.md.
 Ticket ${it.ticket} (stage ${it.stage}, ${it.code}). Done = ${it.done}
-Its files: ${it.files.join(', ')}. Worktree: ${wtOf(it)} - use git -C "<worktree>" and absolute paths, never cd.
+Planned files: ${JSON.stringify(it.files)}. Changed files: ${JSON.stringify(route.files)}.
+Worktree: ${wtOf(it)} - use git -C "<worktree>" and absolute paths, never cd.
 Triage scope: ${args.accepted[it.stage].scope}. Risk: ${args.accepted[it.stage].risk}.
 Host checks: ${gate.status === 'pass' ? `passed (log: ${gate.log})` : gate.reason}.
 The implementer's report:
 ---
 ${report == null ? '(none - the implementer returned nothing)' : report}
 ---
-1. Find the commit for ${it.ticket} on that worktree's branch (git -C "<worktree>" log --oneline -5); its diff must touch only what the ticket needs.
-2. Run the check the Done line names, now, and quote what it printed. passed: true only on that evidence.
-3. If the report says PARKED: check that the independent part works, check (git diff) that the gated files hold no partial guess, judge whether the decision is genuinely the user's, and list every file the gated part would touch; parked.files is the union of yours and the implementer's.
-Return the VERDICT: sha = that commit's short sha (empty when there is none).`
+Review the current changes against base ${route.base}. Inspect staged, unstaged and listed untracked files.
+${focus[seat]}
+Return decision APPROVE or CHANGES with evidence. For CHANGES include actionable findings in why. Leave sha empty because the host commits only after approval.`
 
 phase(title)
-log(`${PLAN.run} ${title}: ${items.map(it => it.ticket).join(' ')} - ${items.length} verify agents`)
-const verdicts = await pipeline(items,
-  it => agent(verify(it, args.checked[it.stage]), { label: `${it.code} verify:${it.ticket}`, phase: title, schema: VERDICT }))
-return items.map((it, i) => ({ ...row(it), verdict: verdicts[i] || null }))
+log(`${PLAN.run} ${title}: ${items.map(it => it.ticket).join(' ')} - routed review`)
+const reviews = await pipeline(items, async it => {
+  const checked = args.checked[it.stage]
+  const results = []
+  for (const { seat, tier } of checked.route.reviewers) {
+    const result = await agent(verify(it, checked, seat), {
+      model: models[tier], label: `${it.code} ${seat}:${it.ticket}`, phase: title, schema: REVIEW,
+    })
+    results.push({ seat, result })
+  }
+  return results
+})
+return items.map((it, i) => {
+  const reviewsForTicket = reviews[i] ?? []
+  const changes = reviewsForTicket.filter(({ result }) => result?.ticket === it.ticket && result.decision === 'CHANGES')
+  const code = reviewsForTicket[0]?.result
+  const approved = reviewsForTicket.length === args.checked[it.stage].route.reviewers.length &&
+    reviewsForTicket.every(({ result }) => result?.ticket === it.ticket && result.decision === 'APPROVE' && result.evidence?.trim())
+  return { ...row(it), reviews: reviewsForTicket, changes, verdict: approved ? { ...code, passed: true, sha: '' } : null }
+})
