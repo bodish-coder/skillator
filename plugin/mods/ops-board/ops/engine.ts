@@ -286,7 +286,7 @@ export function makeEngine(o: EngineOpts): Engine {
     if (stopped) return
     if (r.code !== 0) { relayFailed(r); draw(); return }
     setNote(isRelayNote, null)
-    const open = parseRuns(r.out, {}).filter(x => x.done < x.total)
+    const open = parseRuns(r.out, {}).filter(x => x.done < x.total || x.metered)
     const next: Record<string, string> = {}
     const js: Record<string, string> = {}
     for (let i = 0; i < open.length; i += 2) {

@@ -21,9 +21,10 @@ export type Usage = { five: Window | null; seven: Window | null; spendLimitPct: 
                       costUsd: number | null; decision: string | null }   // decision = relay `chain decide` line
 export type Level = 'green' | 'amber' | 'red'
 export type Watch = { level: Level; reasons: string[] }
+export type SeatUsage = { id: string; seat: string; elapsedMs: number | null; usd?: number; tokens?: number }
 export type Stage = { n: number; code: string; ticket: string; title: string; after: string; files: string; state: string
-                      landed?: string }   // F99: the run file's landed cell (a sha), when it has one
-export type RunView = { id: string; title: string; done: number; total: number; owner: string | null;
+                      landed?: string; seats?: SeatUsage[]; triage?: string; triageScope?: string; triageWhy?: string }   // F99: the run file's landed cell (a sha), when it has one
+export type RunView = { id: string; title: string; done: number; total: number; owner: string | null; metered?: true;
                         stages: Stage[]; planned: boolean     // planned = chain planned, nothing dispatched
                         decisions: string[]                   // F50: parked `## Decisions` still unanswered, "Q1 F49 <question> - <what> waits on it"
                         // F85: from `relay-morpheus resume <id>` (the run file) and the .workflow.js beside it

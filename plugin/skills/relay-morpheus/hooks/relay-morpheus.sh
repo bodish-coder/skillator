@@ -690,7 +690,7 @@ cmd_list() {
     # One awk pass, not `grep -c`: grep prints 0 and ALSO exits 1 when it
     # finds nothing, so `$(grep -c ... || echo 0)` returns 0 twice. A `>` row
     # is closed - its work moved to the stage it names - so it counts as done.
-    set -- $(awk 'BEGIN{FS="|"} /^\| *[0-9]+ *\|/{t++; s=$4; gsub(/ /,"",s); if(s=="x"||s==">")d++} END{print t+0, d+0}' "$f")
+    set -- $(awk 'BEGIN{FS="|"} /^\| *[0-9]+ *\|/{t++; s=$4; gsub(/ /,"",s); if(s=="x"||s==">"||s=="-")d++} END{print t+0, d+0}' "$f")
     tot=$1; done_n=$2
     open=$(awk 'BEGIN{FS="|"} /^\| *[0-9]+ *\|/{s=$4;gsub(/ /,"",s); if(s=="~"||s=="!"||s=="?"){n=$2;gsub(/ /,"",n); printf "%s%s", (c++?",":""), n}}' "$f")
     printf 'RUN-%s  %-42s  %s/%s done' "$id" "$title" "$done_n" "$tot"
@@ -698,6 +698,7 @@ cmd_list() {
     printf '
           plan: %s
 ' "$plan"
+    if grep -q '^seat: ' "$f"; then printf '          gauntlet-usage: yes\n'; fi
     ow=$(hdr_field "$f" owner)
     [ -z "$ow" ] || printf '          owner: %s\n' "$ow"
     wtl=$(hdr_field "$f" worktree)
@@ -2338,7 +2339,7 @@ chain_edge() {
   fi
   lock
   c=$(code_of "$n"); [ -n "$c" ] || die "stage $n has no chain block - chain plan $n first"
-  case "$(row_cell "$n" 4)" in x|'>') die "stage $n is closed ($(row_cell "$n" 4)) - an edge on it changes nothing" ;; esac
+  case "$(row_cell "$n" 4)" in x|'>'|'-') die "stage $n is closed ($(row_cell "$n" 4)) - an edge on it changes nothing" ;; esac
   [ -z "$io" ] || [ -n "$(q_get "$k" state)" ] || die "no Q$k in $RUN"
   RELAY_EDGE="$line" awk -v n="$n" '
     !inb && $0 ~ ("^### [A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9] - stage " n " - ") { inb = 1; print; next }

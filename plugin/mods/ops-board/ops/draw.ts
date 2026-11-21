@@ -17,7 +17,7 @@ import { armLines } from '../hooks/lib/teamsarm'
 import { messageLines, pendingHandoffOf, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { buildModel, chipsOf, headKey, HEAD, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor, personalGroups } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
-import { isFinished, modeOf, runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
+import { isFinished, modeOf, runDetails, runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
 import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
 import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM, MUTED_HOW, mutedWords } from '../hooks/lib/facts'
 import type { Limits } from '../hooks/lib/facts'
@@ -552,7 +552,7 @@ function stageLine(st: Stage, planned: boolean): Seg[] {
   const t = [...ids].join(' ')
   const dot: Mono = { text: '●', color: statusColor(stageStatus(st, planned)), mono: STAGE_MONO[st.state] ?? '·' }
   return [{ text: '    ' }, dot, { text: ` ${String(st.n).padStart(2)}  ` },
-    ...(t ? [{ text: t + ' ', color: 'suggestion' as Color }] : []), { text: words.join(' ') }]
+    ...(t ? [{ text: t + ' ', color: 'suggestion' as Color }] : []), { text: words.join(' ') + (st.state === 'rejected' ? '  rejected' : '') }]
 }
 
 // F76: the Workflows tab (id 'runs') - a Runs section (relay runs) and a Workflows section, each a header
@@ -578,7 +578,7 @@ function runsBody(s: State, h: number): Seg[][] {
 function runRows(s: State, sel: string): Keyed[] {
   if (!s.runs.length) return [{ key: 'none', segs: [dim('    ' + (s.runsRead ? 'no open runs - plan one with relay-morpheus (plan-runs)' : 'reading runs…'))] }]
   const idW = Math.max(...s.runs.map(r => r.id.length)) + 2
-  const out: Keyed[] = s.runs.map((run: RunView): Keyed => {
+  const out: Keyed[] = s.runs.flatMap((run: RunView): Keyed[] => {
     const rCol = statusColor(runStatus(run))
     const dot: Seg = { text: '●', color: rCol }   // F76: the Tickets tab's colours
     const right = modeOf(run) + ' · ' + (run.planned ? `planned · ${run.stages.length} stage${run.stages.length === 1 ? '' : 's'}` : `${run.done}/${run.total} done`)
@@ -589,9 +589,10 @@ function runRows(s: State, sel: string): Keyed[] {
     const body = idStr + titleStr
     const text = body + ' '.repeat(Math.max(2, avail - cells(body) - right.length)) + right
     const fin = isFinished(run)
-    return { key: 'row:' + run.id, segs: isSel
+    const row: Keyed = { key: 'row:' + run.id, segs: isSel
       ? [{ text: '› ' }, dot, { text: text.padEnd(avail), inverse: true }]
       : [{ text: '  ' }, dot, { text: idStr, color: fin ? undefined : 'suggestion', bold: !fin, dim: fin }, { text: titleStr, dim: fin }, { text: text.slice(body.length), color: fin ? undefined : rCol, dim: fin }] }   // F99: a finished run dim whole
+    return fin ? [row, ...runDetails(run).map(l => ({ ...l, segs: [{ text: '    ' }, ...l.segs] }))] : [row]
   })
   const ex = s.runs.find(r => r.id === s.runsExpanded)
   if (ex) {
@@ -599,9 +600,9 @@ function runRows(s: State, sel: string): Keyed[] {
     if (!ex.stages.length) out.push({ key: 'none', segs: [dim('    no stages read yet')] })
     ex.stages.forEach(st => out.push({ key: 'st:' + st.n, segs: stageLine(st, ex.planned) }))
     for (const l of runLines(ex, s.board)) {
-      if (/^(par|dec|phase):/.test(l.key)) out.push({ key: l.key, segs: [{ text: '    ' }, ...l.segs] })
+      if (/^(par|dec|phase):/.test(l.key) || (!isFinished(ex) && /^(triage|usage):/.test(l.key))) out.push({ key: l.key, segs: [{ text: '    ' }, ...l.segs] })
     }
-    out.push({ key: 'start', segs: [{ text: '    ' }, hot('e engage', 'e'), dim('; the command is then shown to paste into your CLI')] })
+    if (!isFinished(ex)) out.push({ key: 'start', segs: [{ text: '    ' }, hot('e engage', 'e'), dim('; the command is then shown to paste into your CLI')] })
   }
   return out
 }

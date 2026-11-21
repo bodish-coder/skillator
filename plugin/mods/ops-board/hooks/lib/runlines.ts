@@ -1,5 +1,5 @@
 import type { Color } from 'claude-code'
-import type { Board, Box, RunView, Stage, Ticket } from '../../types'
+import type { Board, Box, RunView, SeatUsage, Stage, Ticket } from '../../types'
 import type { Seg } from './bandlines'
 import type { Line } from './healthlines'
 import { paint } from './board'
@@ -26,10 +26,10 @@ export const sectionHead = (sec: RunsSection, open: boolean, n: number | null) =
 // pending read the same in every tab: completed = [x], running = [~], pending (not
 // started) = [ ], failed = [!] (red, as before). A section header takes the colour of
 // the most pressing status in it: running, then failed, pending, completed.
-export type RunStatus = 'completed' | 'running' | 'pending' | 'failed'
-const STATUS_BOX: Record<RunStatus, Box> = { completed: 'x', running: '~', pending: ' ', failed: '!' }
+export type RunStatus = 'completed' | 'running' | 'pending' | 'failed' | 'rejected'
+const STATUS_BOX: Record<RunStatus, Box> = { completed: 'x', running: '~', pending: ' ', failed: '!', rejected: '-' }
 export const statusColor = (st: RunStatus): Color => paint(STATUS_BOX[st])
-// F99: finished = every stage row landed or re-planned (relay list's done count); the one definition.
+// Relay counts landed, re-planned and rejected stages as closed.
 export const isFinished = (r: RunView) => r.total > 0 && r.done >= r.total
 // Active runs in list order, then the finished ones - a finished run sorts below every active one.
 export const orderRuns = (runs: RunView[]) => [...runs.filter(r => !isFinished(r)), ...runs.filter(isFinished)]
@@ -37,10 +37,9 @@ export const orderRuns = (runs: RunView[]) => [...runs.filter(r => !isFinished(r
 // a failed stage shows red on its own row.
 export const runStatus = (r: RunView): RunStatus =>
   isFinished(r) ? 'completed' : r.planned ? 'pending' : 'running'
-// A stage: x landed, ~ / open in flight, ! failed; pending, parked (?), re-planned (>) or
-// unknown (-) has not started; a planned run's stages have not either.
+// Rejected stages are terminal and have their own status.
 export const stageStatus = (s: Stage, planned: boolean): RunStatus =>
-  planned ? 'pending' : s.state === 'x' ? 'completed' : s.state === '~' || s.state === 'open' ? 'running' : s.state === '!' ? 'failed' : 'pending'
+  planned ? 'pending' : s.state === 'rejected' ? 'rejected' : s.state === 'x' ? 'completed' : s.state === '~' || s.state === 'open' ? 'running' : s.state === '!' ? 'failed' : 'pending'
 const PRESSING: RunStatus[] = ['running', 'failed', 'pending', 'completed']
 export const sectionStatus = (all: RunStatus[]): RunStatus | null => PRESSING.find(st => all.includes(st)) ?? null
 
@@ -50,9 +49,9 @@ export const continuePrompt = (id: string) =>
 // F85: a run with a /gauntlet-plan script beside it is a workflow run; else the Chain
 // header's mode, else agents.
 export const modeOf = (r: RunView) => (r.phases ? 'workflow' : r.mode ?? 'agents')
-// The first phase with a stage not landed (x) or moved on (>); -1: none.
+// The first phase with an unclosed stage; -1 means none.
 export const nextPhase = (r: RunView) =>
-  r.phases?.findIndex(ph => ph.some(it => !['x', '>'].includes(r.stages.find(s => s.n === it.n)?.state ?? ''))) ?? -1
+  r.phases?.findIndex(ph => ph.some(it => !['x', '>', 'rejected'].includes(r.stages.find(s => s.n === it.n)?.state ?? ''))) ?? -1
 
 // F85: engage - relay-morpheus.sh's DRIVER_STALE default: a driver stamp younger is live.
 export const DRIVER_STALE_MIN = 20
@@ -83,7 +82,7 @@ export function engageOf(r: RunView, now: number): EngageCheck {
 
 // F85: a short title - up to the first '. ' or ' (', as /pending cuts one, at most 40 wide.
 export const shortTitle = (s: string) => cut(s.split(/\. | \(/)[0]!.trim(), 40)
-// F99: a finished run's one row - the done dot, the rest dim; no stage table, no Engage.
+// Finished runs use a dim header and no Engage.
 export const finishedLine = (r: RunView): Line =>
   ({ key: 'run:' + r.id, segs: [{ text: '●', color: statusColor('completed') }, { text: ` ${r.id}  ${r.title}  ${r.done}/${r.total} done`, dim: true }] })
 // The lead of a row serving stage n of a run: `s137 B10 Muse marketplace add installs nothing`.
@@ -95,11 +94,52 @@ export function stageLead(r: RunView, n: number, board: Board | null): string {
 }
 
 const STATE_WORD: Record<string, string> = {
-  x: 'landed', '~': 'in flight', '!': 'failed', '?': 'parked', '>': 're-planned', open: 'open', pending: 'pending',
+  x: 'landed', '~': 'in flight', '!': 'failed', '?': 'parked', '>': 're-planned', rejected: 'rejected', open: 'open', pending: 'pending',
 }
 const cut = (s: string, room: number) => (s.length <= room ? s : s.slice(0, Math.max(1, room - 1)) + '…')
 // A stage's ticket ids; exported as stageTickets, apart from team.ts's ticketsOf.
 const ticketsOf = (s: Stage) => s.ticket.split(/\s+/).filter(Boolean)
+export function usageText(seats: SeatUsage[]): string {
+  if (!seats.length) return ''
+  const time = seats.flatMap(s => s.elapsedMs === null ? [] : [s.elapsedMs])
+  const costs = seats.flatMap(s => s.usd === undefined ? [] : [s.usd])
+  const tokens = seats.flatMap(s => s.tokens === undefined || s.usd !== undefined ? [] : [s.tokens])
+  const sum = (values: number[]) => values.reduce((total, value) => total + value, 0)
+  const minutes = sum(time) / 60_000
+  const wall = time.length ? `${minutes > 0 && minutes < 0.01 ? '<0.01' : minutes.toFixed(2)} min seat time${time.length < seats.length ? ' (partial)' : ''}` : 'seat time unavailable'
+  const dollars = sum(costs)
+  const usage = [
+    ...(costs.length ? [dollars > 0 && dollars < 0.0001 ? '<$0.0001' : '$' + dollars.toFixed(4)] : []),
+    ...(tokens.length ? [`${sum(tokens)} tokens`] : []),
+  ].join(' + ')
+  return wall + ' · ' + (usage ? usage + (costs.length + tokens.length < seats.length ? ' (partial usage)' : '') : 'usage unavailable')
+}
+
+export const runUsage = (r: RunView) => usageText(r.stages.flatMap(s => s.seats ?? []))
+
+export function runDetails(r: RunView): Line[] {
+  const lines: Line[] = []
+  const total = runUsage(r)
+  if (total) lines.push({ key: 'usage:' + r.id, segs: [{ text: 'Run total · ' + total, dim: true }] })
+  const tickets = new Map<string, SeatUsage[]>()
+  for (const s of r.stages) {
+    if (s.triage) lines.push({ key: `triage:${r.id}:${s.n}`, segs: [
+      { text: `s${s.n} ${s.ticket} · ${s.triage}` },
+      { text: [s.triageScope, s.triageWhy].filter(Boolean).map(t => ' · ' + t).join(''), dim: true },
+    ] })
+    if (s.seats?.length) {
+      const label = s.ticket || `stage ${s.n}`
+      const records = tickets.get(label) ?? []
+      records.push(...s.seats)
+      tickets.set(label, records)
+    }
+  }
+  for (const [ticket, records] of tickets) {
+    lines.push({ key: `usage:${r.id}:${ticket}`, segs: [{ text: ticket + ' · ' + usageText(records) }] })
+  }
+  return lines
+}
+
 const afterOf = (s: Stage) => s.after.split(/[\s,]+/).filter(x => /^\d+$/.test(x)).map(Number)
 
 function dot(board: Board | null, id: string): Seg {
@@ -165,6 +205,7 @@ export function runLines(run: RunView, board: Board | null): Line[] {
       ...(word ? [{ text: '  ' + word, color: (s.state === '!' ? 'error' : s.state === 'x' ? 'success' : undefined) as Color | undefined, dim: s.state === 'pending' }] : []),
     ] })
   }
+  lines.push(...runDetails(run))
   if (run.planned && run.stages.length > 1) {
     const t = wavesText(run.stages)
     const [lead, rest] = [t.slice(0, t.indexOf(':') + 1), t.slice(t.indexOf(':') + 1)]

@@ -587,7 +587,7 @@ function DoList {
         $tot++
         $st = Cell $l 3
         # A `>` row is closed - its work moved to the stage it names.
-        if ($st -eq 'x' -or $st -eq '>') { $dn++ }
+        if ($st -in @('x', '>', '-')) { $dn++ }
         if ($st -eq '~' -or $st -eq '!' -or $st -eq '?') { $open += $n }
       }
     }
@@ -595,6 +595,7 @@ function DoList {
     if ($open) { $row += "  (stage $($open -join ',') open)" }
     $row
     "          plan: $plan"
+    if ($lines -match '^seat: ') { "          gauntlet-usage: yes" }
     $ow = HdrField $f.FullName 'owner'
     if ($ow) { "          owner: $ow" }
     $wl = HdrField $f.FullName 'worktree'
@@ -2334,7 +2335,7 @@ function DoChainEdge($n) {
   Lock
   try {
     $c = CodeOf $n; if (-not $c) { Die "stage $n has no chain block - chain plan $n first" }
-    $sn = RowCellN $n 3; if ($sn -cin @('x', '>')) { Die "stage $n is closed ($sn) - an edge on it changes nothing" }
+    $sn = RowCellN $n 3; if ($sn -cin @('x', '>', '-')) { Die "stage $n is closed ($sn) - an edge on it changes nothing" }
     if ($k -and $null -eq (QGet $k 'state')) { Die "no Q$k in $Run" }
     $inb = $false; $done = $false
     $out = foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {

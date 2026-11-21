@@ -433,6 +433,48 @@ resume. Replaying the same record is safe. A replacement stage gets fresh triage
   for the owner to revisit. Later gauntlet phases may advance past the
   rejected stage's scheduling edge.
 
+### Measure each model call (F189)
+
+Measure every triage, build, reviewer and commit seat, including failed calls and
+every resumed build call for fixes or commits. Use the run file path printed
+by Relay resume (the ledger, not the stage worktree).
+
+For each host delegate call (or in-session seat), run the first command just
+before invoking it, then finish it as soon as it returns. Save the printed ID.
+
+```sh
+node "<relay-morpheus>/hooks/gauntlet-usage.mjs" start "<run-file>" <stage> build
+node "<relay-morpheus>/hooks/gauntlet-usage.mjs" finish "<run-file>" <stage> <id> tokens <amount>
+```
+
+Use the role name (for example, `triage`, `code-review`, `build-fix` or
+`build-commit`) and a new start ID for each invocation. Use `usd <amount>`
+if the host reports the actual call's USD charge, otherwise use
+`tokens <amount>` for the host-reported call total or the sum of explicitly
+reported non-overlapping token counts. If the host exposes neither, omit
+both arguments. Never use generated response prose, prices, quota deltas,
+or session totals that include other work. For a cumulative per-delegate
+counter, use the before/after difference only for that delegate's isolated call.
+If usage becomes available afterward, repeat finish with the reported amount.
+If a call cannot be observed to return, keep its start in the ledger and start
+its retry with a new ID. When Relay is writing the ledger, retry the recording
+operation after its lock clears, never the model call.
+
+The Workflow template measures each individual Workflow agent call internally.
+Pass a fresh unique alphanumeric or hyphenated `usageId` for each Workflow
+triage or review call. Save the returned JSON array to a file and persist its
+`seatUsage` rows before processing verdicts:
+
+```sh
+node "<relay-morpheus>/hooks/gauntlet-usage.mjs" record "<run-file>" "<workflow-result.json>"
+```
+
+The schema response exposes no metering. When the host separately reports
+usage for an individual Workflow agent call, apply it with `finish` using
+the record's stage and ID. The host-side builder is measured with start and
+finish on every turn. Use a fresh result file for each invocation so a retry of
+the recorder can replay that result without duplicating rows.
+
 ### After build: deterministic checks (F187)
 
 At dispatch, tell the builder to return after implementation and local tests,
@@ -528,9 +570,9 @@ and stop; none plans every open ticket sequentially and runs.
    `RM chain decide`; use no RELAY_CHAIN_PARALLEL for sequential,
    `RELAY_CHAIN_PARALLEL=<stages in the phase>` for parallel,
    `RELAY_CHAIN_PARALLEL=<N>` for parallel N. For pending stages without
-   recorded triage, call `Workflow({scriptPath, args: {phase: <k>, triage: true,
+   recorded triage, call `Workflow({scriptPath, args: {phase: <k>, triage: true, usageId,
    stages: [<pending n>, ...]}})` and record every result as described above.
-   For a modern saved plan with a driver preceding F186, F187 or F188, execute a temporary copy
+   For a modern saved plan with a driver preceding F186, F187, F188 or F189, execute a temporary copy
    combining its unchanged `meta` and `PLAN` with the current template's driver
    below the `nothing below is edited per run` marker. Keep the saved plan intact.
    Then, for each eligible ACCEPT stage, `RM chain dispatch <n> --driver
@@ -544,7 +586,7 @@ and stop; none plans every open ticket sequentially and runs.
    prompts without starting agents. Use a resumable Claude Code Agent for
    each builder and keep its ID for the checks loop above. Run the gate with
    the host shell between builder turns. Call Workflow again with
-   `{phase: <k>, accepted, worktrees, checked, models}` after running the route
+   `{phase: <k>, accepted, worktrees, checked, models, usageId}` after running the route
    hook. Include only eligible stages in `accepted`. Each `checked[n]` is
    `{report: <builder report>, gate: <recorded JSON>, route: <routing JSON>}`.
    Pass the resolved `{build, deep}` model slugs in `models`. A returned
@@ -597,7 +639,7 @@ Cursor, antigravity/agy, codex, muse, pi, opencode and gemini run the same
    <the Driver tag from the table> --owner <delegate>` - the row goes `~` and
    the prompt into the run file **before** any agent exists. Note the worktree each names, flip its
    ticket `[~]` (`RM board <ID> '~'`).
-3. Per ticket, through the delegate: the implementer gets the stage prompt (the
+3. Measure every delegated or in-session seat as described in **Measure each model call**, including triage and builder resumes. Per ticket, through the delegate: the implementer gets the stage prompt (the
    In-flight block's text, with the recorded scope, risk, and stage worktree
    when one was named - the same text `implement(it)` builds); on its
    return follow the shared checks and reviewer routing above. Dispatch every

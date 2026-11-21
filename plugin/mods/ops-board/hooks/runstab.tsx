@@ -6,7 +6,7 @@ import { gitBin, runCall } from './lib/host'
 import { parseBoard } from './lib/board'
 import { norm } from './lib/calls'
 import { parseRuns, scriptPathOf } from './lib/runs'
-import { continuePrompt, eligibleRunTickets, engageOf, finishedLine, isFinished, parseFollowupOut, runLines, stageTickets as ticketsOf, startRunCmd } from './lib/runlines'
+import { continuePrompt, eligibleRunTickets, engageOf, finishedLine, isFinished, parseFollowupOut, runDetails, runLines, stageTickets as ticketsOf, startRunCmd } from './lib/runlines'
 import type { RunLine } from './lib/runlines'
 import { treeLines } from './lib/agents'
 import { diagnose } from './lib/diagnose'
@@ -39,7 +39,7 @@ export const RUNS_POLL_MS = 30_000
 const CHAIN_STATUS_AT_ONCE = 2
 let polling = false
 
-// One read of relay: the list, then each open run's file and its script. A failed list keeps what was shown.
+// One read of relay: the list, then open and metered runs' files and scripts. A failed list keeps what was shown.
 export async function pollRuns($: EngineInterface): Promise<void> {
   if (polling) return
   polling = true
@@ -49,7 +49,7 @@ export async function pollRuns($: EngineInterface): Promise<void> {
     const chains: Record<string, string> = {}
     const scripts: Record<string, string> = {}
     const root = (await $.session.repo())?.root ?? ''
-    const open = parseRuns(r.out, {}).filter(x => x.done < x.total)
+    const open = parseRuns(r.out, {}).filter(x => x.done < x.total || x.metered)
     // The open runs' resume calls overlap, at most CHAIN_STATUS_AT_ONCE at a time.
     let next = 0
     const worker = async () => {
@@ -414,7 +414,7 @@ export async function pushPendingRunNative($: EngineInterface, id?: string): Pro
   const open = openRuns(runs)
   const r0 = (id ? runs.find(r => r.id === id) : open[0]) ?? runs[0]
   if (!r0) { say($, 'no run available to push pending stages'); return }
-  const pending = r0.stages.filter(s => s.state !== 'x' && s.state !== '~' && s.state !== '>')
+  const pending = r0.stages.filter(s => s.state !== 'x' && s.state !== '~' && s.state !== '>' && s.state !== 'rejected')
   if (pending.length === 0) { say($, `${r0.id}: no eligible pending stages (all completed or in-flight)`); return }
   const mode = r0.mode === 'parallel' ? 'parallel' : 'sequential'
   const r = await runCall($, 'relay-push-pending', [r0.id, mode])
@@ -582,6 +582,7 @@ export async function RunsTab($: EngineInterface, els: Els, v: RunsView, a: Agen
         <Text wrap="truncate-end">{l.segs.map(s => <Text color={s.color} dimColor={s.dim}>{s.text}</Text>)}</Text>
         <Button key={'diagnose:' + run.id} hotkey={run.id === current ? 'd' : undefined} plain dimColor onPress={() => { void openDiagnose($, run.id) }}>diagnose</Button>
       </Box>,
+      ...runDetails(run).map(draw),
     )
   })
   return out

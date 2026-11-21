@@ -115,6 +115,26 @@ const isAccepted = (it, result) => result?.ticket === it.ticket && result.verdic
   [result.scope, result.why].every(value => typeof value === 'string' && value.trim() &&
     value.length <= 500 && !/[\u0000-\u001f\u007f\u2028\u2029]/u.test(value))
 
+// Agent responses contain schema data. Metering comes from the host, outside that data.
+const seatUsage = new Map()
+const measuredAgent = async (it, seat, prompt, options) => {
+  const startedAt = Date.now()
+  const records = seatUsage.get(it.stage) ?? []
+  const id = `workflow-${args.usageId ?? startedAt}-${it.stage}-${seat}-${records.length}`
+  const record = { id, seat, startedAt, elapsedMs: null }
+  records.push(record)
+  seatUsage.set(it.stage, records)
+  try {
+    return await agent(prompt, options)
+  } catch (error) {
+    log(`${it.code} ${seat} did not return: ${error}`)
+    return null
+  } finally {
+    const endedAt = Date.now()
+    if (endedAt >= startedAt) record.elapsedMs = endedAt - startedAt
+  }
+}
+
 if (args.triage === true) {
   if (!Array.isArray(args.stages) || args.stages.some(stage => !planned.some(it => it.stage === stage))) {
     throw new Error('args.stages must list pending stage numbers from the selected phase')
@@ -122,8 +142,8 @@ if (args.triage === true) {
   const items = planned.filter(it => args.stages.includes(it.stage))
   phase(title)
   const results = await pipeline(items,
-    it => agent(triage(it), { label: `${it.code} triage:${it.ticket}`, phase: title, schema: TRIAGE }))
-  return items.map((it, i) => ({ stage: it.stage, ticket: it.ticket, triage: results[i] || null }))
+    it => measuredAgent(it, 'triage', triage(it), { label: `${it.code} triage:${it.ticket}`, phase: title, schema: TRIAGE }))
+  return items.map((it, i) => ({ stage: it.stage, ticket: it.ticket, triage: results[i] || null, seatUsage: seatUsage.get(it.stage) ?? [] }))
 }
 
 if (!args.accepted || typeof args.accepted !== 'object') {
@@ -197,7 +217,7 @@ const reviews = await pipeline(items, async it => {
   const checked = args.checked[it.stage]
   const results = []
   for (const { seat, tier } of checked.route.reviewers) {
-    const result = await agent(verify(it, checked, seat), {
+    const result = await measuredAgent(it, seat, verify(it, checked, seat), {
       model: models[tier], label: `${it.code} ${seat}:${it.ticket}`, phase: title, schema: REVIEW,
     })
     results.push({ seat, result })
@@ -210,5 +230,5 @@ return items.map((it, i) => {
   const code = reviewsForTicket[0]?.result
   const approved = reviewsForTicket.length === args.checked[it.stage].route.reviewers.length &&
     reviewsForTicket.every(({ result }) => result?.ticket === it.ticket && result.decision === 'APPROVE' && result.evidence?.trim())
-  return { ...row(it), reviews: reviewsForTicket, changes, verdict: approved ? { ...code, passed: true, sha: '' } : null }
+  return { ...row(it), seatUsage: seatUsage.get(it.stage) ?? [], reviews: reviewsForTicket, changes, verdict: approved ? { ...code, passed: true, sha: '' } : null }
 })
