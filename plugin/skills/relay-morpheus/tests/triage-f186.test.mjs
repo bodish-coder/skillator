@@ -25,7 +25,7 @@ const workflow = new Function('args', 'agent', 'phase', 'log', 'pipeline',
     run: 'RUN-0001', runWorktree: 'run-root', mode: 'parallel', phases: [stages],
   }) + ';\n' + driver + '\n})()')
 
-test('Workflow triages every selected pending stage and only builds ACCEPT with the recorded risk', async () => {
+test('Workflow triages every selected pending stage and verifies only ACCEPT with host checks', async () => {
   const calls = []
   const agent = (prompt, { label }) => {
     calls.push({ prompt, label })
@@ -44,12 +44,24 @@ test('Workflow triages every selected pending stage and only builds ACCEPT with 
   await assert.rejects(run({}), /record triage/)
   await assert.rejects(run({ accepted: { 1: results[0] } }), /valid ACCEPT/)
   await assert.rejects(run({ accepted: { 3: results[2] } }), /valid ACCEPT/)
-  const built = await run({ accepted: { 2: results[1] }, worktrees: { 2: 'ticket-root' } })
-  assert.deepEqual(built.map(row => row.ticket), ['F2'])
-  assert.deepEqual(calls.slice(3).map(call => call.label), ['AAA2 fix:F2', 'AAA2 verify:F2'])
-  assert.match(calls[3].prompt, new RegExp('high risk.*' + scope))
-  assert.match(calls[3].prompt, /ticket-root/)
-  assert.match(calls[4].prompt, /Risk: high/)
+  const args = { accepted: { 2: results[1] }, worktrees: { 2: 'ticket-root' } }
+  const prepared = await run({ ...args, prepare: true })
+  assert.deepEqual(prepared.map(row => row.ticket), ['F2'])
+  assert.match(prepared[0].prompt, new RegExp('high risk.*' + scope))
+  assert.match(prepared[0].prompt, /ticket-root/)
+  await assert.rejects(run(args), /requires the host's/)
+  await assert.rejects(run({ ...args, checked: { 2: { report: 'Checks passed' } } }), /requires the host's/)
+  await assert.rejects(run({ ...args, checked: { 2: { gate: { status: 'blocked' } } } }), /requires the host's/)
+  assert.equal(calls.length, 3)
+  const checked = { 2: { report: 'Build report', gate: { status: 'pass', exit: 0, log: 'gate.log' } } }
+  const reviewed = await run({ ...args, checked })
+  assert.deepEqual(reviewed.map(row => row.ticket), ['F2'])
+  assert.deepEqual(calls.slice(3).map(call => call.label), ['AAA2 verify:F2'])
+  assert.match(calls[3].prompt, /Risk: high/)
+  assert.match(calls[3].prompt, /Host checks: passed \(log: gate.log\)/)
+  checked[2].gate = { status: 'skip', reason: 'No .skillator/checks script configured' }
+  await run({ ...args, checked })
+  assert.match(calls.at(-1).prompt, /No .skillator\/checks script configured/)
 })
 
 const windows = process.platform === 'win32'

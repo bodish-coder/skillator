@@ -433,6 +433,46 @@ resume. Replaying the same record is safe. A replacement stage gets fresh triage
   for the owner to revisit. Later gauntlet phases may advance past the
   rejected stage's scheduling edge.
 
+### After build: deterministic checks (F187)
+
+At dispatch, tell the builder to return after implementation and local tests,
+before review or commit. Keep its session ID in the stage's In-flight `run:`
+line. Use a resumable delegate where available, or keep the build in the
+orchestrator session where the host cannot resume a delegate. Handle an
+immediate stop from the builder before launching checks.
+
+The orchestrator runs the gate itself from the stage worktree:
+
+```sh
+node "<relay-morpheus>/hooks/gauntlet-checks.mjs" "<stage-worktree>" "<run-ledger-directory>/reports/checks/<RUN-id>-s<stage>"
+```
+
+The repo can configure `.skillator/checks.sh`, `.skillator/checks.ps1`, or both,
+with lint, type checks and tests. The script must exit nonzero on failure.
+Windows prefers PowerShell and uses `sh.exe` (Git for Windows) for the shell
+fallback. Other hosts prefer `sh` and use `pwsh` for the PowerShell fallback.
+Use the same log directory throughout a stage, including on resume. The
+command prints the recorded JSON and stores it in `result.json` beside the
+attempt logs. Read the record even when the process exits nonzero.
+
+- **pass** or **skip**: resume the same builder for pre-commit review and
+  commit, then start the verifier. Skip means neither script was configured
+  when checks began.
+  If pre-commit review changes files, run the gate again before verification.
+- **retry**: resume the same builder with the last log path and the relevant
+  failure output. Ask it to fix the failure and return before review or commit. Run the
+  gate again only after that work returns.
+- **blocked**: after the third failure, retain the last log and the gate
+  record, mark the stage `RM stage <n> '!'` (PowerShell `-Mode stage -N <n>
+  -State '!'`), and use `ticket-meta block <ID> "checks failed after three
+  attempts; see <last-log-path>"`. Report the log path.
+  Skip review, merge and automatic retry of this stage. An owner-directed
+  replacement stage uses its own log directory.
+
+Only the orchestrator's recorded pass or skip admits review. A missing or
+unreadable gate result leaves the stage in flight until the command failure
+is diagnosed. Apply the same gate to newly planned replacement stages.
+
 **Run** (`/gauntlet-run [RUN id] | [sequential|parallel] [N|max] [IDs]`):
 a RUN id runs as saved; mode/count/IDs plan as Plan above, show it, then run
 without a pause. A mode or count beside a RUN id: the saved plan fixes its
@@ -450,7 +490,7 @@ and stop; none plans every open ticket sequentially and runs.
    `RELAY_CHAIN_PARALLEL=<N>` for parallel N. For pending stages without
    recorded triage, call `Workflow({scriptPath, args: {phase: <k>, triage: true,
    stages: [<pending n>, ...]}})` and record every result as described above.
-   For a modern saved plan with a pre-F186 driver, execute a temporary copy
+   For a modern saved plan with a driver preceding F186 or F187, execute a temporary copy
    combining its unchanged `meta` and `PLAN` with the current template's driver
    below the `nothing below is edited per run` marker. Keep the saved plan intact.
    Then, for each eligible ACCEPT stage, `RM chain dispatch <n> --driver
@@ -458,15 +498,21 @@ and stop; none plans every open ticket sequentially and runs.
    file **before** the agent exists. Note the worktree each names (stderr
    `stage <n> works and commits in: <path>`; none = the run worktree), flip
    its ticket `[~]` (`RM board <ID> '~'` - it claims an unowned ticket to
-   you, as `ticket-meta start` does (F106)), then one call:
-   `Workflow({scriptPath, args: {phase: <k>, accepted: {"<n>": <recorded ACCEPT>}, worktrees: {"<n>": "<path>"}}})`.
-   Include only stages successfully dispatched. Skip this call if none were dispatched.
-   Write the returned `runId` into each In-flight block's `run:` line.
+   you, as `ticket-meta start` does (F106)). Call
+   `Workflow({scriptPath, args: {phase: <k>, prepare: true, accepted, worktrees}})`
+   with the successfully dispatched stages. The result supplies their build
+   prompts without starting agents. Use a resumable Claude Code Agent for
+   each builder and keep its ID for the checks loop above. Run the gate with
+   the host shell between builder turns. Call Workflow again with
+   `{phase: <k>, accepted, worktrees, checked}`. Include only stages with a
+   host-recorded pass or skip in `accepted`. Each matching `checked[n]` is
+   `{report: <builder report>, gate: <recorded JSON>}`. Skip the review call
+   when none qualify.
 3. Land each returned row as chain.md Step 3 (a `parked` verdict → Park first,
    a `stop` other than `none` → that stop, now): review, `RM chain merge <n>`
    for a stage worktree, `RM stage <n> x workflow <sha>`, `RM board <ID> x`;
    `passed:false` or `null` → `RM stage <n> '!'`, ticket `[ ]` with the why.
-4. A failed stage that a later phase waits on (`BLOCKED`): its retry is a new
+4. A verification failure that a later phase waits on (`BLOCKED`): its retry is a new
    stage (`RM add`, `chain plan`) triaged first with the same prompt and
    recorded verdict, then run on ACCEPT as one Agent call. Keep the saved script intact.
 5. All phases done → `RM chain next` until `FINAL`, then the end batch above
@@ -513,7 +559,8 @@ Cursor, antigravity/agy, codex, muse, pi, opencode and gemini run the same
 3. Per ticket, through the delegate: the implementer gets the stage prompt (the
    In-flight block's text, with the recorded scope, risk, and stage worktree
    when one was named - the same text `implement(it)` builds); on its
-   return the verifier gets the `verify(it, report)` text plus one trailing
+   return follow the shared deterministic checks loop above. After a pass or
+   an explicit skip, the verifier gets the `verify(it, { report, gate })` text plus one trailing
    line: ``End your report with one line `VERDICT: <json>` matching this
    schema: {ticket, passed, sha, evidence, why?, parked?}`` (the script's
    `VERDICT` object pasted). No `VERDICT:` line or bad JSON = `passed:false`,
@@ -526,12 +573,12 @@ Cursor, antigravity/agy, codex, muse, pi, opencode and gemini run the same
    and says so in the first line when the plan is parallel.
 4. **No delegate** (pi without its extension, opencode, gemini): the session is
    the implementer, then the verifier, ticket by ticket in phase order - the
-   stored prompt read and done, then the verify text done as a second pass that
+   stored prompt read and done, the shared checks loop run, then the verify text done as a second pass that
    edits nothing. `run: in-session`.
 5. Landing: step 3 of the Run above, with the landing owner the host's
    delegate value from the table - `RM stage <n> x <delegate> <sha>` (`task`,
    `subagent` or `session`), never `workflow`.
-6. A failed stage that a later phase waits on (`BLOCKED`): its retry is a new
+6. A verification failure that a later phase waits on (`BLOCKED`): its retry is a new
    stage (`RM add`, `chain plan`) triaged first. On ACCEPT, dispatch with the host's delegate from the
    table, or on a host with no delegate `RM chain dispatch <n> --driver <its
    tag> --owner session` (row `~`, prompt on disk) before its work starts

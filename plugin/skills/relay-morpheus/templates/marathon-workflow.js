@@ -1,16 +1,16 @@
 // marathon-workflow.js - relay-morpheus's Workflow script template (F73).
 // /gauntlet-plan copies it beside the run file - .skillator/run-<0000>-<slug>.md ->
 // .skillator/run-<0000>-<slug>.workflow.js - and fills `meta` and `PLAN` (nothing below them).
-// /gauntlet-run runs it one phase per Workflow call, after `chain dispatch` of that phase's stages:
+// /gauntlet-run runs it for one phase at a time:
 //   First: args = {phase: 1, triage: true, stages: [12]} (read-only, before dispatch).
-//   Build: args = {phase: 1, accepted: {'12': <recorded ACCEPT>}, worktrees: {'12': '<path>'}}.
-// args.phase   - the phase to run, 1-based. Required: a phase is one Workflow call, so every stage
-//                in it is on disk (`~`, its prompt in the In-flight block) before its agent exists.
+//   After dispatch: args = {phase: 1, prepare: true, accepted, worktrees}.
+//   After host build and checks: args = {phase: 1, accepted, worktrees, checked}.
+// args.phase   - the phase to run, 1-based.
 // args.worktrees - stage number -> the worktree `chain dispatch` named for it (a stage worktree
 //                when another stage was in flight); missing = PLAN.runWorktree.
 // PLAN.mode (F112) is the plan shape: 'sequential' = one ticket per phase, 'parallel' = file-disjoint tickets, 'parallel <N>' = at most N; the check below refuses a wider phase.
 // Returns one row per ticket: {stage, code, ticket, worktree, verdict}; verdict null = the agent died.
-// Agents: one implementer and one read-and-run-only verifier per ticket, both under its phase. Pure ASCII.
+// Agents: Workflow triages and verifies. The host keeps the implementer resumable across checks. Pure ASCII.
 // The agents never touch the board: each ticket is [~] and claimed before its phase runs - chain dispatch
 // claims it (F80), and RM board <ID> '~' claims an unowned one again on the flip, as ticket-meta start does (F106).
 // Hosts with no Workflow tool read meta and PLAN as data and never execute this file -
@@ -73,7 +73,7 @@ PLAN.phases.forEach((p, i) => {
 
 const k = args && args.phase
 if (!Number.isInteger(k) || k < 1 || k > PLAN.phases.length) {
-  throw new Error(`args.phase must be 1..${PLAN.phases.length} - /gauntlet-run runs one phase per call, after chain dispatch of its stages`)
+  throw new Error(`args.phase must be 1..${PLAN.phases.length}`)
 }
 const planned = PLAN.phases[k - 1]
 const wts = (args && args.worktrees) || {}
@@ -140,13 +140,25 @@ const implement = it => {
   const here = wt === PLAN.runWorktree ? '' :
     `\nThis stage works and commits in its own worktree: ${wt} - it replaces the run worktree wherever the prompt names it.`
   const { scope, risk } = args.accepted[it.stage]
-  return it.prompt + `\n\nTriage ACCEPT (${risk} risk). Scope: ${scope}` + here
+  return it.prompt + `\n\nTriage ACCEPT (${risk} risk). Scope: ${scope}` + here +
+    '\n\nStop after implementation and local tests, before review or commit. The host runs the deterministic gate first and resumes this build session for fixes or for pre-commit review and commit.'
 }
 
-const verify = (it, report) => `You verify one ticket of ${PLAN.run}. Read and run only: never edit a file, commit, or touch TICKETS.md.
+const row = it => ({ stage: it.stage, code: it.code, ticket: it.ticket, worktree: wtOf(it) })
+if (args.prepare === true) return items.map(it => ({ ...row(it), prompt: implement(it) }))
+
+for (const it of items) {
+  const gate = args.checked?.[it.stage]?.gate
+  const passed = gate?.status === 'pass' && gate.exit === 0 && typeof gate.log === 'string' && gate.log
+  const skipped = gate?.status === 'skip' && typeof gate.reason === 'string' && gate.reason
+  if (!passed && !skipped) throw new Error(`Stage ${it.stage} requires the host's passing or skipped check result before review`)
+}
+
+const verify = (it, { report, gate }) => `You verify one ticket of ${PLAN.run}. Read and run only: never edit a file, commit, or touch TICKETS.md.
 Ticket ${it.ticket} (stage ${it.stage}, ${it.code}). Done = ${it.done}
 Its files: ${it.files.join(', ')}. Worktree: ${wtOf(it)} - use git -C "<worktree>" and absolute paths, never cd.
 Triage scope: ${args.accepted[it.stage].scope}. Risk: ${args.accepted[it.stage].risk}.
+Host checks: ${gate.status === 'pass' ? `passed (log: ${gate.log})` : gate.reason}.
 The implementer's report:
 ---
 ${report == null ? '(none - the implementer returned nothing)' : report}
@@ -157,8 +169,7 @@ ${report == null ? '(none - the implementer returned nothing)' : report}
 Return the VERDICT: sha = that commit's short sha (empty when there is none).`
 
 phase(title)
-log(`${PLAN.run} ${title}: ${items.map(it => it.ticket).join(' ')} - ${items.length * 2} agents`)
+log(`${PLAN.run} ${title}: ${items.map(it => it.ticket).join(' ')} - ${items.length} verify agents`)
 const verdicts = await pipeline(items,
-  it => agent(implement(it), { label: `${it.code} fix:${it.ticket}`, phase: title }),
-  (report, it) => agent(verify(it, report), { label: `${it.code} verify:${it.ticket}`, phase: title, schema: VERDICT }))
-return items.map((it, i) => ({ stage: it.stage, code: it.code, ticket: it.ticket, worktree: wtOf(it), verdict: verdicts[i] || null }))
+  it => agent(verify(it, args.checked[it.stage]), { label: `${it.code} verify:${it.ticket}`, phase: title, schema: VERDICT }))
+return items.map((it, i) => ({ ...row(it), verdict: verdicts[i] || null }))
