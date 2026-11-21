@@ -5,6 +5,7 @@
 
 export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' | 'meta-assign-tester' | 'meta-assign-session' | 'meta-decide' | 'meta-decided'
   | 'meta-team-add' | 'meta-team-remove' | 'meta-team-lead'
+  | 'meta-intake'
   | 'meta-status' | 'holo-ticket' | 'meta-reconcile' | 'meta-unblock' | 'meta-start' | 'meta-testing' | 'meta-block'
   | 'relay-list' | 'relay-resume' | 'relay-queue-add' | 'relay-push-pending' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-watchdog-mode' | 'relay-decide'
   | 'relay-stage-landed'
@@ -44,6 +45,7 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
   'pending-kv':         { script: PENDING, sh: a => ['--kv', ...a], ps: a => ['--kv', ...a] },
   'pending-machine':    { script: PENDING, sh: a => ['--machine', ...a], ps: a => ['--machine', ...a] },
   'meta-assign':        { script: META, sh: a => ['assign', ...a], ps: a => ['assign', ...a] },
+  'meta-intake':        { script: META, sh: a => ['intake', ...a], ps: a => ['intake', ...a] },
   'meta-assign-tester': { script: META, sh: a => ['assign-tester', ...a], ps: a => ['assign-tester', ...a] },
   'meta-assign-session': { script: META, sh: a => ['assign-session', ...a], ps: a => ['assign-session', ...a] },   // F178 [id, code]
   'meta-decide':        { script: META, sh: a => ['decide', ...a], ps: a => ['decide', ...a] },

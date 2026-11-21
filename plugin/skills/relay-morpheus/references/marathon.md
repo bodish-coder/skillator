@@ -388,13 +388,172 @@ For an eligible legacy selection, use Legacy recovery above and stop; steps
    `chain plan`, ID, files, Done line, the prompt file's text verbatim as a
    JS string). Nothing below `PLAN` is edited.
 6. Show it: the run file's stages, each phase with its tickets, codes and files,
-   tickets left out and why, the agent count (2 per ticket - an implementer and
-   a read-and-run-only verifier; the final stage is the main session's), the
+   tickets left out and why, the base agent count (an implementer and code
+   reviewer per accepted ticket, with extra seats selected after build), the
    script's path, and the line `run it: /gauntlet-run RUN-<0000>` with what runs
    it on this host: Claude Code `(Workflow tool)`; cursor `(Task tool, one Task
    per agent)`; antigravity/agy `(background subagents)`; codex `(subagents)`;
    muse `(child agents)`; pi, opencode, gemini `(in-session, phases in order;
    pi with the subagent extension: that)`. The script is written on every host.
+
+### Before build: triage (F186)
+
+Each gauntlet ticket stage gets a read-only triage before spec, dispatch or
+build. Use the template's `triage(it)` prompt and `TRIAGE` schema on all hosts.
+Read the ticket, Done line and planned files. Decide whether the work is worth
+doing, bound its scope to the planned files, and assign a risk of `low`,
+`medium` or `high`. A missing or malformed response is retried as triage or
+reported as incomplete. It never authorizes dispatch.
+
+For each result, check its stage and ticket against the plan and the current
+board owner. Record the verdict in that stage's Chain block before dispatch:
+
+```sh
+RM chain triage 66 ACCEPT medium "Export columns and encoding" "Matches the documented export contract"
+```
+
+PowerShell: `-Mode chain -Action triage -N 66 -Verdict ACCEPT -Risk medium
+-Scope "Export columns and encoding" -Why "Matches the documented export contract"`.
+The stage's `tickets:` identifies the ticket. `triage: <verdict> <risk>`,
+`triage-scope:` and `triage-why:` are its metadata. Scope and reason are
+nonblank single lines of up to 500 characters. Reuse the recorded result on
+resume. Replaying the same record is safe. A replacement stage gets fresh triage.
+
+- **ACCEPT**: dispatch only when eligible under the normal chain rules.
+  Pass the recorded scope and risk to the implementer and verifier.
+- **NEEDS-INFO**: require a genuine owner decision. If `parked.stop` is
+  anything other than `none`, use the existing immediate stop. Otherwise use
+  `RM park` with the stage, ticket and existing parked payload (including the
+  gated files and what the decision blocks). Then record NEEDS-INFO with
+  `chain triage` (which sets the stage to `?`) and mark the ticket blocked
+  with its RUN/Q reference as under Park above. A resume after parking can
+  reuse the Q. Continue with independent work and use the existing end batch.
+- **REJECT**: record the reason with `chain triage`. It terminates the stage
+  as `-`, with no build, retry, merge or landed SHA. Leave the ticket open
+  for the owner to revisit. Later gauntlet phases may advance past the
+  rejected stage's scheduling edge.
+
+### Measure each model call (F189)
+
+Measure every triage, build, reviewer and commit seat, including failed calls and
+every resumed build call for fixes or commits. Use the run file path printed
+by Relay resume (the ledger, not the stage worktree).
+
+For each host delegate call (or in-session seat), run the first command just
+before invoking it, then finish it as soon as it returns. Save the printed ID.
+
+```sh
+node "<relay-morpheus>/hooks/gauntlet-usage.mjs" start "<run-file>" <stage> build
+node "<relay-morpheus>/hooks/gauntlet-usage.mjs" finish "<run-file>" <stage> <id> tokens <amount>
+```
+
+Use the role name (for example, `triage`, `code-review`, `build-fix` or
+`build-commit`) and a new start ID for each invocation. Use `usd <amount>`
+if the host reports the actual call's USD charge, otherwise use
+`tokens <amount>` for the host-reported call total or the sum of explicitly
+reported non-overlapping token counts. If the host exposes neither, omit
+both arguments. Never use generated response prose, prices, quota deltas,
+or session totals that include other work. For a cumulative per-delegate
+counter, use the before/after difference only for that delegate's isolated call.
+If usage becomes available afterward, repeat finish with the reported amount.
+If a call cannot be observed to return, keep its start in the ledger and start
+its retry with a new ID. When Relay is writing the ledger, retry the recording
+operation after its lock clears, never the model call.
+
+The Workflow template measures each individual Workflow agent call internally.
+Pass a fresh unique alphanumeric or hyphenated `usageId` for each Workflow
+triage or review call. Save the returned JSON array to a file and persist its
+`seatUsage` rows before processing verdicts:
+
+```sh
+node "<relay-morpheus>/hooks/gauntlet-usage.mjs" record "<run-file>" "<workflow-result.json>"
+```
+
+The schema response exposes no metering. When the host separately reports
+usage for an individual Workflow agent call, apply it with `finish` using
+the record's stage and ID. The host-side builder is measured with start and
+finish on every turn. Use a fresh result file for each invocation so a retry of
+the recorder can replay that result without duplicating rows.
+
+### After build: deterministic checks (F187)
+
+At dispatch, tell the builder to return after implementation and local tests,
+before review or commit. Keep its session ID and the full pre-build HEAD SHA
+in the stage's In-flight block. Start from a clean stage worktree, apart
+from Relay's ticket status updates. Keep the session ID in the `run:`
+line. Use a resumable delegate where available, or keep the build in the
+orchestrator session where the host cannot resume a delegate. Handle an
+immediate stop from the builder before launching checks.
+
+The orchestrator runs the gate itself from the stage worktree:
+
+```sh
+node "<relay-morpheus>/hooks/gauntlet-checks.mjs" "<stage-worktree>" "<run-ledger-directory>/reports/checks/<RUN-id>-s<stage>"
+```
+
+The repo can configure `.skillator/checks.sh`, `.skillator/checks.ps1`, or both,
+with lint, type checks and tests. The script must exit nonzero on failure.
+Windows prefers PowerShell and uses `sh.exe` (Git for Windows) for the shell
+fallback. Other hosts prefer `sh` and use `pwsh` for the PowerShell fallback.
+Use the same log directory throughout a stage, including on resume. The
+command prints the recorded JSON and stores it in `result.json` beside the
+attempt logs. Read the record even when the process exits nonzero.
+
+- **pass** or **skip**: route review below. Skip means neither script was
+  configured when checks began.
+- **retry**: resume the same builder with the last log path and the relevant
+  failure output. Ask it to fix the failure and return before review or commit. Run the
+  gate again only after that work returns.
+- **blocked**: after the third failure, retain the last log and the gate
+  record, mark the stage `RM stage <n> '!'` (PowerShell `-Mode stage -N <n>
+  -State '!'`), and use `ticket-meta block <ID> "checks failed after three
+  attempts; see <last-log-path>"`. Report the log path.
+  Skip review, merge and automatic retry of this stage. An owner-directed
+  replacement stage uses its own log directory.
+
+Only the orchestrator's recorded pass or skip admits review. A missing or
+unreadable gate result leaves the stage in flight until the command failure
+is diagnosed. Apply the same gate to newly planned replacement stages.
+
+### After checks: route reviewers (F188)
+
+With the builder paused, run this against the gate log directory from F187:
+
+```sh
+node "<relay-morpheus>/hooks/gauntlet-review.mjs" "<stage-worktree>" "<pre-build-head>" "<run-file>" "<stage>" "<gate-log-directory>"
+```
+
+The hook reads the recorded ACCEPT risk and the actual staged, unstaged, and
+untracked paths. It records the stage, base, risk, files, and seats as
+`reviewers:` JSON in the Chain block before dispatch. If the ledger is
+locked by a Relay update, rerun after that update completes. Use the JSON
+printed by the hook for review on every host.
+
+| Evidence | Seats and build-jarvis roles |
+|---|---|
+| Every diff | Code review at `build`, raised to `deep` for high risk or a security touch |
+| UI files | Add `design-arwen` at `deep` for design judgment and `a11y-toph` at the code verification tier |
+| Auth, external input handling, crypto, or secrets | Add defensive `security-review` at `deep` |
+
+UI detection uses UI file extensions and path conventions. Security detection
+uses path names and common changed API markers. On a naming convention the
+hook misses, identify the affected surface during code review and request the
+specialist seat before approval. High triage risk raises verification even for
+a plain diff. Resolve the selected tiers through
+[build-jarvis's tier table](../../build-jarvis/SKILL.md) and
+[`PLATFORMS.md`](../../../PLATFORMS.md#role-tiers), using the local model
+mapping if present. Give each read-only reviewer the Workflow template's
+`verify(it, { report, gate, route }, seat)` prompt and `REVIEW` schema.
+
+Collect every seat's result. An explicit `CHANGES` goes back to the same
+builder with the seat's findings. After the builder returns, run the F187 gate
+again, recompute and record routing, and rerun review on the revised diff.
+An absent or malformed result requires completing that review before landing.
+Handle any immediate stop as above. Once all seats approve, resume the same
+builder to commit the reviewed diff without changing it. If pre-commit work
+changes the diff, run the gate and review again before committing. Compare the
+committed changes to what was reviewed and supply the actual commit SHA to
+the landing step. Use the code review result for Done evidence and parking.
 
 **Run** (`/gauntlet-run [RUN id] | [sequential|parallel] [N|max] [IDs]`):
 a RUN id runs as saved; mode/count/IDs plan as Plan above, show it, then run
@@ -407,25 +566,38 @@ and stop; none plans every open ticket sequentially and runs.
    first: a missing `mode` property means a pre-F112 plan; follow Legacy recovery
    (A162), printing a concrete `/gauntlet-plan <mode> <IDs>` command for its
    remaining tickets, and stop before any dispatch. Quoted keys count too.
-2. Phase by phase, in order, skipping a phase whose stages are all `x`:
+2. Phase by phase, in order, skipping a phase with no pending work:
    `RM chain decide`; use no RELAY_CHAIN_PARALLEL for sequential,
    `RELAY_CHAIN_PARALLEL=<stages in the phase>` for parallel,
-   `RELAY_CHAIN_PARALLEL=<N>` for parallel N; then for each of its stages
-   `RM chain dispatch <n> --driver
+   `RELAY_CHAIN_PARALLEL=<N>` for parallel N. For pending stages without
+   recorded triage, call `Workflow({scriptPath, args: {phase: <k>, triage: true, usageId,
+   stages: [<pending n>, ...]}})` and record every result as described above.
+   For a modern saved plan with a driver preceding F186, F187, F188 or F189, execute a temporary copy
+   combining its unchanged `meta` and `PLAN` with the current template's driver
+   below the `nothing below is edited per run` marker. Keep the saved plan intact.
+   Then, for each eligible ACCEPT stage, `RM chain dispatch <n> --driver
    @<sid> --owner workflow` (`ticket-meta session`) - the row goes `~` and the prompt into the run
    file **before** the agent exists. Note the worktree each names (stderr
    `stage <n> works and commits in: <path>`; none = the run worktree), flip
    its ticket `[~]` (`RM board <ID> '~'` - it claims an unowned ticket to
-   you, as `ticket-meta start` does (F106)), then one call:
-   `Workflow({scriptPath, args: {phase: <k>, worktrees: {"<n>": "<path>"}}})`.
-   Write the returned `runId` into each In-flight block's `run:` line.
-3. Land each returned row as chain.md Step 3 (a `parked` verdict → Park first,
+   you, as `ticket-meta start` does (F106)). Call
+   `Workflow({scriptPath, args: {phase: <k>, prepare: true, accepted, worktrees}})`
+   with the successfully dispatched stages. The result supplies their build
+   prompts without starting agents. Use a resumable Claude Code Agent for
+   each builder and keep its ID for the checks loop above. Run the gate with
+   the host shell between builder turns. Call Workflow again with
+   `{phase: <k>, accepted, worktrees, checked, models, usageId}` after running the route
+   hook. Include only eligible stages in `accepted`. Each `checked[n]` is
+   `{report: <builder report>, gate: <recorded JSON>, route: <routing JSON>}`.
+   Pass the resolved `{build, deep}` model slugs in `models`. A returned
+   `changes` list contains findings to send to the same builder. A null
+   verdict with no changes means review remains incomplete. Skip the review
+   call when no stages qualify.
+3. Land each approved row as chain.md Step 3 (a `parked` verdict → Park first,
    a `stop` other than `none` → that stop, now): review, `RM chain merge <n>`
-   for a stage worktree, `RM stage <n> x workflow <sha>`, `RM board <ID> x`;
-   `passed:false` or `null` → `RM stage <n> '!'`, ticket `[ ]` with the why.
-4. A failed stage that a later phase waits on (`BLOCKED`): its retry is a new
-   stage (`RM add`, `chain plan`) run as one Agent call - the saved script is
-   not edited mid-run.
+   for a stage worktree, `RM stage <n> x workflow <sha>`, `RM board <ID> x`.
+4. An owner-directed replacement stage (`RM add`, `chain plan`) gets fresh
+   triage and the same build, gate and review loop. Keep the saved script intact.
 5. All phases done → `RM chain next` until `FINAL`, then the end batch above
    (asked once, after the work), then the final stage: `RM stage <final> '~'`,
    Landing above (`RM land <n> --start`, sweep, `/code-review`, the bump,
@@ -456,37 +628,39 @@ Cursor, antigravity/agy, codex, muse, pi, opencode and gemini run the same
    first: a missing `mode` property means a pre-F112 plan; follow Legacy recovery
    (A162), printing a concrete `/gauntlet-plan <mode> <IDs>` command for its
    remaining tickets, and stop before any dispatch. Quoted keys count too.
-2. Phase by phase, in order, skipping a phase whose stages are all `x`:
+2. Phase by phase, in order, skipping a phase with no pending work:
    `RM chain decide`; use no RELAY_CHAIN_PARALLEL for sequential,
    `RELAY_CHAIN_PARALLEL=<stages in the phase>` for parallel,
-   `RELAY_CHAIN_PARALLEL=<N>` for parallel N; then for each of its stages
-   `RM chain dispatch <n> --driver
+   `RELAY_CHAIN_PARALLEL=<N>` for parallel N. Triage each pending stage with
+   no recorded triage through the host's delegate, or in-session when none is
+   available. Ask the triager for a single `TRIAGE: <json>` line matching
+   `TRIAGE` and record it using the shared triage instructions above. Then, for
+   each eligible ACCEPT stage, `RM chain dispatch <n> --driver
    <the Driver tag from the table> --owner <delegate>` - the row goes `~` and
    the prompt into the run file **before** any agent exists. Note the worktree each names, flip its
    ticket `[~]` (`RM board <ID> '~'`).
-3. Per ticket, through the delegate: the implementer gets the stage prompt (the
-   In-flight block's text, prefixed with the script's worktree line when a
-   stage worktree was named - the same text `implement(it)` builds); on its
-   return the verifier gets the `verify(it, report)` text plus one trailing
-   line: ``End your report with one line `VERDICT: <json>` matching this
-   schema: {ticket, passed, sha, evidence, why?, parked?}`` (the script's
-   `VERDICT` object pasted). No `VERDICT:` line or bad JSON = `passed:false`,
-   why `no VERDICT line`. A host with parallel delegates runs a phase's tickets
+3. Measure every delegated or in-session seat as described in **Measure each model call**, including triage and builder resumes. Per ticket, through the delegate: the implementer gets the stage prompt (the
+   In-flight block's text, with the recorded scope, risk, and stage worktree
+   when one was named - the same text `implement(it)` builds); on its
+   return follow the shared checks and reviewer routing above. Dispatch every
+   recorded seat through the host delegate with its resolved tier. Ask it
+   for a single `REVIEW: <json>` line matching the template's `REVIEW` schema.
+   A host with parallel delegates runs a phase's tickets
    at once (cursor: several Task calls in one turn; agy/codex/muse: one
    subagent per ticket); phases stay serial everywhere. Write the delegate's id
    (Task id, subagent name, child id) into each In-flight block's `run:` line;
    none → `run: <delegate>`. The mode is the phase shape: a delegate host runs
    a phase's tickets at once; an in-session host runs them one after another
    and says so in the first line when the plan is parallel.
-4. **No delegate** (pi without its extension, opencode, gemini): the session is
-   the implementer, then the verifier, ticket by ticket in phase order - the
-   stored prompt read and done, then the verify text done as a second pass that
-   edits nothing. `run: in-session`.
+4. **No delegate** (pi without its extension, opencode, gemini): the session
+   builds, runs the gate, and takes each recorded reviewer seat as a
+   read-only pass. Record any model substitution and return to the same
+   build context for corrections. `run: in-session`.
 5. Landing: step 3 of the Run above, with the landing owner the host's
    delegate value from the table - `RM stage <n> x <delegate> <sha>` (`task`,
    `subagent` or `session`), never `workflow`.
-6. A failed stage that a later phase waits on (`BLOCKED`): its retry is a new
-   stage (`RM add`, `chain plan`) dispatched with the host's delegate from the
+6. A verification failure that a later phase waits on (`BLOCKED`): its retry is a new
+   stage (`RM add`, `chain plan`) triaged first. On ACCEPT, dispatch with the host's delegate from the
    table, or on a host with no delegate `RM chain dispatch <n> --driver <its
    tag> --owner session` (row `~`, prompt on disk) before its work starts
    in-session - the saved

@@ -161,8 +161,8 @@ export function anatomyFigure(run, now = Date.now()) {
   const nq = run.qs.filter((q) => ASKABLE.has(q.state)).length;
   const count = (st) => run.stages.filter((s) => s.state === st).length;
   const label = `${run.id} as a bench machine: ${m} stations in stage order, ${count("landed")} landed, ${count("inflight")} in flight, ` +
-    `${count("failed")} failed, ${count("replanned")} re-planned, ${nq} decision lever${nq === 1 ? "" : "s"} waiting on you.`;
-  const keys = ["pending", "inflight", "landed", "failed", "parked", "replanned"].map((s) =>
+    `${count("failed")} failed, ${count("rejected")} rejected, ${count("replanned")} re-planned, ${nq} decision lever${nq === 1 ? "" : "s"} waiting on you.`;
+  const keys = ["pending", "inflight", "landed", "failed", "parked", "rejected", "replanned"].map((s) =>
     `<li><i class="key key-${s}"></i>${s === "inflight" ? "in flight" : s === "replanned" ? "re-planned, on the bypass" : s}</li>`).join("");
   return `<figure class="iso-card" data-figure="bench">` +
     `<div class="iso-head"><span>Fig 1</span><span>${esc(run.id)} · ${esc(run.title)}</span></div>` +
@@ -191,7 +191,7 @@ export const ANATOMY_CSS = `
 .st-replanned .body{opacity:.6}
 .lamp{--c:var(--pending)}
 .lamp .t{fill:var(--c)} .lamp .f{fill:color-mix(in srgb,var(--c) 78%,#000)} .lamp .r{fill:color-mix(in srgb,var(--c) 60%,#000)}
-${["pending", "landed", "failed", "parked", "replanned"].map((s) => `.lamp-${s},.key-${s}{--c:var(--${s})}`).join(" ")}
+${["pending", "landed", "failed", "parked", "rejected", "replanned"].map((s) => `.lamp-${s},.key-${s}{--c:var(--${s})}`).join(" ")}
 .lamp-inflight,.key-inflight{--c:var(--accent)} .lamp-unknown{--c:var(--failed)} .key{background:var(--c)}
 .pulse{fill:var(--accent);opacity:.35;animation:iso-pulse 1.6s ease-in-out infinite alternate}
 @keyframes iso-pulse{from{opacity:.12}to{opacity:.5}}

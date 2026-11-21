@@ -12,11 +12,12 @@ import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State, PointerAction, SkillGuide, HelpItem } from './state'
 import { activeUser, pointerModal, decideLines, dialogLines, engageLines, filteredSkills, formLines, helpCommand, reconcileLines, runsCursor, setupLines, SKILLS, COMMANDS, HELP_ITEMS, startRunLines, teamRow, viewOf } from './state'
+import { cleanIntakeText, intakeDetails } from '../hooks/lib/intake'
 import { armLines } from '../hooks/lib/teamsarm'
 import { messageLines, pendingHandoffOf, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { buildModel, chipsOf, headKey, HEAD, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor, personalGroups } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
-import { isFinished, modeOf, runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
+import { isFinished, modeOf, runDetails, runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
 import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
 import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM, MUTED_HOW, mutedWords } from '../hooks/lib/facts'
 import type { Limits } from '../hooks/lib/facts'
@@ -225,6 +226,9 @@ function keysOf(s: State, m: Model): Seg[][] {
     ? [[dim('type the ID')], h('tab choices', 'tab'), h('enter choose', 'return'), cancel]
     : [move, h('a assign decider', 'a'), h('h decision page', 'h'), h('q MCQ decision', 'q'), h('tab ticket', 'tab'), h('enter choose', 'return'), cancel]
   if (s.reconcile) return [move, h('space pick', 'space'), h('enter apply picked', 'return'), h('a accept all', 'a'), h('esc none', 'escape')]
+  if (s.intake?.busy) return [[dim('Saving intake decision…')]]
+  if (s.intake?.edit) return [h('tab field', 'tab'), h('enter save edit', 'return'), cancel]
+  if (s.intake) return [move, h('a accept', 'a'), ...(s.intake.draft.ticketId ? [] : [h('e edit', 'e'), h('x reject', 'x')]), cancel]
   if (s.engage) return [h('enter engage', 'return'), cancel]
   if (s.startRun) return [field, h('space change', 'space'), h('enter confirm', 'return'), cancel]
   if (s.filterField) return [[{ text: '[←', color: 'suggestion', action: { kind: 'key', key: { name: 'left' } } }, { text: '→ field]', color: 'suggestion', action: { kind: 'key', key: { name: 'right' } } }], [{ text: '[↑', color: 'suggestion', action: { kind: 'key', key: { name: 'up' } } }, { text: '↓ value]', color: 'suggestion', action: { kind: 'key', key: { name: 'down' } } }], h('enter/esc leave', 'escape')]
@@ -252,7 +256,8 @@ function keysOf(s: State, m: Model): Seg[][] {
   const userOpen = isUsrHead ? isUserSectionOpen(s.open as string[], s.selected!.slice(HEAD.length) as UserSection) : false
   const head = isHead(s.selected ?? m.selected) ? m.groups.find(g => headKey(g.box) === (s.selected ?? m.selected)) : undefined
   const enter = isUsrHead ? (userOpen ? 'enter close' : 'enter open') : head ? (head.open ? 'enter close' : 'enter open') : 'enter line'
-  return [move, h(enter, 'return'), h('a assign', 'a'), h('d decide', 'd'), ...(sel && isDecidable(sel) ? [h('D decided', 'D')] : []), h('t team', 't'), h('c reconcile', 'c'), h('u ask', 'u'), h('r reload', 'r'), quit]
+  const intake = s.rows <= 12 && s.cols <= 40 ? [] : [h('i intake', 'i')]
+  return [move, h(enter, 'return'), h('a assign', 'a'), h('d decide', 'd'), ...(sel && isDecidable(sel) ? [h('D decided', 'D')] : []), h('t team', 't'), h('c reconcile', 'c'), ...intake, h('u ask', 'u'), h('r reload', 'r'), quit]
 }
 
 export function keysLines(s: State, m: Model): Seg[][] {
@@ -547,7 +552,7 @@ function stageLine(st: Stage, planned: boolean): Seg[] {
   const t = [...ids].join(' ')
   const dot: Mono = { text: '●', color: statusColor(stageStatus(st, planned)), mono: STAGE_MONO[st.state] ?? '·' }
   return [{ text: '    ' }, dot, { text: ` ${String(st.n).padStart(2)}  ` },
-    ...(t ? [{ text: t + ' ', color: 'suggestion' as Color }] : []), { text: words.join(' ') }]
+    ...(t ? [{ text: t + ' ', color: 'suggestion' as Color }] : []), { text: words.join(' ') + (st.state === 'rejected' ? '  rejected' : '') }]
 }
 
 // F76: the Workflows tab (id 'runs') - a Runs section (relay runs) and a Workflows section, each a header
@@ -573,7 +578,7 @@ function runsBody(s: State, h: number): Seg[][] {
 function runRows(s: State, sel: string): Keyed[] {
   if (!s.runs.length) return [{ key: 'none', segs: [dim('    ' + (s.runsRead ? 'no open runs - plan one with relay-morpheus (plan-runs)' : 'reading runs…'))] }]
   const idW = Math.max(...s.runs.map(r => r.id.length)) + 2
-  const out: Keyed[] = s.runs.map((run: RunView): Keyed => {
+  const out: Keyed[] = s.runs.flatMap((run: RunView): Keyed[] => {
     const rCol = statusColor(runStatus(run))
     const dot: Seg = { text: '●', color: rCol }   // F76: the Tickets tab's colours
     const right = modeOf(run) + ' · ' + (run.planned ? `planned · ${run.stages.length} stage${run.stages.length === 1 ? '' : 's'}` : `${run.done}/${run.total} done`)
@@ -584,9 +589,10 @@ function runRows(s: State, sel: string): Keyed[] {
     const body = idStr + titleStr
     const text = body + ' '.repeat(Math.max(2, avail - cells(body) - right.length)) + right
     const fin = isFinished(run)
-    return { key: 'row:' + run.id, segs: isSel
+    const row: Keyed = { key: 'row:' + run.id, segs: isSel
       ? [{ text: '› ' }, dot, { text: text.padEnd(avail), inverse: true }]
       : [{ text: '  ' }, dot, { text: idStr, color: fin ? undefined : 'suggestion', bold: !fin, dim: fin }, { text: titleStr, dim: fin }, { text: text.slice(body.length), color: fin ? undefined : rCol, dim: fin }] }   // F99: a finished run dim whole
+    return fin ? [row, ...runDetails(run).map(l => ({ ...l, segs: [{ text: '    ' }, ...l.segs] }))] : [row]
   })
   const ex = s.runs.find(r => r.id === s.runsExpanded)
   if (ex) {
@@ -594,9 +600,9 @@ function runRows(s: State, sel: string): Keyed[] {
     if (!ex.stages.length) out.push({ key: 'none', segs: [dim('    no stages read yet')] })
     ex.stages.forEach(st => out.push({ key: 'st:' + st.n, segs: stageLine(st, ex.planned) }))
     for (const l of runLines(ex, s.board)) {
-      if (/^(par|dec|phase):/.test(l.key)) out.push({ key: l.key, segs: [{ text: '    ' }, ...l.segs] })
+      if (/^(par|dec|phase):/.test(l.key) || (!isFinished(ex) && /^(triage|usage):/.test(l.key))) out.push({ key: l.key, segs: [{ text: '    ' }, ...l.segs] })
     }
-    out.push({ key: 'start', segs: [{ text: '    ' }, hot('e engage', 'e'), dim('; the command is then shown to paste into your CLI')] })
+    if (!isFinished(ex)) out.push({ key: 'start', segs: [{ text: '    ' }, hot('e engage', 'e'), dim('; the command is then shown to paste into your CLI')] })
   }
   return out
 }
@@ -1081,6 +1087,15 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.decide ? decideBody(s)
     : s.reconcile ? boxBody(s, { title: recTitle, rows: [...recRows.map((text, index) => ({ text, action: { kind: 'reconcile' as const, index } })), { text: '' },
         { text: '', segs: [dim('  '), hot('Enter apply picked', 'return'), dim(' · '), hot('a accept all', 'a'), dim(' · '), hot('Esc none', 'escape')] }] })   // F81
+    : s.intake ? boxBody(s, { title: 'Intake draft', rows: s.intake.edit
+      ? (['title', 'description'] as const).map(field => ({
+        text: `${field}: ${cleanIntakeText(s.intake!.edit![field])}`,
+        color: s.intake!.edit!.field === field ? 'suggestion' : undefined,
+      }))
+      : [
+        { text: (s.intake.draft.type === 'B' ? 'Bug: ' : 'Feature: ') + cleanIntakeText(s.intake.draft.title) },
+        ...intakeDetails(s.intake.draft).slice(s.intake.offset, s.intake.offset + Math.max(1, room - 3)).map(text => ({ text })),
+      ] })
     : s.engage ? boxBody(s, { title: engTitle, rows: [...engRows.map(text => ({ text })), { text: '' },
         { text: '', segs: [dim('  '), hot('Enter engage', 'return'), dim(' · '), hot('Esc cancel', 'escape')] }] })      // F85
     : s.startRun ? boxBody(s, {
@@ -1102,7 +1117,7 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.tab === 'run' ? windowOf(runTabLines(s), s.runForm ? null : s.runSel, room, 'run')
     : ticketsBody(s, m, room)
   // B25: a modal box taller than the room keeps its last rows (the buttons, the bottom edge)
-  const boxed = !!(s.setup || s.person || s.dialog || s.decide || s.reconcile || s.engage || s.startRun) && !(s.help || s.tab === 'help')
+  const boxed = !!(s.setup || s.person || s.dialog || s.decide || s.reconcile || s.intake || s.engage || s.startRun) && !(s.help || s.tab === 'help')
   const top = boxed && main.length > room && room >= 4
     ? [...main.slice(0, room - 2), ...main.slice(-2)]
     : main.slice(0, room)

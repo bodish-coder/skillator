@@ -1366,6 +1366,37 @@ function Do-Team([string[]]$a) {
   }
 }
 
+function Find-TicketNode {
+  $top = [IO.Path]::GetFullPath((Get-Top)).TrimEnd('\') + '\'
+  Get-Command node -CommandType Application -All -ErrorAction SilentlyContinue | ForEach-Object { $_.Source } |
+    Where-Object { [IO.Path]::IsPathRooted($_) -and -not ([IO.Path]::GetFullPath($_).StartsWith($top, [StringComparison]::OrdinalIgnoreCase)) } |
+    Select-Object -First 1
+}
+
+function Do-Intake([string[]]$a) {
+  $node = Find-TicketNode
+  if (-not $node) { Fail 'intake needs Node on PATH' }
+  $root = Get-MainRoot
+  $common = @(Git-Out rev-parse --path-format=absolute --git-common-dir)[0]
+  $board = "$root/TICKETS.md"
+  $allocator = "$PSScriptRoot/../../../practice/scripts/next-id.ps1"
+  if ($script:BFresh) { $allocator = Join-Path (Split-Path -Parent $script:BFresh) 'next-id.ps1' }
+  $git = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+  $shell = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+  $lock = $a[0] -cne 'spreadsheet'
+  if ($lock) { Lock-Board "$board.lock" }
+  try {
+    if ($a[0] -ceq 'accept') { Assert-BoardFresh $root }
+    $ErrorActionPreference = 'Continue'
+    $out = & $node "$PSScriptRoot/intake.mjs" $root $common $git $shell $allocator @a
+    if ($LASTEXITCODE -ne 0) { Fail 'intake command failed' }
+    if ($a[0] -ceq 'accept') { Commit-Board $board "board: intake $out" }
+    return $out
+  } finally {
+    if ($lock) { Unlock-Board }
+  }
+}
+
 function Invoke-Cmd([string]$c, [string[]]$a) {
   # Resolved first: outside a repo every subcommand stops here.
   $null = Get-Top
@@ -1389,6 +1420,7 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'defer' { return (Do-Defer $a) }
     'tag' { return (Do-Tag $a) }
     'team' { return (Do-Team $a) }
+    'intake' { return (Do-Intake $a) }
     'whoami' { return (Do-Whoami $a) }
     'iam' { return (Do-Iam $a) }
     'stamp' { return (Do-Stamp $a) }
@@ -1421,10 +1453,7 @@ function Invoke-TeamsPost([string]$c, [string[]]$a) {
     if (-not (Test-Path -LiteralPath $js -PathType Leaf)) { return }
     # A151: the first node on PATH outside the repo - a '.' entry, or one inside the repo
     # (a node_modules/.bin), could start a node the repo supplies.
-    $top = [System.IO.Path]::GetFullPath((Get-Top)).TrimEnd('\') + '\'
-    $node = Get-Command node -CommandType Application -All -ErrorAction SilentlyContinue | ForEach-Object { $_.Source } |
-      Where-Object { [System.IO.Path]::IsPathRooted($_) -and -not ([System.IO.Path]::GetFullPath($_).StartsWith($top, [StringComparison]::OrdinalIgnoreCase)) } |
-      Select-Object -First 1
+    $node = Find-TicketNode
     if (-not $node) { return }
     $prev = $env:TEAMS_STATUS_POSTS
     $env:TEAMS_STATUS_POSTS = 'on'

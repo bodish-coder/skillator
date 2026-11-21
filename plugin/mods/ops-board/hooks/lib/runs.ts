@@ -1,4 +1,4 @@
-import type { Flight, PlanItem, RunView, Stage } from '../../types'
+import type { Flight, PlanItem, RunView, SeatUsage, Stage } from '../../types'
 
 // Pure: `relay-morpheus list` plus, per run, `relay-morpheus resume <id>` (F85: the run
 // file whole - before it, `chain status`, its `## Chain` and `## Decisions` only). A text
@@ -90,12 +90,26 @@ function parseChain(text: string): Parsed {
     }
     if (!cur) continue
     // Unindented fields only: a prompt's lines are indented two spaces.
-    const f = /^(tickets|files|after): (.*)$/.exec(line)
+    const f = /^(tickets|files|after|seat|triage|triage-scope|triage-why): (.*)$/.exec(line)
     if (!f) continue
     const val = f[2]!.trim()
     if (f[1] === 'tickets') cur.ticket = val.split(' . ').map(p => p.trim().split(/\s+/)[0]!).filter(Boolean).join(' ')
     else if (f[1] === 'files') cur.files = val || '-'
-    else cur.after = val || '-'
+    else if (f[1] === 'after') cur.after = val || '-'
+    else if (f[1] === 'triage') cur.triage = val
+    else if (f[1] === 'triage-scope') cur.triageScope = val
+    else if (f[1] === 'triage-why') cur.triageWhy = val
+    else if (f[1] === 'seat') {
+      try {
+        const seat = JSON.parse(val) as SeatUsage
+        const measured = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n >= 0
+        if (typeof seat.id === 'string' && typeof seat.seat === 'string' && !cur.seats?.some(s => s.id === seat.id) &&
+            (seat.elapsedMs === null || measured(seat.elapsedMs)) &&
+            (seat.usd === undefined || measured(seat.usd)) && (seat.tokens === undefined || measured(seat.tokens))) {
+          (cur.seats ??= []).push(seat)
+        }
+      } catch { /* Skip malformed ledger rows. */ }
+    }
   }
   const decisions = qs.map(decisionText).filter((d): d is string => d !== null)
   return { stages, hasChain, states, landed, decisions, mode, driver, flights }
@@ -140,6 +154,7 @@ export function parseRuns(list: string, chains: Record<string, string>, scripts:
     }
     const o = /^\s+owner: (\S+)\s*$/.exec(line)
     if (o && cur) cur.owner = o[1]!
+    if (cur && /^\s+gauntlet-usage: yes\s*$/.test(line)) cur.metered = true
   }
   for (const run of out) {
     const text = chains[run.id]
@@ -154,7 +169,7 @@ export function parseRuns(list: string, chains: Record<string, string>, scripts:
     if (js !== undefined) run.phases = parsePlan(js)
     run.stages = p.stages.map(s => ({
       ...s,
-      state: p.states.get(s.n) ?? (openSet.has(s.n) ? 'open' : run.planned ? 'pending' : '-'),
+      state: p.states.get(s.n) === '-' ? 'rejected' : p.states.get(s.n) ?? (openSet.has(s.n) ? 'open' : run.planned ? 'pending' : '-'),
       ...(p.landed.has(s.n) ? { landed: p.landed.get(s.n)! } : {}),   // F99: only when the cell has a sha
     }))
   }

@@ -1,15 +1,16 @@
 // marathon-workflow.js - relay-morpheus's Workflow script template (F73).
 // /gauntlet-plan copies it beside the run file - .skillator/run-<0000>-<slug>.md ->
 // .skillator/run-<0000>-<slug>.workflow.js - and fills `meta` and `PLAN` (nothing below them).
-// /gauntlet-run runs it one phase per Workflow call, after `chain dispatch` of that phase's stages:
-//   Workflow({scriptPath: '<that file>', args: {phase: 1, worktrees: {'12': '<path>'}}})
-// args.phase   - the phase to run, 1-based. Required: a phase is one Workflow call, so every stage
-//                in it is on disk (`~`, its prompt in the In-flight block) before its agent exists.
+// /gauntlet-run runs it for one phase at a time:
+//   First: args = {phase: 1, triage: true, stages: [12]} (read-only, before dispatch).
+//   After dispatch: args = {phase: 1, prepare: true, accepted, worktrees}.
+//   After host build, checks and routing: args = {phase: 1, accepted, worktrees, checked, models}.
+// args.phase   - the phase to run, 1-based.
 // args.worktrees - stage number -> the worktree `chain dispatch` named for it (a stage worktree
 //                when another stage was in flight); missing = PLAN.runWorktree.
 // PLAN.mode (F112) is the plan shape: 'sequential' = one ticket per phase, 'parallel' = file-disjoint tickets, 'parallel <N>' = at most N; the check below refuses a wider phase.
 // Returns one row per ticket: {stage, code, ticket, worktree, verdict}; verdict null = the agent died.
-// Agents: one implementer and one read-and-run-only verifier per ticket, both under its phase. Pure ASCII.
+// Agents: Workflow triages and verifies. The host keeps the implementer resumable across checks. Pure ASCII.
 // The agents never touch the board: each ticket is [~] and claimed before its phase runs - chain dispatch
 // claims it (F80), and RM board <ID> '~' claims an unowned one again on the flip, as ticket-meta start does (F106).
 // Hosts with no Workflow tool read meta and PLAN as data and never execute this file -
@@ -72,35 +73,162 @@ PLAN.phases.forEach((p, i) => {
 
 const k = args && args.phase
 if (!Number.isInteger(k) || k < 1 || k > PLAN.phases.length) {
-  throw new Error(`args.phase must be 1..${PLAN.phases.length} - /gauntlet-run runs one phase per call, after chain dispatch of its stages`)
+  throw new Error(`args.phase must be 1..${PLAN.phases.length}`)
 }
-const items = PLAN.phases[k - 1]
+const planned = PLAN.phases[k - 1]
 const wts = (args && args.worktrees) || {}
 const wtOf = it => wts[String(it.stage)] || PLAN.runWorktree
 const title = `Phase ${k}`
 
+const TRIAGE = {
+  type: 'object',
+  properties: {
+    ticket: { type: 'string' },
+    verdict: { enum: ['ACCEPT', 'NEEDS-INFO', 'REJECT'] },
+    scope: { type: 'string', minLength: 1, maxLength: 500 },
+    risk: { enum: ['low', 'medium', 'high'] },
+    why: { type: 'string', minLength: 1, maxLength: 500 },
+    parked: VERDICT.properties.parked,
+  },
+  required: ['ticket', 'verdict', 'scope', 'risk', 'why'],
+}
+
+const triage = it => `Triage ticket ${it.ticket} (stage ${it.stage}) in ${PLAN.run} before spec or build.
+Read only. Inspect the ticket, its Done line, the planned files and enough of the repo to judge the work.
+Do not edit, commit, write a spec, build, or ask the owner.
+Done = ${it.done}
+Planned files: ${it.files.join(', ')}. Worktree: ${PLAN.runWorktree}
+Stage prompt (read as context only):
+---
+${it.prompt}
+---
+ACCEPT when the work is worth doing and its scope is actionable. Resolve routine choices from evidence.
+NEEDS-INFO when scope or value depends on an owner-only decision. Include a genuine parked question with
+2-4 options, default, and affected files. Stops must be reported with the existing parked.stop field.
+REJECT when the work is already satisfied, superseded, or lacks a justified outcome. Give the specific reason.
+Keep accepted scope inside the planned file boundary. Use the existing scope stop for a required expansion.
+Report scope and why as single lines. Risk: low for local reversible work, medium for integration or
+user-facing behavior, high for auth, money, concurrency, or shared contracts.`
+
+const isAccepted = (it, result) => result?.ticket === it.ticket && result.verdict === 'ACCEPT' &&
+  ['low', 'medium', 'high'].includes(result.risk) &&
+  [result.scope, result.why].every(value => typeof value === 'string' && value.trim() &&
+    value.length <= 500 && !/[\u0000-\u001f\u007f\u2028\u2029]/u.test(value))
+
+// Agent responses contain schema data. Metering comes from the host, outside that data.
+const seatUsage = new Map()
+const measuredAgent = async (it, seat, prompt, options) => {
+  const startedAt = Date.now()
+  const records = seatUsage.get(it.stage) ?? []
+  const id = `workflow-${args.usageId ?? startedAt}-${it.stage}-${seat}-${records.length}`
+  const record = { id, seat, startedAt, elapsedMs: null }
+  records.push(record)
+  seatUsage.set(it.stage, records)
+  try {
+    return await agent(prompt, options)
+  } catch (error) {
+    log(`${it.code} ${seat} did not return: ${error}`)
+    return null
+  } finally {
+    const endedAt = Date.now()
+    if (endedAt >= startedAt) record.elapsedMs = endedAt - startedAt
+  }
+}
+
+if (args.triage === true) {
+  if (!Array.isArray(args.stages) || args.stages.some(stage => !planned.some(it => it.stage === stage))) {
+    throw new Error('args.stages must list pending stage numbers from the selected phase')
+  }
+  const items = planned.filter(it => args.stages.includes(it.stage))
+  phase(title)
+  const results = await pipeline(items,
+    it => measuredAgent(it, 'triage', triage(it), { label: `${it.code} triage:${it.ticket}`, phase: title, schema: TRIAGE }))
+  return items.map((it, i) => ({ stage: it.stage, ticket: it.ticket, triage: results[i] || null, seatUsage: seatUsage.get(it.stage) ?? [] }))
+}
+
+if (!args.accepted || typeof args.accepted !== 'object') {
+  throw new Error('Run and record triage before dispatching this phase')
+}
+const items = planned.filter(it => Object.hasOwn(args.accepted, it.stage))
+for (const it of items) {
+  if (!isAccepted(it, args.accepted[it.stage])) throw new Error(`Stage ${it.stage} requires a valid ACCEPT triage`)
+}
+if (!items.length) return []
+
 const implement = it => {
   const wt = wtOf(it)
   const here = wt === PLAN.runWorktree ? '' :
-    `This stage works and commits in its own worktree: ${wt} - it replaces the run worktree wherever the prompt below names it.\n\n`
-  return here + it.prompt
+    `\nThis stage works and commits in its own worktree: ${wt} - it replaces the run worktree wherever the prompt names it.`
+  const { scope, risk } = args.accepted[it.stage]
+  return it.prompt + `\n\nTriage ACCEPT (${risk} risk). Scope: ${scope}` + here +
+    '\n\nStop after implementation and local tests, before review or commit. The host runs the deterministic gate and reviewer seats, and resumes this build session for requested changes or to commit the approved diff.'
 }
 
-const verify = (it, report) => `You verify one ticket of ${PLAN.run}. Read and run only: never edit a file, commit, or touch TICKETS.md.
+const row = it => ({ stage: it.stage, code: it.code, ticket: it.ticket, worktree: wtOf(it) })
+if (args.prepare === true) return items.map(it => ({ ...row(it), prompt: implement(it) }))
+
+const focus = {
+  'code-review': 'Check correctness and scope, run the Done check, and quote its output. If the report says PARKED, verify the independent work, confirm the gated files hold no partial guess, and return the existing parked payload with the union of affected files.',
+  'design-arwen': 'Apply the design-arwen review to the visible UI states, hierarchy, interaction and consistency.',
+  'a11y-toph': 'Apply the a11y-toph review to the affected UI, including semantics, keyboard access and focus.',
+  'security-review': 'Review the diff defensively for authorization, trust-boundary validation, cryptography and secret handling. Identify corrections without developing exploits or exposing secret values.',
+}
+const models = args.models ?? { build: 'opus', deep: 'fable' }
+
+for (const it of items) {
+  const { gate, route } = args.checked?.[it.stage] ?? {}
+  const passed = gate?.status === 'pass' && gate.exit === 0 && typeof gate.log === 'string' && gate.log
+  const skipped = gate?.status === 'skip' && typeof gate.reason === 'string' && gate.reason
+  if (!passed && !skipped) throw new Error(`Stage ${it.stage} requires the host's passing or skipped check result before review`)
+  if (route?.stage !== it.stage || route.risk !== args.accepted[it.stage].risk ||
+      !Array.isArray(route.files) || !Array.isArray(route.reviewers) ||
+      route.reviewers[0]?.seat !== 'code-review' ||
+      route.reviewers.some(({ seat, tier }) => !Object.hasOwn(focus, seat) || !['build', 'deep'].includes(tier) || !models[tier])) {
+    throw new Error(`Stage ${it.stage} requires the recorded reviewer route`)
+  }
+}
+
+const REVIEW = {
+  ...VERDICT,
+  properties: {
+    ...VERDICT.properties,
+    decision: { enum: ['APPROVE', 'CHANGES'] },
+  },
+  required: ['ticket', 'decision', 'evidence'],
+}
+
+const verify = (it, { report, gate, route }, seat) => `You are the ${seat} reviewer for one ticket of ${PLAN.run}. Read and run only: never edit a file, commit, or touch TICKETS.md.
 Ticket ${it.ticket} (stage ${it.stage}, ${it.code}). Done = ${it.done}
-Its files: ${it.files.join(', ')}. Worktree: ${wtOf(it)} - use git -C "<worktree>" and absolute paths, never cd.
+Planned files: ${JSON.stringify(it.files)}. Changed files: ${JSON.stringify(route.files)}.
+Worktree: ${wtOf(it)} - use git -C "<worktree>" and absolute paths, never cd.
+Triage scope: ${args.accepted[it.stage].scope}. Risk: ${args.accepted[it.stage].risk}.
+Host checks: ${gate.status === 'pass' ? `passed (log: ${gate.log})` : gate.reason}.
 The implementer's report:
 ---
 ${report == null ? '(none - the implementer returned nothing)' : report}
 ---
-1. Find the commit for ${it.ticket} on that worktree's branch (git -C "<worktree>" log --oneline -5); its diff must touch only what the ticket needs.
-2. Run the check the Done line names, now, and quote what it printed. passed: true only on that evidence.
-3. If the report says PARKED: check that the independent part works, check (git diff) that the gated files hold no partial guess, judge whether the decision is genuinely the user's, and list every file the gated part would touch; parked.files is the union of yours and the implementer's.
-Return the VERDICT: sha = that commit's short sha (empty when there is none).`
+Review the current changes against base ${route.base}. Inspect staged, unstaged and listed untracked files.
+${focus[seat]}
+Return decision APPROVE or CHANGES with evidence. For CHANGES include actionable findings in why. Leave sha empty because the host commits only after approval.`
 
 phase(title)
-log(`${PLAN.run} ${title}: ${items.map(it => it.ticket).join(' ')} - ${items.length * 2} agents`)
-const verdicts = await pipeline(items,
-  it => agent(implement(it), { label: `${it.code} fix:${it.ticket}`, phase: title }),
-  (report, it) => agent(verify(it, report), { label: `${it.code} verify:${it.ticket}`, phase: title, schema: VERDICT }))
-return items.map((it, i) => ({ stage: it.stage, code: it.code, ticket: it.ticket, worktree: wtOf(it), verdict: verdicts[i] || null }))
+log(`${PLAN.run} ${title}: ${items.map(it => it.ticket).join(' ')} - routed review`)
+const reviews = await pipeline(items, async it => {
+  const checked = args.checked[it.stage]
+  const results = []
+  for (const { seat, tier } of checked.route.reviewers) {
+    const result = await measuredAgent(it, seat, verify(it, checked, seat), {
+      model: models[tier], label: `${it.code} ${seat}:${it.ticket}`, phase: title, schema: REVIEW,
+    })
+    results.push({ seat, result })
+  }
+  return results
+})
+return items.map((it, i) => {
+  const reviewsForTicket = reviews[i] ?? []
+  const changes = reviewsForTicket.filter(({ result }) => result?.ticket === it.ticket && result.decision === 'CHANGES')
+  const code = reviewsForTicket[0]?.result
+  const approved = reviewsForTicket.length === args.checked[it.stage].route.reviewers.length &&
+    reviewsForTicket.every(({ result }) => result?.ticket === it.ticket && result.decision === 'APPROVE' && result.evidence?.trim())
+  return { ...row(it), seatUsage: seatUsage.get(it.stage) ?? [], reviews: reviewsForTicket, changes, verdict: approved ? { ...code, passed: true, sha: '' } : null }
+})

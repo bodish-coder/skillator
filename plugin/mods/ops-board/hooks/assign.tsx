@@ -41,6 +41,7 @@ const assignA = atom({ plugin: 'ops-board', key: 'assign' } as const, null)
 const personA = atom({ plugin: 'ops-board', key: 'person' } as const, null)
 const statusA = atom({ plugin: 'ops-board', key: 'status' } as const, null)
 const reconcileA = atom({ plugin: 'ops-board', key: 'reconcile' } as const, null)   // F81: reconcile.tsx's form
+const intakeA = atom({ plugin: 'ops-board', key: 'intake' } as const, null)
 const sessionA = atom({ plugin: 'ops-board', key: 'session' } as const, null)       // F109: this session's code
 
 const HANDLE = /^@[a-z0-9_-]+$/
@@ -130,7 +131,7 @@ export async function openAssign($: EngineInterface, kind: AssignDraft['kind'], 
 const whoKey = (d: AssignDraft) => (d.handle ? 'who:' + d.handle : 'who:+add')
 
 export async function isFormUp($: EngineInterface): Promise<boolean> {
-  return (await read($, statusA)) !== null || (await read($, assignA)) !== null || (await read($, personA)) !== null || (await read($, reconcileA)) !== null
+  return (await read($, statusA)) !== null || (await read($, assignA)) !== null || (await read($, personA)) !== null || (await read($, reconcileA)) !== null || (await read($, intakeA)) !== null
 }
 
 export async function clearForm($: EngineInterface) {
@@ -139,6 +140,7 @@ export async function clearForm($: EngineInterface) {
   await update($, assignA, () => null)
   await update($, personA, () => null)
   await update($, reconcileA, () => null)
+  await update($, intakeA, () => null)
 }
 
 // Done or Cancel: back to the view the form came from, Esc the pane's own again

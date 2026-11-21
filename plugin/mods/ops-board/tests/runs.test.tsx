@@ -1100,3 +1100,21 @@ test('A197: native RunsTab Push Pending invokes relay-push-pending and derives t
   expect(w.toasts.at(-1)).toBe('■ push pending failed: queued: RUN-0014')
   await ui.unmount()
 })
+
+test('F189: the native Workflows pane shows finished run and ticket usage', async ($, on) => {
+  const [w, clock] = world(on)
+  w.list = row('0011', 'Done', 1, 1) + '\n          gauntlet-usage: yes\n'
+  w.resume['RUN-0011'] = [
+    '# RUN-0011 - Done', '## Stages', '| 1 | F1 | - | | | - |',
+    '## Chain', '### AAAA - stage 1 - F1', 'tickets: F1', 'triage: REJECT low',
+    'triage-why: Already covered',
+    'seat: {"id":"triage","seat":"triage","startedAt":1,"elapsedMs":60000,"tokens":34}',
+  ].join('\n')
+  await start($, clock)
+  const ui = await runsTab($, 'terminal')
+  await clock.settle()
+  expect((await ui.find({ key: 'usage:RUN-0011' }))?.text).toContain('1.00 min seat time')
+  expect((await ui.find({ key: 'usage:RUN-0011:F1' }))?.text).toContain('34 tokens')
+  expect((await ui.find({ key: 'triage:RUN-0011:1' }))?.text).toContain('REJECT low')
+  await ui.unmount()
+})

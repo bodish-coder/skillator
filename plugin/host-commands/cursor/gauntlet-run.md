@@ -43,11 +43,12 @@ recovery guards; it never replaces a modern `PLAN.mode` plan. Keep the
    no pause: typing this command is the opt-in to run the plan. The `.workflow.js` is read as data (`meta.phases`, `PLAN`), never executed.
    Before dispatch (marathon.md Run): a legacy script takes the Legacy recovery (A162) refusal above;
    print the concrete planning command and stop before any dispatch. Phase by phase: `chain decide`.
-2. Every stage is `chain dispatch`ed (sequential: no RELAY_CHAIN_PARALLEL; parallel: `RELAY_CHAIN_PARALLEL=<stages in the phase>`; `parallel N`: `RELAY_CHAIN_PARALLEL=<N>`) (row `~`, prompt on disk, driver `@cu-<6>`, `--owner task`) before the agent that runs it exists; a ticket's implementer and verifier run under its phase, through the Task tool, one Task per agent (a phase's tickets as several Task calls in one turn); the verifier ends with one `VERDICT: <json>` line.
+2. Before spec or build, follow marathon.md's **Before build: triage** for every pending ticket stage. Record its verdict, scope and risk, park NEEDS-INFO for the end batch, and skip builds for REJECT. Every eligible ACCEPT stage is `chain dispatch`ed (sequential: no RELAY_CHAIN_PARALLEL; parallel: `RELAY_CHAIN_PARALLEL=<stages in the phase>`; `parallel N`: `RELAY_CHAIN_PARALLEL=<N>`) (row `~`, prompt on disk, driver `@cu-<6>`, `--owner task`) before the agent that runs it exists; a ticket's implementer and reviewers run under its phase, through the Task tool, one Task per agent (a phase's tickets as several Task calls in one turn); each reviewer returns one `REVIEW: <json>` result.
    A phase's tickets run at once through the Task tool, so the mode is the phase shape.
    With grayskull-power on (`.skillator/grayskull.md` present) every stage prompt opens with this line, and without it does not: `Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.`
    A stage whose ticket someone else owns is refused there (F80, `IDLE <n> owned <ID> <owner>`): leave it
    out of the phase and list it as skipped with its owner; dispatch claims the rest.
-3. Land each phase as marathon.md says; park the owner's questions for one end batch; the six stops are
+3. Measure each model call as described in marathon.md, including triage, reviewers and every builder resume. After each build, run marathon.md's **After build: deterministic checks**. After a recorded pass or skip, follow **After checks: route reviewers**. Resume the same builder for `CHANGES` and rerun the checks before another review.
+4. Land each phase as marathon.md says; park the owner's questions for one end batch; the six stops are
    asked the moment they are reached. Never push unasked: headless or no answer, end with
    `push: waiting for the owner`.

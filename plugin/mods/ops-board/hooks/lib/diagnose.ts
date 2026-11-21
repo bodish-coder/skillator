@@ -14,7 +14,7 @@ export type ShaState = 'head' | 'off' | 'none'
 export type Diagnosis = { verdict: Verdict; lines: string[]; closable: { n: number }[] }
 
 const BUILT = ['x', '%']            // the ticket's work exists: verified, or testing
-const CLOSED = ['x', '>']           // a stage row no longer open (a > row names where its work went)
+const CLOSED = ['x', '>', 'rejected']           // a stage row no longer open (a > row names where its work went)
 const CLOSABLE = ['pending', '~', 'open']   // parked (?) and failed (!) are said, never closed
 const WORD: Record<string, string> = { '~': 'in flight', open: 'in flight', '!': 'failed', '?': 'parked' }
 
@@ -39,7 +39,7 @@ export function diagnose(run: RunView, board: Board | null, shas: Map<string, Sh
       for (const [id, b] of known) if (!BUILT.includes(b)) lines.push(`stage ${s.n}: landed, but ${id} is [${b}] on the board`)
       continue
     }
-    if (s.state === '>') continue
+    if (CLOSED.includes(s.state)) continue
     const built = known.length > 0 && known.length === ids.length && known.every(([, b]) => BUILT.includes(b))
     if (!built) continue
     lines.push(`stage ${s.n}: ${WORD[s.state] ?? 'not started'} in the run file, but ${known.map(([id, b]) => `${id} is [${b}]`).join(', ')} on the board`)
