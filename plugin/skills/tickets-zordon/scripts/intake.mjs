@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { readSpreadsheet } from './spreadsheet.mjs'
 
 const ticket = /^\s*- \[(.)\]\s+([A-Z]+\d+[a-z]?)\s*[-–—]\s*(.*)/
@@ -79,13 +80,42 @@ async function run([root, common, git, shell, allocator, action, id, revision, p
   const eol = raw.includes('\r\n') ? '\r\n' : '\n'
   const lines = raw.split('\n')
   const readDraft = file => JSON.parse(readFileSync(file, 'utf8'))
+  const pendingNames = () => existsSync(dir) ? readdirSync(dir).filter(name => name.endsWith('.json')) : []
   const decode = data => JSON.parse(data?.startsWith('%7B')
     ? decodeURIComponent(data) : Buffer.from(data, 'base64url').toString('utf8'))
   if (action === 'list') {
-    const pending = existsSync(dir) ? readdirSync(dir).filter(name => name.endsWith('.json')) : []
-    return pending.map(name => readDraft(join(dir, name)))
+    return pendingNames().map(name => readDraft(join(dir, name)))
       .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
       .map(draft => ({ ...draft, duplicates: duplicateIds(draft.title, lines) }))
+  }
+  if (action === 'xml') {
+    if (!id || payload !== undefined) throw new Error('usage: intake xml <file> [mapping.json]')
+    const reader = fileURLToPath(new URL('./xml-intake.py', import.meta.url))
+    const python = process.platform === 'win32' ? 'python' : 'python3'
+    let drafts
+    try {
+      const args = revision === undefined ? [id] : [id, revision]
+      drafts = JSON.parse(execFileSync(python, ['-X', 'utf8', reader, ...args], {
+        encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
+      })).map(draftFields)
+    } catch (error) {
+      if (error.code === 'ENOENT') throw new Error(`XML intake requires Python 3 (${python} on PATH)`)
+      throw new Error(error.stderr?.trim() || 'could not read XML intake file: ' + error.message)
+    }
+    const seen = new Set(pendingNames().map(name => readDraft(join(dir, name)))
+      .filter(draft => draft.source === 'JUnit').map(draft => draft.sourceId))
+    for (const line of lines) {
+      const row = line.match(ticket)
+      const identity = row?.[3].match(/ Source: JUnit\. Source ID: (junit-[a-f0-9]{64})\.(?=\s*(?:$|[([]))/)?.[1]
+      if (identity && !'xX-'.includes(row[1])) seen.add(identity)
+    }
+    return drafts.flatMap(draft => {
+      if (draft.source === 'JUnit') {
+        if (seen.has(draft.sourceId)) return []
+        seen.add(draft.sourceId)
+      }
+      return [enqueue(draft)]
+    })
   }
   if (action === 'teams') {
     const { ID_RE, linesOf, readInbox } = await import('../../teams-uhura/scripts/inbox.mjs')
@@ -103,7 +133,7 @@ async function run([root, common, git, shell, allocator, action, id, revision, p
     return enqueue(draftFields(decode(id)))
   }
   if (!['accept', 'edit', 'reject'].includes(action) || !/^[a-f0-9-]{36}$/.test(id))
-    throw new Error('usage: intake list | add <base64url-json> | spreadsheet <file> [column numbers] | teams <message-id> <base64url-json> | accept/edit/reject <draft-id> <revision> [base64url-json]')
+    throw new Error('usage: intake list | add <base64url-json> | spreadsheet <file> [column numbers] | xml <file> [mapping.json] | teams <message-id> <base64url-json> | accept/edit/reject <draft-id> <revision> [base64url-json]')
   const path = join(dir, id + '.json')
   if (!existsSync(path)) throw new Error('draft is no longer pending')
   const draft = readDraft(path)

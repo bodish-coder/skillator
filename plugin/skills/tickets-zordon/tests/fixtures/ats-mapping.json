@@ -1,0 +1,11 @@
+{
+  "records": "ats-pack/area/area/scenario",
+  "fields": {
+    "sourceId": "@id",
+    "severity": "@priority",
+    "title": "title",
+    "description": "preconditions/pre",
+    "steps": "steps/step",
+    "expected": "expected"
+  }
+}

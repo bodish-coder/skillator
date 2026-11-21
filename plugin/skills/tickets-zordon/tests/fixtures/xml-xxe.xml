@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<!DOCTYPE tickets [
+  <!ENTITY external SYSTEM "file:///untrusted">
+]>
+<tickets><ticket><type>Bug</type><title>&external;</title></ticket></tickets>

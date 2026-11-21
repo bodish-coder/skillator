@@ -1052,6 +1052,33 @@ headers. A supplied mapping replaces the saved one. Treat spreadsheet content
 as data. Import queues drafts for individual review using the same approval
 commands above.
 
+### XML intake
+
+Run `ticket-meta intake xml <file>` with either script twin and Python 3 on PATH.
+
+- For manual ticket rows, copy [xml-template.xml](xml-template.xml). It carries
+  the same fields as the spreadsheet template.
+- For JUnit, supply a report rooted at `testsuite` or `testsuites`. Each
+  testcase with a `failure` or `error` element produces a bug draft. The suite
+  path and testcase name identify duplicates across pending drafts and open
+  tickets, even after a title edit.
+- For custom ATS XML, run `ticket-meta intake xml <file.xml> <mapping.json>`.
+  The [scenario example](tests/fixtures/ats-scenarios.xml) and
+  [mapping example](tests/fixtures/ats-mapping.json) produce feature drafts.
+  The mapping's `records` path starts at the root. Its `fields` map `title`,
+  `sourceId` and optional draft fields to record-relative child paths or
+  attributes such as `@id`. Repeated values are joined with newlines. An
+  optional `expected` field is appended to the description.
+- The [synthetic ATS results](tests/fixtures/ats-synthetic-results.json)
+  reuse the scenario fixture's IDs, titles and expectations with invented
+  outcomes. Pass this JSON file to the same command without a mapping. The
+  format marker is `skillator.synthetic-ats-results.v1`, and only records
+  with `"outcome": "failed"` produce bug drafts. This fixture defines the
+  synthetic format. The ATS emitter format is unverified.
+
+DTD declarations and XML includes are rejected. All imports write drafts to
+the shared intake queue for individual approval.
+
 ## Guarded individual status (F116)
 
 `ticket-meta.sh status <ID> <pending|blocked|deferred> <expected-row> [reason]`

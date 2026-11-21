@@ -1,0 +1,25 @@
+{
+  "format": "skillator.synthetic-ats-results.v1",
+  "results": [
+    {
+      "id": "preview-01",
+      "title": "Load the preview",
+      "expected": "The document renders in the preview panel.",
+      "outcome": "failed",
+      "actual": "The preview panel is blank."
+    },
+    {
+      "id": "preview-02",
+      "title": "Close the preview",
+      "expected": "The document editor regains focus.",
+      "outcome": "passed",
+      "actual": "The document editor regains focus."
+    },
+    {
+      "id": "preview-03",
+      "title": "Resize the preview",
+      "expected": "The panel follows the pointer.",
+      "outcome": "skipped"
+    }
+  ]
+}

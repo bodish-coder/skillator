@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ats-pack>
+  <suite>Preview</suite>
+  <area id="example-session">
+    <area id="preview">
+      <scenario id="preview-01" priority="High">
+        <title>Load the preview</title>
+        <preconditions><pre>A saved sample document is available.</pre></preconditions>
+        <steps>
+          <step>Open the document.</step>
+          <step>Select Preview.</step>
+        </steps>
+        <expected>The document renders in the preview panel.</expected>
+      </scenario>
+      <scenario id="preview-02" priority="Normal">
+        <title>Close the preview</title>
+        <preconditions><pre>The preview panel is open.</pre></preconditions>
+        <steps><step>Select Close.</step></steps>
+        <expected>The document editor regains focus.</expected>
+      </scenario>
+      <scenario id="preview-03" priority="Normal">
+        <title>Resize the preview</title>
+        <preconditions><pre>The preview panel is open.</pre></preconditions>
+        <steps><step>Drag the panel edge.</step></steps>
+        <expected>The panel follows the pointer.</expected>
+      </scenario>
+    </area>
+  </area>
+</ats-pack>

@@ -14,8 +14,9 @@ const prefix = ps ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script
 const payload = data => Buffer.from(JSON.stringify(data)).toString('base64url')
 const python = win ? 'python' : 'python3'
 const template = new URL('../spreadsheet-template.csv', import.meta.url)
+const xmlFixture = name => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
 
-test('intake imports spreadsheets, shares drafts across worktrees, and records only explicit approvals', () => {
+test('intake imports spreadsheets, XML and Teams messages and records only explicit approvals', () => {
   const root = mkdtempSync(join(process.cwd(), '.f185-test-'))
   const worktree = join(root, 'second')
   const board = join(root, 'TICKETS.md')
@@ -127,8 +128,62 @@ test('intake imports spreadsheets, shares drafts across worktrees, and records o
       reporter: message.from, source: 'Teams', sourceId: message.id })
     assert.equal(JSON.parse(intake(['list'], root)).length, 4)
     assert.equal(readFileSync(board, 'utf8'), updated)
+
+    const importXml = (...args) => JSON.parse(intake(['xml', ...args]))
+    const junit = xmlFixture('junit.xml')
+    writeFileSync(board + '.lock', 'fixture lock')
+    assert.match(invoke(['xml', junit]).stderr, /locked/)
+    assert.equal(readFileSync(board + '.lock', 'utf8'), 'fixture lock')
+    rmSync(board + '.lock')
+    const failed = importXml(junit)
+    assert.deepEqual(failed.map(draft => [draft.type, draft.title, draft.description]), [
+      ['B', 'Preview: loads', 'Blank preview\nNo content rendered.'],
+      ['B', 'Preview: resizes', 'Timed out'],
+      ['B', 'Editor: loads', 'No document'],
+    ])
+    assert.equal(new Set(failed.map(draft => draft.sourceId)).size, 3)
+    const renamed = JSON.parse(intake(['edit', failed[0].id, failed[0].revision,
+      payload({ title: 'Renamed preview failure' })]))
+    assert.deepEqual(importXml(junit), [])
+    const twin = importXml(fileURLToPath(new URL('../xml-template.xml', import.meta.url)))
+    assert.deepEqual(twin.map(stripMetadata), [
+      { type: 'B', title: 'Preview fails to load', description: 'The preview panel stays empty.',
+        steps: 'Open the preview panel.', severity: 'High', reporter: 'Example Reporter',
+        screenshot: 'https://example.test/preview.png', source: 'XML' },
+      { type: 'F', title: 'Export the preview', source: 'XML' },
+    ])
+    const scenarios = importXml(xmlFixture('ats-scenarios.xml'), xmlFixture('ats-mapping.json'))
+    assert.deepEqual(scenarios.map(draft => draft.type), ['F', 'F', 'F'])
+    assert.deepEqual(stripMetadata(scenarios[0]), {
+      type: 'F', title: 'Load the preview', sourceId: 'preview-01', severity: 'High',
+      description: 'A saved sample document is available.\nExpected: The document renders in the preview panel.',
+      steps: 'Open the document.\nSelect Preview.', source: 'ATS scenario',
+    })
+    const results = importXml(xmlFixture('ats-synthetic-results.json'))
+    assert.deepEqual(results.map(stripMetadata), [{
+      type: 'B', title: scenarios[0].title, sourceId: scenarios[0].sourceId,
+      description: 'Expected: The document renders in the preview panel.\nActual: The preview panel is blank.',
+      source: 'Synthetic ATS result',
+    }])
+    assert.match(invoke(['xml', xmlFixture('xml-xxe.xml')]).stderr, /DTD and entity declarations are forbidden/)
+    const external = join(root, 'external.xml')
+    writeFileSync(external, '\uFEFF' + readFileSync(xmlFixture('xml-xxe.xml'), 'utf8'), 'utf16le')
+    assert.match(invoke(['xml', external]).stderr, /DTD and entity declarations are forbidden/)
+    writeFileSync(external, '<tickets xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="file:///untrusted"/></tickets>')
+    assert.match(invoke(['xml', external]).stderr, /XML includes are forbidden/)
+    assert.equal(JSON.parse(intake(['list'], root)).length, 13)
     assert.equal(readFileSync(board, 'utf8'), updated)
     assert.equal(readFileSync(join(worktree, 'TICKETS.md'), 'utf8'), initial)
+    const accepted = intake(['accept', renamed.id, renamed.revision])
+    const approved = readFileSync(board, 'utf8')
+    assert.ok(approved.includes(accepted + ' — Renamed preview failure'))
+    assert.ok(approved.includes('Source ID: ' + renamed.sourceId))
+    assert.deepEqual(importXml(junit), [])
+    assert.equal(readFileSync(board, 'utf8'), approved)
+    const annotated = approved.replace(renamed.sourceId + '.', renamed.sourceId + '. (by: fixture)')
+    writeFileSync(board, annotated)
+    assert.deepEqual(importXml(junit), [])
+    assert.equal(readFileSync(board, 'utf8'), annotated)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

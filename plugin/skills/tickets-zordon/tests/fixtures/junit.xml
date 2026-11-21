@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="Preview">
+    <testcase name="loads"><failure message="Blank preview">No content rendered.</failure></testcase>
+    <testcase name="loads"><failure message="Same test on retry"/></testcase>
+    <testcase name="resizes"><error message="Timed out"/></testcase>
+    <testcase name="closes"/>
+    <testcase name="unavailable"><skipped/></testcase>
+  </testsuite>
+  <testsuite name="Editor">
+    <testcase name="loads"><failure message="No document"/></testcase>
+  </testsuite>
+</testsuites>

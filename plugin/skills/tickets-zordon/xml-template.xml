@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tickets>
+  <ticket>
+    <type>Bug</type>
+    <title>Preview fails to load</title>
+    <description>The preview panel stays empty.</description>
+    <steps>Open the preview panel.</steps>
+    <severity>High</severity>
+    <reporter>Example Reporter</reporter>
+    <screenshot-link>https://example.test/preview.png</screenshot-link>
+  </ticket>
+  <ticket>
+    <type>Feature</type>
+    <title>Export the preview</title>
+  </ticket>
+</tickets>
