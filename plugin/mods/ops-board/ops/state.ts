@@ -5,8 +5,8 @@
 // it as is.
 import type { AssignDraft, Board, Box, Engage, Filter, Machine, Member, Msg, PersonDraft, Reconcile, RunView, TeamsCfgView, ArmView, Ticket, Usage, Watch } from '../types'
 import type { Call } from '../hooks/lib/calls'
-import { cleanIntakeText, draftEdit, firstDraft, intakeDetails } from '../hooks/lib/intake'
-import type { Draft } from '../hooks/lib/intake'
+import { cleanIntakeText, draftEdit, firstDraft, intakeDetails, intakeImportArgs, newIntakePaths } from '../hooks/lib/intake'
+import type { Draft, IntakePaths } from '../hooks/lib/intake'
 import type { Model, View } from '../hooks/lib/ticketsmodel'
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
 import { NO_SCRIPTS, decideQuestionsPrompt, holoTicketCmd, loginMessage, loginStatus } from '../hooks/lib/calls'
@@ -197,7 +197,7 @@ export type State = {
   teamSelected: string | null                         // the Team view's row
   teamConfirm: string | null                          // the handle the Team view asks to remove (y/n)
   reconcile: (Reconcile & { index: number }) | null   // F81: the reconcile box, its cursor row
-  intake: { draft: Draft; offset: number; busy?: boolean; edit?: { title: string; description: string; field: 'title' | 'description' } } | null
+  intake: { draft?: Draft; offset: number; busy?: boolean; picking?: boolean; paths?: IntakePaths; field?: keyof IntakePaths; edit?: { title: string; description: string; field: 'title' | 'description' } } | null
   toast: string | null; notes: string[]
   cols: number; rows: number; now: number; quit: boolean
   repo: string | null                      // the repo root's basename, for the tab bar (app.ts sets it)
@@ -726,7 +726,7 @@ function openIntake(s: State): Step {
     if (x.tab !== 'tickets' || pointerModal(x)) return x
     try {
       const draft = firstDraft(r.out)
-      return draft ? { ...x, intake: { draft, offset: 0 }, toast: null } : toast(x, 'Intake queue is empty')
+      return { ...x, intake: draft ? { draft, offset: 0 } : { offset: 0, paths: newIntakePaths() }, toast: null }
     } catch {
       return toast(x, 'Could not read the intake queue')
     }
@@ -737,8 +737,49 @@ function intakeKey(s: State, k: Key): Step {
   const v = s.intake!
   const set = (intake: State['intake']): Step => ({ state: { ...s, intake }, effects: [] })
   if (v.busy) return set(v)
-  if (k.name === 'escape' || (k.ctrl && k.name === 'c')) return set(v.edit ? { ...v, edit: undefined } : null)
+  if (k.name === 'escape' || (k.ctrl && k.name === 'c')) return set(v.edit ? { ...v, edit: undefined }
+    : v.paths && v.draft ? { ...v, paths: undefined } : null)
   const d = v.draft
+  if (v.paths) {
+    const field = v.field ?? 'file'
+    const fields = ['file', 'mapping', 'folder'] as const
+    if (k.name === 'tab') return set({ ...v, field: fields[(fields.indexOf(field) + (k.shift ? 2 : 1)) % 3] })
+    const pick = k.name === 'f2'
+    const submit = k.name === 'enter' || k.name === 'return'
+    if (!pick && !submit) {
+      const input = k.sequence && !k.ctrl && !k.meta ? cleanIntakeText(k.sequence) : ''
+      const current = v.paths[field]
+      const value = k.name === 'backspace' ? [...current].slice(0, -1).join('') : k.ctrl && k.name === 'u' ? '' : current + input
+      return set({ ...v, paths: { ...v.paths, [field]: value } })
+    }
+    const samples = !pick && field === 'folder'
+    let fileArgs: string[]
+    try {
+      fileArgs = pick ? ['pick', field] : samples ? ['samples', v.paths.folder.trim()] : intakeImportArgs(v.paths)
+    } catch (error) {
+      return { state: toast(s, error instanceof Error ? error.message : String(error)), effects: [] }
+    }
+    const busy = { ...s, intake: { ...v, busy: true, picking: pick } }
+    return { state: busy, effects: [run(pick || samples ? 'intake-files' : 'meta-intake', fileArgs, r => x => {
+      const current = x.intake
+      if (!current?.paths) return x
+      const idle = { ...x, intake: { ...current, busy: false, picking: false } }
+      if (r.code !== 0) return toast(idle, why(r, 'intake files'))
+      if (!pick && !samples) return {
+        state: toast({ ...idle, intake: null }, 'Import finished. Review queued drafts before approval.'),
+        effects: openIntake(idle).effects,
+      }
+      try {
+        const path: string | null = JSON.parse(r.out)
+        if (!path) return idle
+        if (samples) return toast(idle, 'Samples saved in ' + cleanIntakeText(path))
+        return { ...idle, intake: { ...idle.intake, paths: { ...current.paths, [field]: path } } }
+      } catch {
+        return toast(idle, 'Could not read the intake file result')
+      }
+    })] }
+  }
+  if (!d) return set(null)
   const e = v.edit
   let args: string[]
   if (e) {
@@ -756,6 +797,7 @@ function intakeKey(s: State, k: Key): Step {
       return set({ ...v, offset: Math.min(Math.max(0, n - 1), Math.max(0, v.offset + (k.name === 'up' ? -1 : 1))) })
     }
     if (k.name === 'e' && !d.ticketId) return set({ ...v, edit: { title: d.title, description: d.description ?? '', field: 'title' } })
+    if (k.name === 'i') return set({ ...v, paths: newIntakePaths(), field: 'file' })
     if (k.name !== 'a' && (k.name !== 'x' || d.ticketId)) return set(v)
     args = [k.name === 'a' ? 'accept' : 'reject', d.id, d.revision]
   }

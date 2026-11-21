@@ -24,3 +24,13 @@ export function intakeDetails(draft: Draft): string[] {
 
 export const cleanIntakeText = (text: string) => text.replace(/[\p{Cc}\p{Cf}]/gu, ' ')
 export const draftEdit = (title: string, description: string) => encodeURIComponent(JSON.stringify({ title, description }))
+export type IntakePaths = { file: string; mapping: string; folder: string }
+export const newIntakePaths = (): IntakePaths => ({ file: '', mapping: '', folder: '' })
+
+export function intakeImportArgs(paths: IntakePaths): string[] {
+  const file = paths.file.trim()
+  if (/\.(csv|xlsx)$/i.test(file)) return ['spreadsheet', file, ...(paths.mapping.trim() ? [paths.mapping.trim()] : [])]
+  if (/\.xml$/i.test(file)) return ['xml', file, ...(paths.mapping.trim() ? [paths.mapping.trim()] : [])]
+  if (/\.json$/i.test(file)) return ['xml', file]
+  throw new Error('Choose a CSV, XLSX, XML, or ATS results JSON file.')
+}

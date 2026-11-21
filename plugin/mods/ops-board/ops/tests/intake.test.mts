@@ -34,3 +34,29 @@ test('Tickets reviews, edits, accepts and rejects one intake draft', () => {
   assert.match(accepted.state.toast ?? '', /Accepted as B4/)
   assert.equal(call(reduce(review, { name: 'x' }), ['reject', draft.id, 'v1'], '{}').state.intake, null)
 })
+
+test('Empty Intake can browse, import, and generate samples', () => {
+  const dispatch = (step: Step, command: string, args: string[], out: string): Step => {
+    const effect = step.effects[0]
+    assert.ok(effect?.kind === 'run')
+    assert.equal(effect.call, command)
+    assert.deepEqual(effect.args, args)
+    const result = effect.then({ code: 0, out, err: '', argv: [] })(step.state)
+    return 'effects' in result ? result : { state: result, effects: [] }
+  }
+  const start = initial(60, 24, 0)
+  const files = dispatch(reduce(start, { name: 'i' }), 'meta-intake', ['list'], '[]').state
+  const frame = screen(files, { plain: true, color: false, ascii: true }).lines.join('\n')
+  assert.match(frame, /Intake files/)
+  const filename = 'C:\\Example Files\\ats.json'
+  const selected = dispatch(reduce(files, { name: 'f2' }), 'intake-files', ['pick', 'file'], JSON.stringify(filename)).state
+  const imported = dispatch(reduce(selected, { name: 'return' }), 'meta-intake', ['xml', filename], '[]')
+  assert.equal(imported.state.intake, null)
+  assert.ok(imported.effects[0]?.kind === 'run')
+  assert.deepEqual(imported.effects[0].args, ['list'])
+  const folder = reduce(files, { name: 'tab', shift: true }).state
+  const typed = reduce(folder, { name: 'p', sequence: 'C:\\Example Files' }).state
+  const generated = dispatch(reduce(typed, { name: 'return' }), 'intake-files', ['samples', 'C:\\Example Files'],
+    '"C:\\\\Example Files\\\\skillator-intake-123"')
+  assert.match(generated.state.toast ?? '', /Samples saved in .*skillator-intake-123/)
+})

@@ -47,7 +47,7 @@ function world(on: On, files: Record<string, string>): [World, MockClock] {
   const w: World = { files: { ...files, [META + '.sh']: '#!/bin/sh\n' }, runs: [], opens: [], closes: [], toasts: [], writes: [], answer: () => null }
   const at = (p: string) => w.files[p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')]
   const clock = mock.clock(on, { now: 1_000_000 })
-  mock.env(on, { SKILLATOR_ROOT: '/s' })
+  mock.env(on, { SKILLATOR_ROOT: '/s', PATH: '/bin' })
   mock.store(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.repo', () => ({ value: { root: '/r', remote: null, internal: false, name: 'r' } }))
@@ -127,6 +127,38 @@ test('F185: the pane displays one draft and sends the exact edit, accept and rej
   expect(w.runs.filter(a => a[2] === 'intake' && a[3] !== 'list')).toEqual([
     sh('intake', 'edit', 'draft-id', 'r1', encodeURIComponent(JSON.stringify({ title: 'Crash after login', description: 'Repro' }))),
     sh('intake', 'accept', 'draft-id', 'r2'), sh('intake', 'reject', 'other', 'r1'),
+  ])
+  expect(w.writes).toEqual([])
+  await pane.unmount()
+})
+
+test('Intake files are available while the approval queue is empty', WITH, async ($, on) => {
+  const helper = '/s/skills/tickets-zordon/scripts/intake-files.mjs'
+  const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/bin/node': 'node', [helper]: 'helper' })
+  const path = '/r/example results.json'
+  const folder = '/r/samples'
+  w.answer = argv => {
+    if (argv[1] === helper) {
+      if (argv[2] === 'pick') return ran(JSON.stringify(argv[3] === 'folder' ? folder : path))
+      return ran(JSON.stringify(folder + '/skillator-intake-fixture'))
+    }
+    if (argv[2] === 'intake') return ran('[]')
+    return null
+  }
+  const pane = await start($, clock, 'terminal')
+  await pane.press({ key: 'key:intake' })
+  expect((await pane.find({ key: 'form:title' }))?.text).toBe('Intake files')
+  await pane.press({ key: 'intake:browse:folder' })
+  await pane.press({ key: 'intake:samples' })
+  await pane.press({ key: 'intake:browse:file' })
+  await pane.press({ key: 'intake:import' })
+  expect(w.runs).toEqual([
+    sh('intake', 'list'),
+    ['/bin/node', helper, 'pick', 'folder'],
+    ['/bin/node', helper, 'samples', folder],
+    ['/bin/node', helper, 'pick', 'file'],
+    sh('intake', 'xml', path),
+    sh('intake', 'list'),
   ])
   expect(w.writes).toEqual([])
   await pane.unmount()

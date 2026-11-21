@@ -226,9 +226,11 @@ function keysOf(s: State, m: Model): Seg[][] {
     ? [[dim('type the ID')], h('tab choices', 'tab'), h('enter choose', 'return'), cancel]
     : [move, h('a assign decider', 'a'), h('h decision page', 'h'), h('q MCQ decision', 'q'), h('tab ticket', 'tab'), h('enter choose', 'return'), cancel]
   if (s.reconcile) return [move, h('space pick', 'space'), h('enter apply picked', 'return'), h('a accept all', 'a'), h('esc none', 'escape')]
-  if (s.intake?.busy) return [[dim('Saving intake decision…')]]
+  if (s.intake?.busy) return [[dim(s.intake.picking ? 'Select a path in the Windows dialog.' : 'Working…')]]
+  if (s.intake?.paths) return [field, [{ text: '[F2 Browse]', color: 'suggestion', action: { kind: 'key', key: { name: 'f2' } } }],
+    h(s.intake.field === 'folder' ? 'enter generate' : 'enter import', 'return'), cancel]
   if (s.intake?.edit) return [h('tab field', 'tab'), h('enter save edit', 'return'), cancel]
-  if (s.intake) return [move, h('a accept', 'a'), ...(s.intake.draft.ticketId ? [] : [h('e edit', 'e'), h('x reject', 'x')]), cancel]
+  if (s.intake?.draft) return [move, h('a accept', 'a'), ...(s.intake.draft.ticketId ? [] : [h('e edit', 'e'), h('x reject', 'x')]), h('i import files', 'i'), cancel]
   if (s.engage) return [h('enter engage', 'return'), cancel]
   if (s.startRun) return [field, h('space change', 'space'), h('enter confirm', 'return'), cancel]
   if (s.filterField) return [[{ text: '[←', color: 'suggestion', action: { kind: 'key', key: { name: 'left' } } }, { text: '→ field]', color: 'suggestion', action: { kind: 'key', key: { name: 'right' } } }], [{ text: '[↑', color: 'suggestion', action: { kind: 'key', key: { name: 'up' } } }, { text: '↓ value]', color: 'suggestion', action: { kind: 'key', key: { name: 'down' } } }], h('enter/esc leave', 'escape')]
@@ -1087,7 +1089,11 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.decide ? decideBody(s)
     : s.reconcile ? boxBody(s, { title: recTitle, rows: [...recRows.map((text, index) => ({ text, action: { kind: 'reconcile' as const, index } })), { text: '' },
         { text: '', segs: [dim('  '), hot('Enter apply picked', 'return'), dim(' · '), hot('a accept all', 'a'), dim(' · '), hot('Esc none', 'escape')] }] })   // F81
-    : s.intake ? boxBody(s, { title: 'Intake draft', rows: s.intake.edit
+    : s.intake?.paths ? boxBody(s, { title: 'Intake files', rows: (['file', 'mapping', 'folder'] as const).map((field, i) => ({
+        text: `${['File', 'Optional mapping', 'Sample folder'][i]}: ${cleanIntakeText(s.intake!.paths![field])}`,
+        color: (s.intake!.field ?? 'file') === field ? 'suggestion' : undefined,
+      })) })
+    : s.intake?.draft ? boxBody(s, { title: 'Intake draft', rows: s.intake.edit
       ? (['title', 'description'] as const).map(field => ({
         text: `${field}: ${cleanIntakeText(s.intake!.edit![field])}`,
         color: s.intake!.edit!.field === field ? 'suggestion' : undefined,

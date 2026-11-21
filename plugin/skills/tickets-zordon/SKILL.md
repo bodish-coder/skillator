@@ -1038,6 +1038,13 @@ UTF-8 JSON object as base64url. Drafts live in the shared Git directory.
 ### Import spreadsheets
 
 Copy [spreadsheet-template.csv](spreadsheet-template.csv) and fill in one row per
+In Ops Board, open **Tickets → Intake** (`i`) to import files or save samples.
+If a draft is open, choose **Import files** first. Use the Windows browse
+dialog or enter a path. In the standalone board, use `Tab` to move between
+fields, `F2` to browse, and `Enter` to import or generate samples.
+Generate samples writes a new folder with an XLSX workbook, a ticket XML
+template, and a matching ATS XML sample, results JSON and mapping.
+
 draft. Type accepts Bug, Feature, B or F. Type and Title are required.
 Run `ticket-meta intake spreadsheet <file>` with either script twin. CSV uses
 UTF-8. XLSX reads the first worksheet and requires Python 3 on PATH

@@ -305,7 +305,7 @@ export async function makeHost(opts: { appDir: string; cwd: string; skills?: str
         if (!sh) return { code: 127, out: '', err: NO_SH, argv: [] }
         bin = sh
       }
-      return spawnArgv(argvFor(call, win, skillsDir, args, bin), repoRoot, call === 'pending-machine' ? 15000 : 30000, stdin)
+      return spawnArgv(argvFor(call, win, skillsDir, args, bin), repoRoot, call === 'pending-machine' ? 15000 : call === 'intake-files' && args[0] === 'pick' ? 130000 : 30000, stdin)
     },
     async stat(path) {
       try { const s = await fsStat(abs(path)); return { mtimeMs: s.mtimeMs, size: s.size } } catch { return null }

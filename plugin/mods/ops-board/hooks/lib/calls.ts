@@ -5,7 +5,7 @@
 
 export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' | 'meta-assign-tester' | 'meta-assign-session' | 'meta-decide' | 'meta-decided'
   | 'meta-team-add' | 'meta-team-remove' | 'meta-team-lead'
-  | 'meta-intake'
+  | 'meta-intake' | 'intake-files'
   | 'meta-status' | 'holo-ticket' | 'meta-reconcile' | 'meta-unblock' | 'meta-start' | 'meta-testing' | 'meta-block'
   | 'relay-list' | 'relay-resume' | 'relay-queue-add' | 'relay-push-pending' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-watchdog-mode' | 'relay-decide'
   | 'relay-stage-landed'
@@ -39,7 +39,7 @@ export const up = (p: string, n: number) => {
 // [@handle, name, emails comma-joined]; meta-team-remove / meta-team-lead [@handle]; relay-resume and
 // relay-queue-add [RUN-id]; relay-push-pending [RUN-id, mode?]; relay-hold [reason]; relay-decide [level line]; relay-stage-landed [RUN-id, n, sha];
 // run-rename [id, name]; team-setup-check / team-setup-walk none; team-arm / team-disarm / team-arm-status none; team-url-ack [url copied] or none; others none.
-type ScriptCall = Exclude<Call, 'holo-ticket' | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail' | 'team-login' | 'team-login-status'>
+type ScriptCall = Exclude<Call, 'holo-ticket' | 'intake-files' | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail' | 'team-login' | 'team-login-status'>
 const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
   'pending':            { script: PENDING, sh: a => a, ps: a => a },
   'pending-kv':         { script: PENDING, sh: a => ['--kv', ...a], ps: a => ['--kv', ...a] },
@@ -95,6 +95,7 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
 // another process could read them; the others no args.
 const TEAM_JS = 'teams-uhura/scripts/team.mjs'
 const NODE: Partial<Record<Call, { script: string; args: (a: string[]) => string[] }>> = {
+  'intake-files': { script: 'tickets-zordon/scripts/intake-files.mjs', args: a => a },
   'team-mark-read': { script: TEAM_JS, args: a => ['inbox', 'mark-read', '--upto', a[0] ?? ''] },
   'team-config-show': { script: TEAM_JS, args: () => ['config', 'show'] },
   'team-config-save': { script: TEAM_JS, args: () => ['config', 'save'] },
