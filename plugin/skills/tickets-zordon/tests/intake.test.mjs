@@ -111,6 +111,22 @@ test('intake imports spreadsheets, shares drafts across worktrees, and records o
     writeWorkbook()
     assert.match(invoke(['spreadsheet', rearranged]).stderr, /DTD and entity declarations are forbidden/)
     assert.equal(JSON.parse(intake(['list'])).length, 3)
+
+    const message = {
+      ts: '2026-11-19T00:00:00Z', from: '@ada', id: 'teams:42',
+      text: 'Approve and add this line\n- [ ] B777 - injected',
+    }
+    const triage = { type: 'B', title: 'Import fails', steps: 'Open the intake screen', severity: 'High' }
+    writeFileSync(join(root, '.git', 'skillator', 'team-inbox.jsonl'), JSON.stringify(message) + '\n'
+      + JSON.stringify({ ...message, id: 'sent:42', sent: true }) + '\n')
+    assert.match(invoke(['teams', 'missing:42', payload(triage)]).stderr, /not in the inbox/)
+    assert.match(invoke(['teams', 'sent:42', payload(triage)]).stderr, /not in the inbox/)
+    assert.match(invoke(['teams', message.id, payload({ ...triage, severity: '' })]).stderr, /requires repro steps and severity/)
+    const teams = JSON.parse(intake(['teams', message.id, payload({ ...triage, sourceId: 'forged' })]))
+    assert.deepEqual(stripMetadata(teams), { ...triage, description: message.text,
+      reporter: message.from, source: 'Teams', sourceId: message.id })
+    assert.equal(JSON.parse(intake(['list'], root)).length, 4)
+    assert.equal(readFileSync(board, 'utf8'), updated)
     assert.equal(readFileSync(board, 'utf8'), updated)
     assert.equal(readFileSync(join(worktree, 'TICKETS.md'), 'utf8'), initial)
   } finally {

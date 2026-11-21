@@ -87,11 +87,23 @@ async function run([root, common, git, shell, allocator, action, id, revision, p
       .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
       .map(draft => ({ ...draft, duplicates: duplicateIds(draft.title, lines) }))
   }
+  if (action === 'teams') {
+    const { ID_RE, linesOf, readInbox } = await import('../../teams-uhura/scripts/inbox.mjs')
+    if (!ID_RE.test(id ?? '')) throw new Error('teams intake requires a message ID')
+    const message = readInbox(join(common, 'skillator')).findLast(record => record.id === id)
+    if (!message) throw new Error('Teams message is not in the inbox')
+    const { type, title, steps, severity } = decode(revision)
+    const draft = draftFields({ type, title, steps, severity,
+      description: linesOf(message.text).join('\n'), reporter: message.from,
+      source: 'Teams', sourceId: message.id })
+    if (!draft.steps || !draft.severity) throw new Error('Teams triage requires repro steps and severity')
+    return enqueue(draft)
+  }
   if (action === 'add') {
     return enqueue(draftFields(decode(id)))
   }
   if (!['accept', 'edit', 'reject'].includes(action) || !/^[a-f0-9-]{36}$/.test(id))
-    throw new Error('usage: intake list | add <base64url-json> | spreadsheet <file> [column numbers] | accept/edit/reject <draft-id> <revision> [base64url-json]')
+    throw new Error('usage: intake list | add <base64url-json> | spreadsheet <file> [column numbers] | teams <message-id> <base64url-json> | accept/edit/reject <draft-id> <revision> [base64url-json]')
   const path = join(dir, id + '.json')
   if (!existsSync(path)) throw new Error('draft is no longer pending')
   const draft = readDraft(path)
