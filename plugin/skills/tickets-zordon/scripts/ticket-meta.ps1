@@ -1381,7 +1381,7 @@ function Do-Intake([string[]]$a) {
   $board = "$root/TICKETS.md"
   $allocator = "$PSScriptRoot/../../../practice/scripts/next-id.ps1"
   if ($script:BFresh) { $allocator = Join-Path (Split-Path -Parent $script:BFresh) 'next-id.ps1' }
-  $git = (Get-Command git -CommandType Application -ErrorAction Stop).Source
+  $git = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
   $shell = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
   Lock-Board "$board.lock"
   try {
