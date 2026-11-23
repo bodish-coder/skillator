@@ -141,7 +141,7 @@ test('F61: offsetFor keeps a header in view too', () => {
 })
 test('band, health, runs line builders live in lib', () => {
   expect(NARROW_COLUMNS).toBe(110)
-  expect(countsOf(board)).toEqual({ open: 7, progress: 1, testing: 0, blocked: 1, decision: 1 })
+  expect(countsOf(board)).toEqual({ open: 7, progress: 1, testing: 0, verified: 0, blocked: 1, decision: 1 })
   const band = bandLines({ watch: { level: 'green', reasons: [] }, machine: null, usage: null, relay: null, counts: countsOf(board), narrow: true, cols: 80, now: 0 })
   expect(band).toHaveLength(2)
   expect(healthLines({ usage: null, machine: null, relay: null, now: 0 }).map(l => l.key)).toContain('h:machine')
@@ -172,18 +172,18 @@ test('F116 status/help native prefixes occupy the Tickets chrome budget', () => 
 })
 
 test('A199: buildModel includes personalized Assigned and Decide groups, folding, and raw ticket resolution when fold state is passed', () => {
-  const mOpen = buildModel(view({ me: '@asha', assignedFolded: false, decideFolded: false }))
+  const mOpen = buildModel(view({ me: '@asha', open: ['unfold:assigned', 'unfold:decide'] }))
   expect(mOpen.userGroups.map(g => [g.id, g.tickets.map(t => t.id), g.open])).toEqual([
     ['assigned', [], true],
     ['decide', ['F3'], true],
   ])
   expect(mOpen.items.slice(0, 4)).toEqual(['head:assigned', 'head:decide', 'decide:F3', 'head:~'])
 
-  const mSel = buildModel(view({ me: '@asha', assignedFolded: false, decideFolded: false, selected: 'decide:F3' }))
+  const mSel = buildModel(view({ me: '@asha', open: ['unfold:assigned', 'unfold:decide'], selected: 'decide:F3' }))
   expect(mSel.selected).toBe('decide:F3')
   expect(mSel.ticket).toBe('F3')
 
-  const mFolded = buildModel(view({ me: '@asha', assignedFolded: false, decideFolded: true, selected: 'decide:F3' }))
+  const mFolded = buildModel(view({ me: '@asha', open: ['unfold:assigned'], selected: 'decide:F3' }))
   expect(mFolded.userGroups.find(g => g.id === 'decide')?.open).toBe(false)
   expect(mFolded.items).not.toContain('decide:F3')
   expect(mFolded.selected).toBe('head:decide')
@@ -193,15 +193,15 @@ test('A199: buildModel includes personalized Assigned and Decide groups, folding
 // F178: a third personal section, 'This session (<code>)', only when the board knows its session code
 test('F178: the This session section lists open tickets tagged [session: <code>], only with a session code', () => {
   const b = parseBoard('- [ ] F1 — mine [session: cc-1ir0]\n- [ ] F2 — other [session: cc-zzzz]\n- [x] F3 — done [session: cc-1ir0]\n', 'T', 0, 0)
-  const m = buildModel(view({ board: b, me: '@vidul', session: 'cc-1ir0', assignedFolded: false, decideFolded: false, sessionFolded: false }))
+  const m = buildModel(view({ board: b, me: '@vidul', session: 'cc-1ir0', open: ['unfold:assigned', 'unfold:decide', 'unfold:session'] }))
   const g = m.userGroups.find(x => x.id === 'session')!
   expect([g.title, g.tickets.map(t => t.id), g.open]).toEqual(['This session (cc-1ir0)', ['F1'], true])
   expect(m.items.slice(0, 4)).toEqual(['head:assigned', 'head:decide', 'head:session', 'session:F1'])
-  const sel = buildModel(view({ board: b, me: '@vidul', session: 'cc-1ir0', assignedFolded: false, decideFolded: false, sessionFolded: false, selected: 'session:F1' }))
+  const sel = buildModel(view({ board: b, me: '@vidul', session: 'cc-1ir0', open: ['unfold:assigned', 'unfold:decide', 'unfold:session'], selected: 'session:F1' }))
   expect(sel.ticket).toBe('F1')
   // no session code: no section; no me, but a session code: the session section alone
-  expect(buildModel(view({ board: b, me: '@vidul', assignedFolded: false, decideFolded: false })).userGroups.map(x => x.id)).toEqual(['assigned', 'decide'])
-  expect(buildModel(view({ board: b, session: 'cc-1ir0', sessionFolded: false })).items.slice(0, 2)).toEqual(['head:session', 'session:F1'])
+  expect(buildModel(view({ board: b, me: '@vidul', open: ['unfold:assigned', 'unfold:decide'] })).userGroups.map(x => x.id)).toEqual(['assigned', 'decide'])
+  expect(buildModel(view({ board: b, session: 'cc-1ir0', open: ['unfold:session'] })).items.slice(0, 2)).toEqual(['head:session', 'session:F1'])
 })
 
 // F180: with no open choice made, every personal section is collapsed

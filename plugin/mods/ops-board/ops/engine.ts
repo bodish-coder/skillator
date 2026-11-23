@@ -9,7 +9,7 @@ import { MUTE_FILE, muteKv } from '../hooks/lib/facts'
 import type { Effect, Key, PointerAction, State, Step } from './state'
 import { onBoard, onInbox, onMachine, onRuns, onUsage, reduce, afterRun, point, openHelp, onSkillDoc, readProfiles } from './state'
 import { INBOX_FILE, READ_FILE } from '../hooks/lib/inbox'
-import { parseBoard } from '../hooks/lib/board'
+import { parseBoard, withWorkingStates } from '../hooks/lib/board'
 import { meOf, parseTeam } from '../hooks/lib/team'
 import { parseRuns, scriptPathOf } from '../hooks/lib/runs'
 import { NO_SCRIPTS } from '../hooks/lib/calls'
@@ -243,7 +243,10 @@ export function makeEngine(o: EngineOpts): Engine {
       if (tst) { try { team = parseTeam(await host.read(teamPath)) } catch { team = [] } }
     }
     if (stopped) return
-    if (moved && board) state = onBoard(state, board, team, meOf(team, email ?? '', o.envMe))
+    if (board) {
+      const current = await withWorkingStates(board, root, Date.now(), p => host.stat(p), p => host.read(p))
+      if (!stopped && (moved || current !== board)) state = onBoard(state, current, team, meOf(team, email ?? '', o.envMe))
+    }
     await pollInbox()
     draw()
   }

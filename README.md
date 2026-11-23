@@ -312,7 +312,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
 - **tickets-zordon** — Jira-style serialised ticket IDs for AI coding chats: bugs
   `B1, B2, B3…`, features `F1, F2, F3…`, agent-found issues `A1, A2, A3…`,
   sub-parts `B7a/B7b`, all in one committed `TICKETS.md` at the repo root with
-  `[ ]` pending / `[~]` in-progress / `[%]` testing / `[!]` blocked / `[?]` pending
+  `[ ]` pending / `[~]` in-progress / `[%]` testing / `[v]` verified / `[!]` blocked / `[?]` pending
   decision / `[>]` deferred / `[x]` done / `[-]` cancelled status. IDs are never reused or renumbered and new lines are appended, so
   teammates on the same branch and future chats can fetch the open set and nothing
   gets forgotten. 1–3 tickets are dispatched as plain parallel agents; at 4+, a
@@ -320,10 +320,13 @@ Deactivating is deleting `.skillator/grayskull.md`.
   deterministic script that fixes and adversarially verifies every ticket in
   parallel, with structured verdicts coming back. The main session always owns
   `TICKETS.md`; agents only report. Invoke with `/tickets-zordon`.
-  `/verify-shifu` re-checks every `[%]` testing ticket with one fresh agent
-  each (read and run tests only) and records a dated `(verified PASS ..)` or
-  `(verified FAIL ..: what - why)` note; the box stays `[%]` either way, and a
-  Done line needing the owner's eyes → OWNER, no note.
+  `/verify-shifu [--deep] [ticket IDs…]` checks Testing tickets against fresh
+  evidence and writes an interactive HTML report. PASS moves a ticket to
+  Verified. FAIL and OWNER record the outstanding check in Testing.
+  `/analyse-shifu [ticket IDs…]` runs the selected local testing apps against
+  the requested tickets, or all Testing and Verified tickets when no IDs are
+  supplied. It reruns app checks and reuses deep verification when the
+  implementation and acceptance criteria still match.
 - **rules-orko** — how the user works, written down the moment they say it.
   "From now on always run the tests before you commit" or "in this repo nobody
   touches `store.py` without asking" dies with the chat otherwise: two isolated

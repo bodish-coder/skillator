@@ -1,9 +1,11 @@
-export type Box = ' ' | '~' | '%' | '!' | '?' | '>' | 'x' | '-'
+export type Box = ' ' | '~' | '%' | 'v' | '!' | '?' | '>' | 'x' | '-'
 export type Ticket = {
   id: string; box: Box; title: string; line: string      // line = exact text after "- [b] "
   parent: string | null; indent: number; section: string // heading it sits under
   apps: string[]; decide: string | null; owner: string | null; tester: string | null; by: string[]
   session: string | null                                 // "(@cc-4ae496)" or F109 "(@cc-k7q2:asha:run)" tag, without parens
+  workingSession?: string | null
+  workingState?: 'active' | 'ended' | 'stale' | 'unknown'
   assignedSession?: string | null                        // F178: [session: cc-1ir0] - the session the ticket is for
 }
 export type Board = { path: string; mtimeMs: number; size: number; tickets: Ticket[]; error: string | null }
@@ -184,10 +186,7 @@ declare module 'claude-code' {
       filter: Filter; filterOpen: boolean
       ascii: boolean
       ticketOffset: number | null    // pinned Tickets list; null follows selection
-      openGroups: Box[]      // F61: the open groups' boxes this session; none = all collapsed
-      assignedFolded: boolean
-      decideFolded: boolean
-      sessionFolded: boolean   // F178: the 'This session' section
+      openGroups: string[]   // status boxes and unfold:<personal section>; empty = collapsed
       runsOpen: ('runs' | 'workflows' | 'agents')[]   // F76: the Workflows tab's open sections this session
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]
       runs: RunView[]; assign: AssignDraft | null; narrow: boolean

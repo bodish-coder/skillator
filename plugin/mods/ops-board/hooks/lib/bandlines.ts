@@ -1,6 +1,6 @@
 import type { Color } from 'claude-code'
 import type { Board, Level, Machine, Usage, Watch, Window } from '../../types'
-import { paint } from './board'
+import { isOpen, paint } from './board'
 import { ageText, DISK, figure, HOLD_UNKNOWN, isStale, MEM, mutedWords } from './facts'
 
 // F48, design §7: the band's lines - always on, green when fine - the narrow
@@ -9,7 +9,7 @@ import { ageText, DISK, figure, HOLD_UNKNOWN, isStale, MEM, mutedWords } from '.
 export const NARROW_COLUMNS = 110
 const FACTS_OLD_MS = 3 * 60 * 1000          // a machine poll missed twice: its facts show their age
 
-export type Counts = { open: number; progress: number; testing: number; blocked: number; decision: number }
+export type Counts = { open: number; progress: number; testing: number; verified: number; blocked: number; decision: number }
 export type BandInput = {
   watch: Watch; machine: Machine | null; usage: Usage | null
   relay: string | null              // "RUN-0012 2/4": the first run not all done
@@ -27,11 +27,11 @@ export const clean = (t: string) => t.replace(/\t/g, ' ').replace(/[\x00-\x08\x0
 const LEVEL_COLOR: Record<Level, Color> = { green: 'success', amber: 'warning', red: 'error' }
 const GLYPH: Record<Level, string> = { green: '●', amber: '▲', red: '■' }
 
-// Open = [ ] [~] [%] [!] [?]; deferred and closed are not open (tickets-zordon, pending).
+// Open = [ ] [~] [%] [v] [!] [?]; deferred and closed are not open (tickets-zordon, pending).
 export function countsOf(board: Board | null): Counts | null {
   if (!board || board.error) return null
   const n = (b: string) => board.tickets.filter(t => t.box === b).length
-  return { open: n(' ') + n('~') + n('%') + n('!') + n('?'), progress: n('~'), testing: n('%'), blocked: n('!'), decision: n('?') }
+  return { open: board.tickets.filter(isOpen).length, progress: n('~'), testing: n('%'), verified: n('v'), blocked: n('!'), decision: n('?') }
 }
 
 // F95: the status line: `ops [@me] <p> pending | <i> in progress | <t> total · 5h <pct>`, 7d
@@ -41,7 +41,7 @@ export function countsOf(board: Board | null): Counts | null {
 const STATUS_MAX = 60
 export function statusText(c: Counts | null, u: Usage | null, now: number, me: string | null, handoff?: string | null): string {
   const counts = !c ? '-'
-    : `${c.open - c.progress - c.testing - c.blocked - c.decision} pending | ${c.progress} in progress | ${c.open} total`
+    : `${c.open - c.progress - c.testing - c.verified - c.blocked - c.decision} pending | ${c.progress} in progress | ${c.open} total`
   const part = (label: string, w: Window | null | undefined) => (w ? ` · ${label} ${w.pct}%${isStale(w, now) ? ' (stale)' : ''}` : '')
   const five = part('5h', u?.five), seven = part('7d', u?.seven)
   const head = (who: string | null) => `ops ${who ? who + ' ' : ''}${counts}`
@@ -113,7 +113,7 @@ export function bandSegs(v: BandInput): Seg[][] {
   if (v.narrow) {
     const c = v.counts
     const counts: Seg[][] = c ? [[{ text: `${c.open} open` },
-      ...([['~', c.progress], ['%', c.testing], ['!', c.blocked], ['?', c.decision]] as const)
+      ...([['~', c.progress], ['%', c.testing], ['v', c.verified], ['!', c.blocked], ['?', c.decision]] as const)
         .filter(([, n]) => n > 0).flatMap(([b, n]): Seg[] => [{ text: ' ' }, { text: '●' + n, color: paint(b) }])]] : []
     const one = join([lead, ...counts, ...(v.relay ? [[{ text: v.relay }]] : []), disk, mem])
     const amberWords: Seg[][] = m?.locks.length ? [[{ text: 'locks ' }, { text: `${m.locks.length} stale`, color: 'warning' }]] : []

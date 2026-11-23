@@ -25,7 +25,7 @@ Create it if missing, with exactly this shape:
 ```markdown
 # TICKETS
 
-Legend: `[ ]` pending · `[~]` in-progress · `[%]` testing · `[!]` blocked · `[?]` decide · `[>]` deferred · `[x]` done · `[-]` cancelled
+Legend: `[ ]` pending · `[~]` in-progress · `[%]` testing · `[v]` verified · `[!]` blocked · `[?]` decide · `[>]` deferred · `[x]` done · `[-]` cancelled
 IDs are permanent — never reuse or renumber. Append new tickets at the end of
 their section.
 
@@ -127,6 +127,7 @@ sh <skills>/tickets-zordon/scripts/ticket-meta.sh assign F12 @asha   # implement
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh decide F12 @asha   # must decide it
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh decided F12        # decision made
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh testing F12 owner live check  # [%], waits on that test
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh verify F12 pass unit tests green  # [%] -> [v]
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh tested F12 pass    # [%] -> [x]; fail -> [~]
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh done F12 RED/GREEN 3/3, abc1234  # [x] + tag, ` **Done <date>: ..**`
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh block F12 S3 creds from ops     # [!] ` (blocked: ..)`
@@ -180,7 +181,7 @@ lead: @vidul
   the lead; anyone else is refused, the refusal naming both. Not on the team →
   claims are refused (`add <email> to team.md`).
 - **Picking**: `ticket-meta pick [IDs]` prints `you: <me>` then `pick <ID>`
-  (unassigned, or mine) or `skip <ID> <owner>` per ticket (no IDs: every `[ ]`
+  (unassigned, or mine), `skip <ID> <owner>`, or `skip <ID> verified` per ticket (no IDs: every `[ ]`
   `[~]` `[!]` ticket). Runs take only the picked; a skipped one is listed as
   skipped with its owner, never run. Not on the team → only unassigned tickets.
   No team file → every ticket is picked and nothing is claimed, as before.
@@ -337,6 +338,8 @@ write the ticket.**
 ## Working a ticket
 
 - Starting → `ticket-meta start <ID>`: `[~]`, an unowned ticket claimed to you (F106), your session tag stamped (F109; a subagent prefixes `SKILLATOR_MODE=agent`), see **Who touched it**.
+   - Start records the identified session as `[working: CODE]`. The current worker can run `ticket-meta handoff <ID> <session-code>`. To take over explicitly, run `ticket-meta takeover <ID> --from <current-session-code>`. The commands check the previous worker under the board lock and keep it in the ticket history.
+- Verification PASS → `ticket-meta verify <ID> pass <evidence>` moves Testing to Verified `[v]`.
 - Finished *and verified* (tests/build/manual check actually run) → `[x]`,
   via `ticket-meta done <ID> [evidence]`: the box `[x]`, the `tag` a close owes,
   and, when evidence is given, ` **Done <YYYY-MM-DD>: <evidence>**` before the
@@ -387,7 +390,7 @@ write the ticket.**
   cp1252 (a bare Python `open()` on Windows) matches nothing and changes
   nothing while exiting 0. Read, write and compare it as UTF-8.
 - Cycle end / session end: re-read the file and correct any status that drifted,
-  then report the open set — every open box: `[ ]`, `[~]`, `[%]`, `[!]` and
+  then report the open set — every open box: `[ ]`, `[~]`, `[%]`, `[v]`, `[!]` and
   `[?]` — to the user.
 - Once the turn's edits are read back, republish the artifact board — see
   **The artifact board**. Board changed, artifact stale, is a bug.
@@ -518,8 +521,8 @@ or only the IDs given as arguments — and propose the status it really has.
 ### Verify what is in testing (`/verify-shifu`)
 
 `[%]` says built, a check owed. On `/verify-shifu` (or "verify the testing
-tickets"), re-check **every** `[%]` row - or only the IDs given; a named ID not
-in `[%]` is reported `not [%]` and skipped - against evidence obtained **now**,
+tickets"), re-check **every** `[%]` row or the explicit IDs given. Explicit IDs
+can be in Testing `[%]` or Verified `[v]`. Check against evidence obtained **now**,
 never against the line's own claim.
 
 1. **One fresh agent per ticket**, no session history, its own prompt: the ID,
@@ -555,18 +558,18 @@ never against the line's own claim.
      without parentheses or `*` as ticket-meta needs, no separate WHY (each
      finding carries its own). OWNER still wins.
 2. **Record each verdict** in the main session, with ticket-meta only - the
-   owner's standing ruling, so no question first, headless included. A verdict
-   is a note, never a status: the box stays `[%]` on every verdict (closing it
-   stays the owner's `done`). The note replaces any earlier verify note:
+   owner's standing ruling, so no question first, headless included. PASS puts
+   the ticket in Verified `[v]`. FAIL and OWNER put it in Testing `[%]`. The current
+   verdict replaces the earlier note. The owner's `done` closes the ticket:
    - PASS → `ticket-meta verify <ID> pass <evidence>`:
      ` (verified PASS <date>: <evidence>)` on the line.
    - FAIL → `ticket-meta verify <ID> fail <what failed> - <why>` (` - <why>`
      only when the agent gave a WHY): ` (verified FAIL <date>: <what> - <why>)`.
-   - OWNER → nothing. No note.
+   - OWNER → `ticket-meta verify <ID> owner <reason>` records the check the owner owes.
    - An agent that returns no verdict line is FAIL, "no verdict"; never PASS.
 3. Read the board back - `grep -n '<ID>' TICKETS.md` per ticket - run
    `sh "$PRACTICE/scripts/check-tickets.sh"`, and report one table
-   `ID | verdict | evidence` and the count: `testing 3 (1 pass, 1 fail, 1 owner)`.
+   `ID | verdict | evidence` and the count by verdict: `1 verified, 2 testing (1 fail, 1 owner)`.
 
 ## Work tickets in parallel, not in a line
 
@@ -759,10 +762,10 @@ return results.filter(Boolean)
 Whole board: read `TICKETS.md`. Just the open ones:
 
 ```
-grep -nE '^\s*- \[[ ~%!?]\]' TICKETS.md
+grep -nE '^\s*- \[[ ~%v!?]\]' TICKETS.md
 ```
 
-`[x]` and `[-]` are the closed states, so neither shows up there; `[%]`, `[!]`
+`[x]` and `[-]` are the closed states, so neither shows up there; `[%]`, `[v]`, `[!]`
 and `[?]` do.
 
 When the user says a bare ID ("do B3", "what's F12"), grep for it and act on
@@ -889,14 +892,14 @@ Agent-found
   [ ] A1 — Unhandled promise rejection in the upload worker
   [>] A2 — `parseDate` returns Invalid Date on empty string (deferred: after the parser rewrite)
 
-7 open (4 pending · 1 in-progress · 0 testing · 1 blocked · 1 decide) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
+7 open (4 pending · 1 in-progress · 0 testing · 0 verified · 1 blocked · 1 decide) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
 ```
 
 ### By status (`list tickets status`)
 
 Same lines, regrouped. Sections in this order — **in-progress first**, because
 that is what someone asking for a status view wants to see — In progress,
-Testing, Blocked, Decide, Deferred, Pending (this board has nothing
+Testing, Verified, Blocked, Decide, Deferred, Pending (this board has nothing
 under test, so no Testing section):
 
 ```
@@ -918,7 +921,7 @@ Pending
   [ ] F2 — Bulk delete in the table view
   [ ] A1 — Unhandled promise rejection in the upload worker
 
-7 open (4 pending · 1 in-progress · 0 testing · 1 blocked · 1 decide) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
+7 open (4 pending · 1 in-progress · 0 testing · 0 verified · 1 blocked · 1 decide) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
 ```
 
 A sub-part shown away from its parent carries the parent ID in trailing
@@ -935,36 +938,36 @@ parentheses — `(B2)` — since the indentation that explained it is gone. Incl
   always**, no matter how many there are. A long title truncates at ~80 chars
   with `…`; it never disappears. If the board is too long to print, **page it —
   never abbreviate it** (below).
-- **Open and deferred, by default** (`[ ]`, `[~]`, `[%]`, `[!]`, `[?]`, `[>]`) — every
+- **Open and deferred, by default** (`[ ]`, `[~]`, `[%]`, `[v]`, `[!]`, `[?]`, `[>]`) — every
   deferred ticket is listed, just counted apart. Closed tickets on request
   ("show everything", "what did we finish") — then `[x]` and `[-]` too.
 - **Drop empty sections.** No "Features: none", no empty `Blocked`.
 - **Blocked and deferred show their reason**; that is the whole point of
   `[!]` and `[>]`. Decide shows who decides — its `[decide: ..]` tag;
   testing shows what test — its `(testing: ..)` note.
-- **The counts must add up, and the line must show its work.** Eight mutually
+- **The counts must add up, and the line must show its work.** Nine mutually
   exclusive states, two buckets and a loner:
-  `open = pending + in-progress + testing + blocked + decide`
-  (testing, blocked and decide are open, just waiting) ·
+  `open = pending + in-progress + testing + verified + blocked + decide`
+  (testing, verified, blocked and decide are open, just waiting) ·
   `closed = done + cancelled` · deferred is **neither** — it stands alone
   between them, so it never inflates the open count someone is judging the
   week by · `total = open + deferred + closed`. Each bucket prints its own
   subtotal with the breakdown in parentheses, so the arithmetic is checkable on
   sight and blocked is never mistaken for a bucket beside open.
-- **Always print all eight states, zeros included.** Never drop a term because
+- **Always print all nine states, zeros included.** Never drop a term because
   it is `0`. `0 blocked` is information — it says nothing is stuck, which is
   exactly what someone scanning the board wants to know — and a fixed-shape line
   can be compared against last session's at a glance. An empty board still
   prints the full line:
 
   ```
-  0 open (0 pending · 0 in-progress · 0 testing · 0 blocked · 0 decide) · 0 deferred · 0 closed (0 done · 0 cancelled) · 0 total
+  0 open (0 pending · 0 in-progress · 0 testing · 0 verified · 0 blocked · 0 decide) · 0 deferred · 0 closed (0 done · 0 cancelled) · 0 total
   ```
 - **One count line after the list**, and nothing else. No commentary on the
   board's health, no suggested next ticket unless asked:
 
   ```
-  7 open (4 pending · 1 in-progress · 0 testing · 1 blocked · 1 decide) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
+  7 open (4 pending · 1 in-progress · 0 testing · 0 verified · 1 blocked · 1 decide) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
   ```
 - Legend only if the user seems new to the board, and then one line.
 
@@ -973,7 +976,7 @@ parentheses — `(B2)` — since the indentation that explained it is gone. Incl
 Long boards are where the list is *most* needed and most often ruined. Do not
 compress by dropping titles. Compress by **showing less of the board, in full**:
 
-1. **In-progress, testing, blocked and decide print in full, always.** However big the board,
+1. **In-progress, testing, verified, blocked and decide print in full, always.** However big the board,
    that is what the person asking is actually working on and stuck behind.
 2. **Pending prints in full up to 20 lines per section**, oldest first. Over
    that, print 20 and add one line naming the rest and how to see it:
@@ -985,7 +988,7 @@ compress by dropping titles. Compress by **showing less of the board, in full**:
    files drift: a `B68` logged during a burst of agent findings ends up under
    `## Agent-found` and stays there forever. The ID is the classification; the
    heading is just where the line happened to land. Sort within a group by status
-   (in-progress, testing, blocked, decide, deferred, pending) then by number.
+   (in-progress, testing, verified, blocked, decide, deferred, pending) then by number.
 4. **`list tickets <prefix>`** (`list tickets A`, `list tickets B`) scopes to one
    type and prints it whole, no cap. That is the escape hatch the truncation line
    points at, so it must actually work.
@@ -1037,7 +1040,6 @@ UTF-8 JSON object as base64url. Drafts live in the shared Git directory.
 
 ### Import spreadsheets
 
-Copy [spreadsheet-template.csv](spreadsheet-template.csv) and fill in one row per
 In Ops Board, open **Tickets → Intake** (`i`) to import files or save samples.
 If a draft is open, choose **Import files** first. Use the Windows browse
 dialog or enter a path. In the standalone board, use `Tab` to move between
@@ -1045,6 +1047,7 @@ fields, `F2` to browse, and `Enter` to import or generate samples.
 Generate samples writes a new folder with an XLSX workbook, a ticket XML
 template, and a matching ATS XML sample, results JSON and mapping.
 
+Copy [spreadsheet-template.csv](spreadsheet-template.csv) and fill in one row per
 draft. Type accepts Bug, Feature, B or F. Type and Title are required.
 Run `ticket-meta intake spreadsheet <file>` with either script twin. CSV uses
 UTF-8. XLSX reads the first worksheet and requires Python 3 on PATH

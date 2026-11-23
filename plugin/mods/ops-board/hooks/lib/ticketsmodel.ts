@@ -16,7 +16,7 @@ export const decideTickets = (tickets: readonly Ticket[], user: string | null): 
   user ? tickets.filter(t => isOpen(t) && (sameHandle(t.decide, user) || (t.box === '?' && !t.decide))) : []
 
 export const sessionTickets = (tickets: readonly Ticket[], code: string | null | undefined): Ticket[] =>
-  code ? tickets.filter(t => isOpen(t) && sameHandle(t.assignedSession, code)) : []
+  code ? tickets.filter(t => isOpen(t) && sameHandle(t.workingSession ? (t.box === '~' ? t.workingSession : null) : t.assignedSession, code)) : []
 
 // F180: a personal section starts collapsed; 'unfold:<sec>' in `open` is the owner's choice this session
 export const isUserSectionOpen = (open: readonly string[], sec: UserSection): boolean =>
@@ -34,18 +34,16 @@ export const rawTicketId = (item: string | null): string | null =>
 export function personalGroups(
   tickets: readonly Ticket[],
   user: string | null,
-  opts?: { open?: readonly string[]; assignedFolded?: boolean; decideFolded?: boolean; sessionFolded?: boolean; session?: string | null },
+  opts?: { open?: readonly string[]; session?: string | null },
 ): UserGroup[] {
   const open = opts?.open ?? []
-  // the pane holds a folded flag per section; the ops app (no flag) its `open` keys
-  const isOpenSec = (sec: UserSection, folded: boolean | undefined) => (folded === undefined ? isUserSectionOpen(open, sec) : !folded)
   const out: UserGroup[] = []
   if (user) {
-    out.push({ id: 'assigned', title: 'Assigned', color: 'suggestion', tickets: assignedTickets(tickets, user), open: isOpenSec('assigned', opts?.assignedFolded) })
-    out.push({ id: 'decide', title: 'Mine to decide', color: 'autoAccept', tickets: decideTickets(tickets, user), open: isOpenSec('decide', opts?.decideFolded) })
+    out.push({ id: 'assigned', title: 'Assigned', color: 'suggestion', tickets: assignedTickets(tickets, user), open: isUserSectionOpen(open, 'assigned') })
+    out.push({ id: 'decide', title: 'Mine to decide', color: 'autoAccept', tickets: decideTickets(tickets, user), open: isUserSectionOpen(open, 'decide') })
   }
   if (opts?.session) {
-    out.push({ id: 'session', title: `This session (${opts.session})`, color: 'warning', tickets: sessionTickets(tickets, opts.session), open: isOpenSec('session', opts.sessionFolded) })
+    out.push({ id: 'session', title: `This session (${opts.session})`, color: 'warning', tickets: sessionTickets(tickets, opts.session), open: isUserSectionOpen(open, 'session') })
   }
   return out
 }
@@ -60,7 +58,7 @@ export function userHeadText(g: UserGroup, glyphs: Glyphs, _ascii = false): stri
 // boxes of the open groups (empty: every group collapsed). The cursor walks `items`:
 // each header ('head:<box>') and the rows of open groups (their ticket ids).
 
-const OPEN_STATES: State[] = ['~', '%', '!', '?', ' ', '>']
+const OPEN_STATES: State[] = ['~', '%', 'v', '!', '?', ' ', '>']
 
 export type Group = { box: State; title: string; tickets: Ticket[]; open: boolean }
 export type Model = {
@@ -77,8 +75,8 @@ export type Model = {
 
 export type View = {
   board: Board | null; team: Member[]; me: string | null; filter: Filter; filterOpen: boolean
-  selected: string | null; expanded: string | null; open: State[]; cols: number
-  assignedFolded?: boolean; decideFolded?: boolean; sessionFolded?: boolean
+  selected: string | null; expanded: string | null; open: string[]; cols: number
+  personalUser?: string | null
   session?: string | null             // F178: the board's own session code (cc-1ir0), none null
   ascii?: boolean; rows?: number | null // omitted by the standalone ops app
   offset?: number | null              // list rows; null follows the selection
@@ -89,7 +87,7 @@ export type Glyphs = { open: string; closed: string; rail: string; railDim: stri
   more: string; down: string; up: string; move: string; sep: string; active: string; cut: string }
 export const UNI: Glyphs = { open: '▾', closed: '▸', rail: '▌ ', railDim: '▏ ', dot: '●', more: '…', down: '↓', up: '↑', move: '↑↓', sep: '·', active: '● ', cut: '…' }
 export const ASCII: Glyphs = { open: 'v', closed: '>', rail: '| ', railDim: ': ', dot: '*', more: '...', down: 'v', up: '^', move: '^v', sep: '-', active: '', cut: '...' }
-export const STATE_WORD: Record<State, string> = { ' ': 'open', '~': 'wip ', '%': 'test', '!': 'blkd', '?': 'dec ', '>': 'defr', x: 'done', '-': 'canc' }
+export const STATE_WORD: Record<State, string> = { ' ': 'open', '~': 'wip ', '%': 'test', v: 'vrfd', '!': 'blkd', '?': 'dec ', '>': 'defr', x: 'done', '-': 'canc' }
 export const TAB_LABELS = ['Tickets', 'Workflows', 'Health', 'Messages', 'Explorer', 'Build', 'Help']
 export const KEY_LABELS = ['move', 'a assign', 'd decide', 'f filter', 'x done', 't team', 'c reconcile', 'i intake', 'u ask', 's status', 'h help', 'r refresh']
 
@@ -174,28 +172,19 @@ export const isDecidable = (t: Ticket) => t.box === '?' && !!t.decide
 export function buildModel(v: View): Model {
   const shown = v.board ? visible(v.board, v.filter, v.me) : []
   const open = v.open ?? []
-  const userGroups = personalGroups(shown, v.me, {
-    open: open as readonly string[],
-    assignedFolded: v.assignedFolded,
-    decideFolded: v.decideFolded,
-    sessionFolded: v.sessionFolded,
-    session: v.session,
-  })
-  const includePersonal = userGroups.length > 0 && (v.assignedFolded !== undefined || v.decideFolded !== undefined || v.sessionFolded !== undefined)
+  const userGroups = personalGroups(shown, v.personalUser ?? v.me, { open, session: v.session })
   const groups = GROUPS
     .filter(g => v.filter.showDone || (g.box !== 'x' && g.box !== '-'))
     .map(g => ({ ...g, tickets: shown.filter(t => t.box === g.box), open: open.includes(g.box) }))
     .filter(g => g.tickets.length > 0)
   const rows = groups.flatMap(g => (g.open ? g.tickets : []))
-  const userItems = includePersonal
-    ? userGroups.flatMap(ug => [headKey(ug.id), ...(ug.open ? ug.tickets.map(t => `${ug.id}:${t.id}`) : [])])
-    : []
+  const userItems = userGroups.flatMap(ug => [headKey(ug.id), ...(ug.open ? ug.tickets.map(t => `${ug.id}:${t.id}`) : [])])
   const statusItems = groups.flatMap(g => [headKey(g.box), ...(g.open ? g.tickets.map(t => t.id) : [])])
   const items = [...userItems, ...statusItems]
   // A ticket whose group is collapsed shows as its header selected; it is still the one
   // stored, so opening the group lands back on it.
   const want = v.selected
-  const userHome = includePersonal && want && /^(assigned|decide|session):/.test(want)
+  const userHome = want && /^(assigned|decide|session):/.test(want)
     ? userGroups.find(ug => ug.tickets.some(t => `${ug.id}:${t.id}` === want))
     : undefined
   const home = want && !isHead(want) ? groups.find(g => g.tickets.some(t => t.id === want)) : undefined
@@ -210,17 +199,15 @@ export function buildModel(v: View): Model {
   const ticket = selected && !isHead(selected) ? rawTicketId(selected) : null
 
   const lines: Model['lines'] = [{ key: 'tabs', rows: 1 }, { key: 'filters', rows: 1 }, { key: 'gap', rows: 1 }]
-  if (includePersonal) {
-    for (const ug of userGroups) {
-      lines.push({ key: headKey(ug.id), rows: 1 })
-      if (!ug.open) continue
-      for (const t of ug.tickets) {
-        const itemKey = `${ug.id}:${t.id}`
-        lines.push({ key: 'row:' + itemKey, rows: 1 })
-        if (chipsOf(t)) lines.push({ key: 'chips:' + itemKey, rows: 1 })
-        if (v.expanded === itemKey || v.expanded === t.id) {
-          lines.push({ key: 'raw:' + itemKey, rows: Math.max(1, Math.ceil((t.line.length + 10) / Math.max(10, v.cols))) })
-        }
+  for (const ug of userGroups) {
+    lines.push({ key: headKey(ug.id), rows: 1 })
+    if (!ug.open) continue
+    for (const t of ug.tickets) {
+      const itemKey = `${ug.id}:${t.id}`
+      lines.push({ key: 'row:' + itemKey, rows: 1 })
+      if (chipsOf(t)) lines.push({ key: 'chips:' + itemKey, rows: 1 })
+      if (v.expanded === itemKey || v.expanded === t.id) {
+        lines.push({ key: 'raw:' + itemKey, rows: Math.max(1, Math.ceil((t.line.length + 10) / Math.max(10, v.cols))) })
       }
     }
   }
@@ -238,7 +225,7 @@ export function buildModel(v: View): Model {
   const filterActive = !!(v.filter.app || v.filter.who || v.filter.mine)
   const all = v.board?.tickets ?? []
   const pool = v.board ? visible(v.board, { ...v.filter, showDone: true }, v.me) : []
-  // Open = [ ] [~] [%] [!] [?] (tickets-zordon, countLine, pending.sh); deferred keeps
+  // Open = [ ] [~] [%] [v] [!] [?] (tickets-zordon, countLine, pending.sh); deferred keeps
   // its own dot after the open ones. "hidden by filter" is the open ones the filter
   // leaves out, deferred not among them, so match + hidden = the unfiltered "n open".
   const openT = pool.filter(isOpen)

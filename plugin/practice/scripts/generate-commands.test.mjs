@@ -218,7 +218,7 @@ test('a directory in an output path fails preflight before any writes', t => {
   assert.equal(readFileSync(stale, 'utf8'), 'keep stale');
 });
 
-test('Windows PowerShell installer writes all 17 Codex skill wrappers with exact substituted bytes', { skip: process.platform !== 'win32' ? 'Windows PowerShell writer check requires Windows' : false }, t => {
+test('Windows PowerShell installer writes all 18 Codex skill wrappers with exact substituted bytes', { skip: process.platform !== 'win32' ? 'Windows PowerShell writer check requires Windows' : false }, t => {
   const root = fixture(t);
   ok(run(root, '--write'));
   const driver = join(root, 'writer.ps1');
@@ -241,11 +241,25 @@ Write-Commands codex $Target
   ok(result);
   assert.equal(result.stderr, '');
   const paths = contract.outputs.filter(p => p.startsWith('host-commands/antigravity/'));
-  assert.equal(paths.length, 17);
+  assert.equal(paths.length, 18);
   for (const path of paths) {
     const actual = readFileSync(join(target, path.replace('host-commands/antigravity/', '')));
     const expected = readFileSync(join(root, path), 'utf8').replaceAll('{{SKILLS}}', target);
     assert.deepEqual(actual, Buffer.from(expected, 'utf8'), path);
+  }
+});
+
+test('Shifu command descriptions, help, and workflow are current on all five generated hosts', async () => {
+  const { renderCommands } = await import('./generate-commands.mjs');
+  const outputs = [...renderCommands(plugin)].filter(([path]) => /\/(?:verify|analyse)-shifu(?:[./])/.test(path));
+  assert.equal(outputs.length, 10);
+  for (const [path, body] of outputs) {
+    assert.equal(readFileSync(join(plugin, path), 'utf8'), body, path);
+    for (const value of path.includes('verify-shifu')
+      ? ['/verify-shifu F191', '/verify-shifu F190 F191', '/verify-shifu --deep F190 F191', '--ids', 'report <run.json>']
+      : ['--configure', 'select analyse', 'combine <evidence.json>', 'report <run.json>']) {
+      assert.ok(body.includes(value), `${path}: ${value}`);
+    }
   }
 });
 
@@ -447,6 +461,7 @@ test('B30: every argv[1]-guarded script still runs its main through a linked plu
   t.after(() => { (process.platform === 'win32' ? rmdirSync : unlinkSync)(link); rmSync(d, { recursive: true, force: true }); });
   for (const [file, args, status, line] of [
     ['practice/scripts/codex-isolation.mjs', ['--help'], 2, /^Usage: codex-isolation\.mjs /m],
+    ['skills/tickets-zordon/scripts/shifu.mjs', ['--help'], 0, /^Shifu commands$/m],
     ['practice/scripts/generate-commands.mjs', ['--check'], 0, /^\d+ generated commands checked; 0 written\.$/m],
     ['practice/scripts/reliability-parity.mjs', ['--help'], 2, /^Usage: node reliability-parity\.mjs /m],
     ['practice/scripts/validate.mjs', ['--help'], 2, /^Usage: node validate\.mjs /m],

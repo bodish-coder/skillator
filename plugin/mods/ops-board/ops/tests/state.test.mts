@@ -1,11 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, decideLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun, point, ticketsItems, activeUser, openHelp, filteredSkills, SKILLS, COMMANDS, HELP_ITEMS, startRunCommand, openStartRun, startRunLines } from '../state'
+import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, decideLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun, point, activeUser, openHelp, filteredSkills, SKILLS, COMMANDS, HELP_ITEMS, startRunCommand, openStartRun, startRunLines } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
-import { parseBoard } from '../../hooks/lib/board'
+import { parseBoard, withWorkingStates } from '../../hooks/lib/board'
 import { decideQuestionsPrompt, holoTicketCmd } from '../../hooks/lib/calls'
-import { buildModel, isUserSectionOpen } from '../../hooks/lib/ticketsmodel'
+import { buildModel, isUserSectionOpen, sessionTickets } from '../../hooks/lib/ticketsmodel'
 import { continuePrompt } from '../../hooks/lib/runlines'
 
 // The board's groups run IN PROGRESS, BLOCKED, DECIDE, PENDING (buildModel):
@@ -646,7 +646,7 @@ const fresh = onBoard(initial(80, 24, 0), parseBoard(BOARD, 'T', 1, 1), team, '@
 test('F61: every group starts collapsed - headers only, the first one selected; counts are every ticket the filter shows', () => {
   assert.deepEqual(fresh.open, [])
   const m = buildModel(viewOf(fresh))
-  assert.deepEqual(m.items, ['head:?', 'head: '])
+  assert.deepEqual(m.items, ['head:assigned', 'head:decide', 'head:?', 'head: '])
   assert.deepEqual(m.rows, [])
   assert.equal(m.selected, 'head:?')
   assert.deepEqual(m.groups.map(g => [g.box, g.tickets.length, g.open]), [['?', 1, false], [' ', 1, false]])
@@ -660,7 +660,7 @@ test('F61: Enter on a header opens and closes it; the selection stays on the hea
   assert.deepEqual(o.open, ['?'])
   assert.equal(o.selected, 'head:?')
   assert.equal(o.expanded, null)
-  assert.deepEqual(buildModel(viewOf(o)).items, ['head:?', 'F3', 'head: '])
+  assert.deepEqual(buildModel(viewOf(o)).items, ['head:assigned', 'head:decide', 'head:?', 'F3', 'head: '])
   const row = press(o, 'down', 'return')
   assert.equal(row.selected, 'F3'); assert.equal(row.expanded, 'F3'); assert.deepEqual(row.open, ['?'])
   assert.deepEqual(press(o, 'return').open, [])
@@ -703,9 +703,9 @@ test('F61: a filter keeps matching groups with their filtered counts; x adds Don
   const asha = { ...fresh, filter: { ...fresh.filter, who: '@asha' } }
   assert.deepEqual(buildModel(viewOf(asha)).groups.map(g => [g.box, g.tickets.length]), [['?', 1], [' ', 1]])
   const vidul = { ...fresh, filter: { ...fresh.filter, mine: true } }
-  assert.deepEqual(buildModel(viewOf(vidul)).items, [])
+  assert.deepEqual(buildModel(viewOf(vidul)).items, ['head:assigned', 'head:decide'])
   const done = reduce(fresh, key('x')).state
-  assert.deepEqual(buildModel(viewOf(done)).items, ['head:?', 'head: ', 'head:x'])
+  assert.deepEqual(buildModel(viewOf(done)).items, ['head:assigned', 'head:decide', 'head:?', 'head: ', 'head:x'])
 })
 
 // F77: the ticket chosen by number in the dialog - selected, unselected, unknown, changed.
@@ -828,16 +828,14 @@ test('F128: Assigned (N) and Decide (N) sections personalized to active user', (
   )
   const tm = [{ handle: '@asha', emails: [] }, { handle: '@vidul', emails: [] }]
   const sAsha = onBoard(initial(80, 24, 0), b, tm, '@asha')
-  const mAsha = buildModel(viewOf(sAsha))
-  const itemsAsha = ticketsItems({ ...sAsha, open: ['unfold:assigned', 'unfold:decide'] as any }, mAsha)
+  const itemsAsha = buildModel(viewOf({ ...sAsha, open: ['unfold:assigned', 'unfold:decide'] })).items
   assert.equal(itemsAsha[0], 'head:assigned')
   assert.equal(itemsAsha[1], 'assigned:F1')
   assert.equal(itemsAsha[2], 'head:decide')
   assert.equal(itemsAsha[3], 'decide:F3')
 
   const sVidul = onBoard(initial(80, 24, 0), b, tm, '@vidul')
-  const mVidul = buildModel(viewOf(sVidul))
-  const itemsVidul = ticketsItems({ ...sVidul, open: ['unfold:assigned', 'unfold:decide'] as any }, mVidul)
+  const itemsVidul = buildModel(viewOf({ ...sVidul, open: ['unfold:assigned', 'unfold:decide'] })).items
   assert.equal(itemsVidul[0], 'head:assigned')
   assert.equal(itemsVidul[1], 'assigned:F5')
   assert.equal(itemsVidul[2], 'head:decide')
@@ -857,13 +855,13 @@ test('F128: Enter, Space, and mouse click toggle expansion/folding of Assigned a
   // Enter opens it
   s = reduce(s, key('return')).state
   assert.ok(isUserSectionOpen(s.open, 'assigned'))
-  let items = ticketsItems(s, buildModel(viewOf(s)))
+  let items = buildModel(viewOf(s)).items
   assert.ok(items.includes('assigned:F1'))
 
   // Space folds it again
   s = reduce(s, key('space')).state
   assert.ok(!isUserSectionOpen(s.open, 'assigned'))
-  items = ticketsItems(s, buildModel(viewOf(s)))
+  items = buildModel(viewOf(s)).items
   assert.ok(!items.includes('assigned:F1'))
 
   // Mouse click via point opens decide
@@ -871,12 +869,12 @@ test('F128: Enter, Space, and mouse click toggle expansion/folding of Assigned a
   assert.ok(!isUserSectionOpen(s.open, 'decide'))
   s = point(s, { kind: 'row', area: 'tickets', id: 'head:decide' }).state
   assert.ok(isUserSectionOpen(s.open, 'decide'))
-  assert.ok(ticketsItems(s, buildModel(viewOf(s))).includes('decide:F3'))
+  assert.ok(buildModel(viewOf(s)).items.includes('decide:F3'))
 
   // Click again folds decide
   s = point(s, { kind: 'row', area: 'tickets', id: 'head:decide' }).state
   assert.ok(!isUserSectionOpen(s.open, 'decide'))
-  assert.ok(!ticketsItems(s, buildModel(viewOf(s))).includes('decide:F3'))
+  assert.ok(!buildModel(viewOf(s)).items.includes('decide:F3'))
 })
 
 test('F128: dynamically adapts when switching users in Team view (t)', () => {
@@ -888,8 +886,8 @@ test('F128: dynamically adapts when switching users in Team view (t)', () => {
   let s = onBoard(initial(80, 24, 0), b, tm, '@asha')
   s = { ...s, open: ['unfold:assigned', 'unfold:decide'] as any }   // F180: opened, as the person would
   assert.equal(activeUser(s), '@asha')
-  assert.ok(ticketsItems(s, buildModel(viewOf(s))).includes('assigned:F1'))
-  assert.ok(!ticketsItems(s, buildModel(viewOf(s))).includes('decide:F3'))
+  assert.ok(buildModel(viewOf(s)).items.includes('assigned:F1'))
+  assert.ok(!buildModel(viewOf(s)).items.includes('decide:F3'))
 
   // Open team view with 't'
   s = reduce(s, key('t')).state
@@ -904,7 +902,7 @@ test('F128: dynamically adapts when switching users in Team view (t)', () => {
   assert.equal(s.me, '@vidul')
 
   // Tickets tab now adapts to @vidul
-  const items = ticketsItems(s, buildModel(viewOf(s)))
+  const items = buildModel(viewOf(s)).items
   assert.ok(!items.includes('assigned:F1'))
   assert.ok(items.includes('decide:F3'))
 })
@@ -1541,11 +1539,11 @@ test('F176: p on Health forces the profile read and keeps its table', () => {
 test('F178: This session section lists open tickets tagged with the app session code', () => {
   const b = parseBoard('- [ ] F1 — Dark mode [session: cc-1ir0]\n- [ ] F2 — Other [session: cc-zzzz]\n', 'T', 1, 1)
   const none = onBoard(initial(80, 24, 0), b, [], null)
-  assert.ok(!ticketsItems(none, buildModel(viewOf(none))).includes('head:session'))
+  assert.ok(!buildModel(viewOf(none)).items.includes('head:session'))
   let s = onBoard({ ...initial(80, 24, 0), session: 'cc-1ir0' }, b, [], null)
   s = { ...s, selected: 'head:session' }
   if (!isUserSectionOpen(s.open as string[], 'session')) s = reduce(s, key('return')).state
-  const items = ticketsItems(s, buildModel(viewOf(s)))
+  const items = buildModel(viewOf(s)).items
   assert.deepEqual(items.slice(0, 2), ['head:session', 'session:F1'])
   assert.ok(!items.includes('session:F2'))
 })
@@ -1554,7 +1552,7 @@ test('F178: This session section lists open tickets tagged with the app session 
 test('F180: fresh ops board - every personal section and status group collapsed', () => {
   const b = parseBoard('- [~] F2 — Wip [owner: @asha]\n- [ ] F1 — Dark mode [owner: @asha] [session: cc-1ir0]\n- [?] F3 — Pick chart [decide: @asha]\n', 'T', 1, 1)
   const s = onBoard({ ...initial(80, 24, 0), session: 'cc-1ir0' }, b, [{ handle: '@asha', emails: [] }], '@asha')
-  const items = ticketsItems(s, buildModel(viewOf(s)))
+  const items = buildModel(viewOf(s)).items
   assert.deepEqual(items, ['head:assigned', 'head:decide', 'head:session', 'head:~', 'head:?', 'head: '])
   for (const sec of ['assigned', 'decide', 'session'] as const) assert.ok(!isUserSectionOpen(s.open as string[], sec))
 })
@@ -1569,4 +1567,49 @@ test('F178: a session draft in the ops dialog runs meta-assign-session with the 
   assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['meta-assign-session', ['F1', 'cc-1ir0']])
   assert.match(settle(r.effects[0]!.then(ok(''))(r.state)).state.toast ?? '', /^✓ F1 assigned to session cc-1ir0: Dark mode/)
   assert.equal(startHandle(null, 'session', team, '@vidul'), '@vidul')
+})
+
+test('F190: an open board follows working-session transfers and shows heartbeat state', async () => {
+  const { makeEngine } = await import('../engine.ts')
+  const root = '/r'
+  const boardPath = root + '/TICKETS.md'
+  const files = new Map<string, { text: string; mtimeMs: number }>()
+  const put = (path: string, text: string, mtimeMs = Date.now()) => files.set(path, { text, mtimeMs })
+  const working = (code: string) => '- [~] F1 - Example [owner: @asha] [session: cc-one] [working: ' + code + '] (@cc-origin:asha:direct)'
+  put(boardPath, '- [ ] F1 - Example', 1)
+  for (const [code, pulse, age] of [['one', 'session', 0], ['two', 'ended', 0], ['three', 'session', 360_000]] as const) {
+    const path = root + '/.skillator/sessions/cc-' + code
+    put(path + '.owner', '@asha\nsession: ' + code + '\n')
+    put(path + '.live', pulse + ': ' + code + '\n', Date.now() - age)
+  }
+  let notify = () => {}
+  const host = {
+    win: false, skillsDir: null, repoRoot: root,
+    async stat(path: string) { const f = files.get(path); return f ? { mtimeMs: f.mtimeMs, size: f.text.length } : null },
+    async read(path: string) { const f = files.get(path); if (!f) throw new Error('missing'); return f.text },
+    async run() { return { code: 0, out: '', err: '', argv: [] } },
+    async gitEmail() { return null },
+  }
+  const board = makeEngine({ host, email: null, once: true, state: { ...initial(80, 24, 0), session: 'cc-two' }, onChange: () => notify(), onQuit: () => {} })
+  try {
+    await board.start()
+    for (const [index, code, expected] of [[2, 'cc-one', 'active'], [3, 'cc-two', 'ended'], [4, 'cc-three', 'stale']] as const) {
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('board did not refresh for ' + code)), 5000)
+        notify = () => {
+          if (board.state.board?.tickets[0]?.workingSession !== code) return
+          clearTimeout(timeout)
+          resolve()
+        }
+        put(boardPath, working(code), index)
+      })
+      const tickets = board.state.board!.tickets
+      assert.equal(tickets[0]?.workingState, expected)
+      assert.equal(tickets[0]?.owner, '@asha')
+      assert.equal(sessionTickets(tickets, 'cc-two').length, Number(code === 'cc-two'))
+    }
+    const read = async (path: string) => path.endsWith('.owner') ? '@asha\nsession: real\n' : 'session: collision\n'
+    const checked = await withWorkingStates(board.state.board!, root, Date.now(), host.stat, read)
+    assert.equal(checked.tickets[0]?.workingState, 'unknown')
+  } finally { board.stop() }
 })

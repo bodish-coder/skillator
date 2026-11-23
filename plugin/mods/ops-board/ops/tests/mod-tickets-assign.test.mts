@@ -45,8 +45,7 @@ test('A199: personalGroups and buildModel compute Assigned/Decide sections, head
     selected: null as string | null,
     expanded: null as string | null,
     open: [] as ('~' | '%' | '!' | '?' | ' ' | '>' | 'x' | '-')[],
-    assignedFolded: false,
-    decideFolded: false,
+    open: ['unfold:assigned', 'unfold:decide'],
     cols: 80,
   }
 
@@ -71,7 +70,7 @@ test('A199: personalGroups and buildModel compute Assigned/Decide sections, head
   assert.equal(lineKey(mSelectedAssigned.selected!), 'row:assigned:F3')
 
   // Folding Assigned hides assigned:F3 and lands selection on head:assigned
-  const mFoldedAssigned = buildModel({ ...baseView, selected: 'assigned:F3', assignedFolded: true })
+  const mFoldedAssigned = buildModel({ ...baseView, selected: 'assigned:F3', open: ['unfold:decide'] })
   assert.equal(userHeadText(mFoldedAssigned.userGroups[0]!, UNI, false), '▸ Assigned (1)')
   assert.ok(!mFoldedAssigned.items.includes('assigned:F3'))
   assert.equal(mFoldedAssigned.selected, 'head:assigned')
@@ -91,9 +90,8 @@ test('A199 + A200: native pane.tsx, teamview.tsx, register.tsx, and assign.tsx w
   const regSrc = readFileSync(new URL('../../hooks/register.tsx', import.meta.url), 'utf8')
   const assignSrc = readFileSync(new URL('../../hooks/assign.tsx', import.meta.url), 'utf8')
 
-  // Verify pane.tsx wires assignedFoldedA / decideFoldedA, toggleUserGroup, and m.userGroups rendering
-  assert.match(paneSrc, /assignedFoldedA\s*=\s*atom\(\{\s*plugin:\s*'ops-board',\s*key:\s*'assignedFolded'/)
-  assert.match(paneSrc, /decideFoldedA\s*=\s*atom\(\{\s*plugin:\s*'ops-board',\s*key:\s*'decideFolded'/)
+  // The pane stores personal and status folds in the same atom.
+  assert.match(paneSrc, /update\(\$, openA, x => toggleUserSection\(x, sec\)\)/)
   assert.match(paneSrc, /for\s*\(\s*const\s+ug\s+of\s+m\.userGroups\s*\)/)
   assert.match(paneSrc, /toggleUserGroup\(\$,\s*ug\.id\)/)
 

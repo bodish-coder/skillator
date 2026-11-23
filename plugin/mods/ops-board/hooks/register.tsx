@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SiteScroll } from 'claude-code'
 import type { Board, Machine, Member, Usage, Watch } from '../types'
-import { listView, parseBoard } from './lib/board'
+import { listView, parseBoard, withWorkingStates } from './lib/board'
 import { meOf, parseGitConfigEmail, parseTeam, sessionTag } from './lib/team'
 import { clean } from './lib/bandlines'
 import { classify, levelLine, MUTE_FILE, MUTED_HOW, muteKv, mutedWords, muteText, parseMachine, unmuteDue, usageFrom } from './lib/facts'
@@ -65,6 +65,7 @@ let armed = false
 let email: string | null = null
 let envMe: string | null = null            // F80: SKILLATOR_ME, as ticket-meta whoami reads it
 let teamSeen = ''
+let heartbeat: { path: string; sid: string; at: number } | null = null
 let ownerSeen = 'none'                      // F97: the session owner file's mtime:size, 'none' when absent
 let lastScroll: SiteScroll = { offset: 0, bodyRows: 0 }
 let lastCols = 54
@@ -130,6 +131,24 @@ async function poll($: EngineInterface, force = false) {
   const ownerPath = tag ? `${root}/.skillator/sessions/${tag}.owner` : null
   let oseen = 'none'
   if (ownerPath) { try { const st = await $.fs.stat(ownerPath); oseen = `${st.mtimeMs}:${st.size}` } catch { /* no owner */ } }
+  const now = await $.clock.now()
+  if (tag && sid && ownerPath && oseen !== 'none') {
+    const path = ownerPath.replace(/\.owner$/, '.live')
+    if (heartbeat?.path !== path || heartbeat.sid !== sid || now - heartbeat.at >= SLOW_MS) {
+      try {
+        const owner = await $.fs.read(ownerPath)
+        if (owner.split(/\r?\n/)[1] === 'session: ' + sid) {
+          await $.fs.write(path, 'session: ' + sid + '\n')
+          heartbeat = { path, sid, at: now }
+        }
+      } catch { /* liveness remains unverified */ }
+    }
+  }
+  const current = await read($, boardA)
+  if (current?.path === path) {
+    const next = await withWorkingStates(current, root, now, p => $.fs.stat(p), p => $.fs.read(p))
+    if (next !== current) await update($, boardA, board => board?.path === current.path && board.mtimeMs === current.mtimeMs && board.size === current.size && board.error === current.error ? next : board)
+  }
   if (force || seen !== teamSeen || oseen !== ownerSeen) {
     teamSeen = seen
     ownerSeen = oseen
@@ -559,6 +578,14 @@ export const register: Register = on => {
   // Session end: a CLAUDE.md the baseline harness left hidden goes back, said in the
   // log and kept for the next session's band.
   on('session.end', async ($, e, next) => {
+    const last = heartbeat
+    if (last && await $.session.id().catch(() => null) === last.sid) {
+      try {
+        if ((await $.fs.read(last.path)).trimEnd() === 'session: ' + last.sid) {
+          await $.fs.write(last.path, 'ended: ' + last.sid + '\n')
+        }
+      } catch { /* the last heartbeat will expire */ }
+    }
     try {
       const lines = await restoreClaudeMd($, 'restore', next.budget.remainingMs - 500)
       for (const l of lines) $.ui.log(l)

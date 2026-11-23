@@ -1077,12 +1077,12 @@ function relayHolds(md, runPath, root) {
 // F116: source facts become ordinary renderer components, never HTML or commands.
 export function ticketModel(md, id) {
   const rows = md.split(/\r?\n/).flatMap((line, i) => {
-    const m = /^[ \t]*- \[([ ~%!? >x-])\][ \t]+([A-Z]{1,3}[0-9]+[a-z]?)[ \t]*[\u2014\u2013-][ \t]*(.*)$/.exec(line);
+    const m = /^[ \t]*- \[([ ~%v!? >x-])\][ \t]+([A-Z]{1,3}[0-9]+[a-z]?)[ \t]*[\u2014\u2013-][ \t]*(.*)$/.exec(line);
     return m ? [{ id: m[2], mark: m[1], title: m[3], line, n: i + 1 }] : [];
   });
   const hits = rows.filter(t => t.id === id);
   if (hits.length !== 1) throw new Error(`${id}: ${hits.length} matching rows; need exactly one`);
-  const t = hits[0], names = { ' ': 'Pending', '!': 'Blocked', '>': 'Deferred', '~': 'In progress', '%': 'Testing', '?': 'Decision', x: 'Done', '-': 'Cancelled' };
+  const t = hits[0], names = { ' ': 'Pending', '!': 'Blocked', '>': 'Deferred', '~': 'In progress', '%': 'Testing', v: 'Verified', '?': 'Decision', x: 'Done', '-': 'Cancelled' };
   const notes = [...t.title.matchAll(/\((blocked|deferred|testing): ([^()]*)\)/g)].map(m => m[0]);
   const linked = [...new Set(notes.flatMap(ids))].filter(x => x !== id).map(x => {
     const hits = rows.filter(r => r.id === x);

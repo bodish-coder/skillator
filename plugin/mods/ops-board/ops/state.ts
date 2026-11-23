@@ -7,13 +7,13 @@ import type { AssignDraft, Board, Box, Engage, Filter, Machine, Member, Msg, Per
 import type { Call } from '../hooks/lib/calls'
 import { cleanIntakeText, draftEdit, firstDraft, intakeDetails, intakeImportArgs, newIntakePaths } from '../hooks/lib/intake'
 import type { Draft, IntakePaths } from '../hooks/lib/intake'
-import type { Model, View } from '../hooks/lib/ticketsmodel'
+import type { View } from '../hooks/lib/ticketsmodel'
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
 import { NO_SCRIPTS, decideQuestionsPrompt, holoTicketCmd, loginMessage, loginStatus } from '../hooks/lib/calls'
 export { decideQuestionsPrompt, holoTicketCmd }
-import { appliedHead, appliedLine, applyOf, buildModel, canApply, HEAD, headKey, isHead, isUserHead, parseReconcile, personalGroups, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
+import { appliedHead, appliedLine, applyOf, buildModel, canApply, HEAD, headKey, isHead, isUserHead, parseReconcile, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
-import { STATE_NAME, ticketById, visible } from '../hooks/lib/board'
+import { STATE_NAME, ticketById } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, MUTE_FILE, MUTED_HOW, mutedWords, muteText, parseMachine, unmuteDue, usageFromLevel } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
@@ -164,7 +164,7 @@ export function point(s: State, a: PointerAction): Step {
   if (a.kind === 'tab') return toTab(s, a.tab)
   if (a.kind !== 'row') return same
   let next = s
-  if (a.area === 'tickets' && s.tab === 'tickets' && !s.showTeam && ticketsItems(s, buildModel(viewOf(s))).includes(a.id)) next = { ...s, selected: a.id }
+  if (a.area === 'tickets' && s.tab === 'tickets' && !s.showTeam && buildModel(viewOf(s)).items.includes(a.id)) next = { ...s, selected: a.id }
   else if (a.area === 'team' && s.tab === 'tickets' && s.showTeam && s.team.some(m => m.handle === a.id)) return { state: { ...s, teamSelected: a.id, me: a.id }, effects: [] }
   else if (a.area === 'runs' && s.tab === 'runs' && runsItems(s).includes(a.id)) next = { ...s, runsSelected: a.id }
   else if (a.area === 'messages' && s.tab === 'messages' && s.messages.some(m => m.id === a.id)) next = { ...s, msgSelected: a.id }
@@ -180,7 +180,7 @@ export type State = {
   session: string | null                   // F178: this app's session code (SKILLATOR_SESSION / Claude Code's), none null
   filter: Filter; filterField: FilterField | null
   selected: string | null; expanded: string | null; showTeam: boolean
-  open: Box[]                              // F61: the open groups' boxes this session; none = all collapsed
+  open: string[]                           // F61: the open groups this session; none = all collapsed
   machine: Machine | null; usage: Usage | null; watch: Watch
   profile: string | null                   // F172: the env-named CLI profile (app.ts, via status.ts ownProfile); null = none detected
   relay: string | null                     // band: "RUN-0012 2/4", the first relay run not all done
@@ -261,21 +261,15 @@ export const initial = (cols: number, rows: number, now: number): State => ({
 export const viewOf = (s: State): View => ({
   board: s.board, team: s.team, me: s.me, filter: s.filter, filterOpen: s.filterField !== null,
   selected: s.selected, expanded: s.expanded, open: s.open, cols: s.cols,
+  personalUser: activeUser(s), session: s.session,
 })
 
 export const activeUser = (s: State): string | null => s.me ?? s.teamSelected ?? null
 
-export function ticketsItems(s: State, m: Model): string[] {
-  if (!s.board) return m.items
-  const groups = personalGroups(visible(s.board, s.filter, s.me), activeUser(s), { open: s.open as string[], session: s.session })
-  return [...groups.flatMap(g => [headKey(g.id), ...(g.open ? g.tickets.map(t => g.id + ':' + t.id) : [])]), ...m.items]
-}
-
 export function onBoard(s: State, board: Board, team: Member[], me: string | null): State {
   const next: State = { ...s, board, team, me }
   const m = buildModel(viewOf(next))
-  const items = ticketsItems(next, m)
-  const selected = items.includes(s.selected ?? '') ? s.selected : (m.items[0] ?? items[0] ?? null)
+  const selected = m.selected
   const expanded = s.expanded && board.tickets.some(t => t.id === s.expanded) ? s.expanded : null
   return { ...next, selected, expanded }
 }
@@ -1309,7 +1303,7 @@ function ticketsKey(s: State, k: Key): Step {
   const same = { state: s, effects: [] }
   if (s.showTeam) return teamKey(s, k)
   const m = buildModel(viewOf(s))
-  const items = ticketsItems(s, m)
+  const items = m.items
   // F61: up/down walk the group headers and the rows of open groups (the model's items).
   const move = (by: number): Step => {
     const cur = items.includes(s.selected ?? '') ? s.selected : m.selected
@@ -1319,7 +1313,7 @@ function ticketsKey(s: State, k: Key): Step {
   }
   const toggleHeader = (id: string): Step => {
     if (isUserHead(id)) {
-      return { state: { ...s, open: toggleUserSection(s.open as string[], id.slice(HEAD.length) as UserSection) as any }, effects: [] }
+      return { state: { ...s, open: toggleUserSection(s.open, id.slice(HEAD.length) as UserSection) }, effects: [] }
     }
     const g = m.groups.find(x => headKey(x.box) === id)
     const keep = s.selected && !isHead(s.selected) && g?.tickets.some(t => t.id === s.selected)
@@ -2551,14 +2545,26 @@ export const COMMANDS: HelpItem[] = [
     hint: "[add @handle \"Name\" email | remove @handle | lead @handle | assign <ID> @handle | list]"
   },
   {
+    id: "analyse-shifu",
+    name: "/analyse-shifu",
+    kind: "command",
+    category: "Workflow & Runners",
+    aliases: [],
+    summary: "Run configured testing apps on Testing and Verified tickets",
+    triggers: ["analyse-shifu"],
+    usage: "Runs configured testing apps for the ticket IDs supplied, or for all Testing and Verified tickets when no IDs are supplied. It runs deep verification when no matching result exists.",
+    examples: ["/analyse-shifu", "/analyse-shifu F165"],
+    hint: "[IDs]"
+  },
+  {
     id: "verify-shifu",
     name: "/verify-shifu",
     kind: "command",
     category: "Workflow & Runners",
     aliases: [],
-    summary: "Verify testing [%] tickets with fresh agents against acceptance criteria; records a PASS or FAIL note, the box stays [%]",
+    summary: "Verify testing [%] tickets with fresh agents; PASS moves to [v] and FAIL or OWNER stays [%] with a reason",
     triggers: ["verify-shifu", "verify tickets", "verify testing"],
-    usage: "Verify testing tickets: one fresh agent per [%] row re-checks its Done line against evidence and records a verdict note - verified PASS, or verified FAIL with what failed and why; the box never moves, OWNER gets no note (tickets-zordon). --deep (opt-in) also runs a code-vader review of the ticket's commits.",
+    usage: "One fresh agent per ticket checks its Done line against evidence. Without IDs, checks all Testing [%] tickets. PASS moves the row to Verified [v]. FAIL and OWNER leave it in Testing [%] with a reason. --deep also runs a code-vader review of the ticket's commits.",
     examples: ["/verify-shifu", "/verify-shifu F165", "/verify-shifu --deep F165"],
     hint: "[--deep] [IDs]"
   }

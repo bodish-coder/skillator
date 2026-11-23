@@ -100,9 +100,9 @@ EOF
     echo "SELFTEST FAIL: a board with a [%] line failed" >&2; cat "$stmp/t.out" >&2; exit 1; }
   grep -q '2 ticket IDs' "$stmp/t.out" || {
     echo "SELFTEST FAIL: [%] line not counted as a ticket" >&2; cat "$stmp/t.out" >&2; exit 1; }
-  printf -- '- [%%] A9 - same number, under test\n' >> "$stmp/t.md"
+  printf -- '- [v] A9 - same number, verified\n' >> "$stmp/t.md"
   if sh "$0" "$stmp/t.md" >/dev/null 2>&1; then
-    echo "SELFTEST FAIL: a [%] line duplicating an ID passed" >&2; exit 1
+    echo "SELFTEST FAIL: a [v] line duplicating an ID passed" >&2; exit 1
   fi
 
   # A92: with no argument the board is the current git repo's top-level
@@ -281,7 +281,7 @@ fi
 # the first " (" or ". ". Characters, not bytes: a UTF-8 sequence counts one.
 LC_ALL=C awk '
   { sub(/\r$/, "") }
-  /^[ \t]*- \[[ ~!?%]\][ \t]+[A-Z]+[0-9]+[a-z]*([ \t]|$)/ {
+  /^[ \t]*- \[[ ~!?%v]\][ \t]+[A-Z]+[0-9]+[a-z]*([ \t]|$)/ {
     r = $0; sub(/^[ \t]*- \[.\][ \t]+/, "", r); match(r, /^[A-Z]+[0-9]+[a-z]*/)
     id = substr(r, 1, RLENGTH); r = substr(r, RLENGTH + 1)
     sub(/^[ \t]*(\342\200\224|\342\200\223|-)?[ \t]*/, "", r)

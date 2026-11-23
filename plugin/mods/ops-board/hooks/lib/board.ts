@@ -1,19 +1,19 @@
 import type { Color } from 'claude-code'
 import type { Board, Box, Filter, Ticket } from '../../types'
 
-export type StateColor = 'amber' | 'cyan' | 'red' | 'pink' | 'orange' | 'dim' | 'green'
+export type StateColor = 'amber' | 'cyan' | 'red' | 'pink' | 'orange' | 'dim' | 'green' | 'purple'
 // The pane shows state by colour; listView() keeps the bracket codes.
 export const STATE_COLOR: Record<Box, StateColor> = {
-  '~': 'amber', '%': 'cyan', '!': 'red', '?': 'pink', ' ': 'orange', '>': 'dim', 'x': 'green', '-': 'dim',
+  '~': 'amber', '%': 'cyan', v: 'purple', '!': 'red', '?': 'pink', ' ': 'orange', '>': 'dim', 'x': 'green', '-': 'dim',
 }
 // Theme keys follow the person's theme on every surface; dim states are drawn dim.
 export const PAINT: Record<StateColor, Color> = {
-  amber: 'warning', cyan: 'suggestion', red: 'error', pink: 'autoAccept', orange: 'claude', dim: 'inactive', green: 'success',
+  amber: 'warning', cyan: 'suggestion', red: 'error', pink: 'autoAccept', orange: 'claude', dim: 'inactive', green: 'success', purple: 'permission',
 }
 export const paint = (b: Box): Color => PAINT[STATE_COLOR[b]]
-// Open = [ ] [~] [%] [!] [?] (tickets-zordon, pending); deferred and closed are not.
+// Open = [ ] [~] [%] [v] [!] [?] (tickets-zordon, pending); deferred and closed are not.
 // F62: [%] is testing - built, waiting on a test result.
-const OPEN: Box[] = [' ', '~', '%', '!', '?']
+const OPEN: Box[] = [' ', '~', '%', 'v', '!', '?']
 export const isOpen = (t: Ticket) => OPEN.includes(t.box)
 // F77: the ticket a typed ID names on the board - case-insensitive, blanks ignored
 // (`f12` is F12); null when none does or nothing is typed.
@@ -22,16 +22,16 @@ export function ticketById(tickets: readonly Ticket[] | undefined, text: string)
   return id ? tickets?.find(t => t.id.toUpperCase() === id) ?? null : null
 }
 export const STATE_NAME: Record<Box, string> = {
-  '~': 'in progress', '%': 'testing', '!': 'blocked', '?': 'decide', ' ': 'pending', '>': 'deferred', 'x': 'done', '-': 'cancelled',
+  '~': 'in progress', '%': 'testing', v: 'verified', '!': 'blocked', '?': 'decide', ' ': 'pending', '>': 'deferred', 'x': 'done', '-': 'cancelled',
 }
 export const GROUPS: { box: Box; title: string }[] = [
-  { box: '~', title: 'IN PROGRESS' }, { box: '%', title: 'TESTING' }, { box: '!', title: 'BLOCKED' }, { box: '?', title: 'DECIDE' },
+  { box: '~', title: 'IN PROGRESS' }, { box: '%', title: 'TESTING' }, { box: 'v', title: 'VERIFIED' }, { box: '!', title: 'BLOCKED' }, { box: '?', title: 'DECIDE' },
   { box: ' ', title: 'PENDING' }, { box: '>', title: 'DEFERRED' }, { box: 'x', title: 'DONE' }, { box: '-', title: 'CANCELLED' },
 ]
 
 // A ticket line as ticket-meta and pending read it: `- [b]`, blanks, the id
 // ([A-Z]{1,3}[0-9]+[a-z]?), optional historical alias `(was <ID>)`, then an em dash, an en dash or a plain `-`.
-const TICKET = /^([ \t]*)- \[([ ~%!?>x-])\][ \t]+([A-Z]{1,3}[0-9]+[a-z]?)(?:[ \t]+(\(was[ \t]+[A-Z]{1,3}[0-9]+[a-z]?\)))?[ \t]*(?:—|–|-)[ \t]*(.*)$/
+const TICKET = /^([ \t]*)- \[([ ~%v!?>x-])\][ \t]+([A-Z]{1,3}[0-9]+[a-z]?)(?:[ \t]+(\(was[ \t]+[A-Z]{1,3}[0-9]+[a-z]?\)))?[ \t]*(?:—|–|-)[ \t]*(.*)$/
 // Anchored on the id, so `F3—re-run the GREEN` keeps "re-run the GREEN".
 const ID_DASH = /^[A-Z]{1,3}[0-9]+[a-z]?[ \t]*(?:\(was[ \t]+[A-Z]{1,3}[0-9]+[a-z]?\)[ \t]*)?(?:—|–|-)[ \t]*/
 const HIST_ALIAS = /^[A-Z]{1,3}[0-9]+[a-z]?[ \t]+(\(was[ \t]+[A-Z]{1,3}[0-9]+[a-z]?\))/
@@ -55,7 +55,7 @@ export function parseBoard(text: string, path: string, mtimeMs: number, size: nu
     let session: string | null = null
     const s = SESSION_TAIL.exec(body)
     if (s) { session = s[1]!; body = body.slice(0, s.index) }
-    let cut = body.search(/ \[(?:app|decide|owner|session|tester|by):/)
+    let cut = body.search(/ \[(?:app|decide|owner|session|working|work-history|tester|by):/)
     if (cut < 0) cut = body.search(/ \([^()]*\)\s*$/)
     const baseTitle = (cut < 0 ? body : body.slice(0, cut)).trim()
     const title = al ? `${al} ${baseTitle}` : baseTitle
@@ -65,12 +65,48 @@ export function parseBoard(text: string, path: string, mtimeMs: number, size: nu
       indent, section,
       apps: handles(tag(body, 'app') ?? ''), decide: tag(body, 'decide')?.toLowerCase() ?? null,
       owner: tag(body, 'owner')?.toLowerCase() ?? null, tester: tag(body, 'tester')?.toLowerCase() ?? null, by: handles(tag(body, 'by') ?? ''), session,
+      workingSession: tag(body, 'working')?.toLowerCase() ?? null,
       assignedSession: tag(body, 'session')?.toLowerCase() ?? null,
     }
     tickets.push(t)
     stack.push(t)
   }
   return { path, mtimeMs, size, tickets, error: null }
+}
+
+// The short code is a file name, not proof of identity. Only a heartbeat
+// matching the full identity in the owner's record is evidence of liveness.
+export const SESSION_HEARTBEAT_MS = 5 * 60_000
+
+export async function withWorkingStates(
+  board: Board, root: string, now: number,
+  stat: (path: string) => Promise<{ mtimeMs: number } | null>,
+  read: (path: string) => Promise<string>,
+): Promise<Board> {
+  const workers = new Set(board.tickets.flatMap(t => t.box === '~' && t.workingSession ? [t.workingSession] : []))
+  const states = new Map<string, Ticket['workingState']>()
+  await Promise.all([...workers].map(async code => {
+    states.set(code, 'unknown')
+    if (!/^[a-z0-9_]+-[a-z0-9_-]+$/.test(code)) return
+    const path = root + '/.skillator/sessions/' + code
+    try {
+      const stamp = await stat(path + '.live')
+      if (!stamp) return
+      const [owner, pulse] = await Promise.all([read(path + '.owner'), read(path + '.live')])
+      const identity = owner.split(/\r?\n/)[1]?.match(/^session: (.+)$/)?.[1]
+      if (!identity) return
+      if (pulse.trimEnd() === 'ended: ' + identity) states.set(code, 'ended')
+      else if (pulse.trimEnd() === 'session: ' + identity) states.set(code, now - stamp.mtimeMs >= SESSION_HEARTBEAT_MS ? 'stale' : 'active')
+    } catch { /* unavailable evidence leaves the worker unknown */ }
+  }))
+  let changed = false
+  const tickets = board.tickets.map(t => {
+    const workingState = t.box === '~' && t.workingSession ? states.get(t.workingSession) : undefined
+    if (workingState === t.workingState) return t
+    changed = true
+    return { ...t, workingState }
+  })
+  return changed ? { ...board, tickets } : board
 }
 
 export function visible(b: Board, f: Filter, me: string | null): Ticket[] {
@@ -87,17 +123,17 @@ export function visible(b: Board, f: Filter, me: string | null): Ticket[] {
 
 export function countLine(ts: Ticket[]): string {
   const n = (b: Box) => ts.filter(t => t.box === b).length
-  const open = n(' ') + n('~') + n('%') + n('!') + n('?')
+  const open = ts.filter(isOpen).length
   const closed = n('x') + n('-')
-  return `${open} open (${n(' ')} pending · ${n('~')} in-progress · ${n('%')} testing · ${n('!')} blocked · ${n('?')} decide)` +
+  return `${open} open (${n(' ')} pending · ${n('~')} in-progress · ${n('%')} testing${n('v') ? ` · ${n('v')} verified` : ''} · ${n('!')} blocked · ${n('?')} decide)` +
     ` · ${n('>')} deferred · ${closed} closed (${n('x')} done · ${n('-')} cancelled) · ${ts.length} total`
 }
 
 const TYPE_NAME: Record<string, string> = { B: 'Bugs', F: 'Features', A: 'Agent-found' }
 const TYPE_ORDER = ['B', 'F', 'A']
-const STATUS_RANK: Box[] = ['~', '%', '!', '?', '>', ' ']
+const STATUS_RANK: Box[] = ['~', '%', 'v', '!', '?', '>', ' ']
 const STATUS_VIEW: { box: Box; title: string }[] = [
-  { box: '~', title: 'In progress' }, { box: '%', title: 'Testing' }, { box: '!', title: 'Blocked' }, { box: '?', title: 'Decide' },
+  { box: '~', title: 'In progress' }, { box: '%', title: 'Testing' }, { box: 'v', title: 'Verified' }, { box: '!', title: 'Blocked' }, { box: '?', title: 'Decide' },
   { box: '>', title: 'Deferred' }, { box: ' ', title: 'Pending' }, { box: 'x', title: 'Done' }, { box: '-', title: 'Cancelled' },
 ]
 const prefixOf = (id: string) => (/^[A-Za-z]+/.exec(id)?.[0] ?? id).toUpperCase()

@@ -372,11 +372,14 @@ put_cmd() {
 # ops-board/pi/, so the data layer has one copy. Rewritten every run, like the prompts.
 put_pi_ext() {
   _ext="$HOME/.pi/agent/extensions/skillator-ops.ts"
-  if [ -n "$dry" ]; then echo "        would write $_ext"; return 0; fi
+  _shifu_ext="$HOME/.pi/agent/extensions/skillator-shifu.ts"
+  if [ -n "$dry" ]; then echo "        would write $_ext"; echo "        would write $_shifu_ext"; return 0; fi
   mkdir -p "$(dirname -- "$_ext")"
   _to=$(native "$1" | sed 's/[\\"]/\\&/g')
   printf '// skillator ops board in pi (/ops) - written by the skillator installer, rewritten every run.\nexport { default } from "%s/ops-board/pi/index.ts";\n' "$_to" > "$_ext"
+  printf '// Shifu command completion - written by the skillator installer.\nexport { default } from "%s/tickets-zordon/scripts/shifu-pi.mjs";\n' "$_to" > "$_shifu_ext"
   echo "        * $_ext"
+  echo "        * $_shifu_ext"
 }
 
 # agy_ide: the Antigravity IDE's CLI (the VS Code fork, not agy) - $SKILLATOR_AGY_IDE when
@@ -588,7 +591,7 @@ retire_dir() {
 }
 write_commands() {
   _c="$root/host-commands"
-  _cmds="skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update team-messages pending-sentinel verify-shifu gauntlet-plan gauntlet-run team code-vader skillator-sync message-uhura decision-matrix"
+  _cmds="skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update team-messages pending-sentinel verify-shifu analyse-shifu gauntlet-plan gauntlet-run team code-vader skillator-sync message-uhura decision-matrix"
   _ops_cmds="skillator-ops"
   case "$1" in
     codex)
@@ -872,7 +875,7 @@ if [ -n "$selftest" ]; then
            .codex/skills/ops-board/ops/app.ts .codex/skills/ops-board/commands/skillator-ops.txt .pi/agent/skills/ops-board/hooks/lib/board.ts \
            .pi/agent/skills/ops-board/ops/package.json .pi/agent/skills/ops-board/hooks/lib/package.json \
            .pi/agent/skills/ops-board/pi/index.ts .pi/agent/skills/ops-board/pi/ops.ts .pi/agent/skills/ops-board/ops/engine.ts \
-           .pi/agent/extensions/skillator-ops.ts .config/opencode/skills/tickets-zordon/SKILL.md \
+           .pi/agent/extensions/skillator-ops.ts .pi/agent/extensions/skillator-shifu.ts .config/opencode/skills/tickets-zordon/SKILL.md \
            .config/opencode/skills/teams-uhura/scripts/team.mjs .config/opencode/skills/ops-board/ops/ops.sh \
            .codex/skills/clone-odo/scripts/odo.sh .codex/skills/clone-odo/scripts/parity.py .config/opencode/skills/clone-odo/templates/features.csv \
            .codex/skills/skill-prometheus/SKILL.md .codex/skills/skill-prometheus/references/testing.md .codex/skills/skill-smith/SKILL.md; do
@@ -882,7 +885,7 @@ if [ -n "$selftest" ]; then
   # F67: opencode - the skills in its global skills dir, the seven commands in its commands/
   # dir, each substituted with that dest, no placeholder left, arguments by $ARGUMENTS
   _oc=.config/opencode
-  for _n in skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update team-messages pending-sentinel verify-shifu gauntlet-plan gauntlet-run; do
+  for _n in skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update team-messages pending-sentinel verify-shifu analyse-shifu gauntlet-plan gauntlet-run; do
     _f=$T/$_oc/commands/$_n.md
     [ -f "$_f" ] || { echo "FAIL: missing $_oc/commands/$_n.md"; exit 1; }
     head -1 "$_f" | grep -qx -- '---' || { echo "FAIL: opencode $_n has no frontmatter"; exit 1; }
@@ -898,7 +901,7 @@ if [ -n "$selftest" ]; then
   grep -qF -e "<<'EOF'" -e "@'" -e 'say "' "$T/$_oc/commands/team-messages.md" && { echo "FAIL: opencode team-messages puts reply text in shell source"; exit 1; }
   [ "$(cat "$T/$_oc/skills/.skillator-source" 2>/dev/null)" = "$(native "$root")" ] || { echo "FAIL: source pointer in $_oc/skills"; exit 1; }
   [ -f "$T/$_oc/skills/tickets-zordon/.skillator-owned" ] || { echo "FAIL: opencode skill has no ownership marker"; exit 1; }
-  grep -qxE 'skillator-pending|list-ticket-zordon|engage-picard|archive-zordon|sync-zordon|skillator-update|team-messages|pending-sentinel|verify-shifu|gauntlet-plan|gauntlet-run|skillator-ops' "$T/$_oc/skills/.skillator-installed" && { echo "FAIL: command in opencode manifest"; exit 1; }
+  grep -qxE 'skillator-pending|list-ticket-zordon|engage-picard|archive-zordon|sync-zordon|skillator-update|team-messages|pending-sentinel|verify-shifu|analyse-shifu|gauntlet-plan|gauntlet-run|skillator-ops' "$T/$_oc/skills/.skillator-installed" && { echo "FAIL: command in opencode manifest"; exit 1; }
   # /skillator-update names opencode among the hosts it refreshes, on every host
   for f in .codex/skills/skillator-update/SKILL.md .cursor/commands/skillator-update.md .pi/agent/prompts/skillator-update.md \
            .gemini/commands/skillator-update.toml .gemini/skills/skillator-update/SKILL.md \
@@ -987,7 +990,8 @@ if [ -n "$selftest" ]; then
   grep -q '^description: ' "$T/.cursor/commands/skillator-pending.md" || { echo "FAIL: cursor description"; exit 1; }
   # F56: pi's extension re-exports the board from the pi dest's ops-board/pi (native path)
   grep -qxF "export { default } from \"$N/.pi/agent/skills/ops-board/pi/index.ts\";" "$T/.pi/agent/extensions/skillator-ops.ts" || { echo "FAIL: pi extension target"; exit 1; }
-  [ "$(ls "$T/.pi/agent/extensions")" = skillator-ops.ts ] || { echo "FAIL: pi extensions dir holds more than skillator-ops.ts"; exit 1; }
+  grep -qxF "export { default } from \"$N/.pi/agent/skills/tickets-zordon/scripts/shifu-pi.mjs\";" "$T/.pi/agent/extensions/skillator-shifu.ts" || { echo "FAIL: pi Shifu extension target"; exit 1; }
+  [ "$(ls "$T/.pi/agent/extensions" | wc -l | tr -d ' ')" = 2 ] || { echo "FAIL: pi extensions dir has an unexpected file"; exit 1; }
   # A145: pi's skills dirs list the three docs in .ignore (pi skips them as skills); the
   # docs are still there at ../ from every skill, and no other host gets a .ignore
   for d in .pi/agent/skills .pi/skills; do
@@ -1010,7 +1014,7 @@ if [ -n "$selftest" ]; then
   done
   # F90: codex runs the commands as skills - <codex home>/skills/<n>/SKILL.md with name and
   # description, no placeholder, and no custom prompt written
-  for _n in skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update team-messages pending-sentinel verify-shifu gauntlet-plan gauntlet-run; do
+  for _n in skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update team-messages pending-sentinel verify-shifu analyse-shifu gauntlet-plan gauntlet-run; do
     _f=$T/.codex/skills/$_n/SKILL.md
     { head -1 "$_f" | grep -qx -- '---' && grep -qx "name: $_n" "$_f" && grep -q '^description: ' "$_f"; } || { echo "FAIL: codex skill $_n frontmatter"; exit 1; }
     grep -qF '{{SKILLS}}' "$_f" && { echo "FAIL: placeholder left in .codex/skills/$_n"; exit 1; }
@@ -1049,7 +1053,7 @@ if [ -n "$selftest" ]; then
     grep -rqF '{{SKILLS}}' "$T/$f" && { echo "FAIL: placeholder left in $f"; exit 1; }
   done
   for d in .codex/skills .gemini/config/skills .gemini/skills .gemini/antigravity-cli/skills; do
-    grep -qxE 'skillator-pending|list-ticket-zordon|engage-picard|archive-zordon|sync-zordon|skillator-update|team-messages|pending-sentinel|verify-shifu|gauntlet-plan|gauntlet-run|skillator-ops' "$T/$d/.skillator-installed" && { echo "FAIL: command skill in manifest $d"; exit 1; }
+    grep -qxE 'skillator-pending|list-ticket-zordon|engage-picard|archive-zordon|sync-zordon|skillator-update|team-messages|pending-sentinel|verify-shifu|analyse-shifu|gauntlet-plan|gauntlet-run|skillator-ops' "$T/$d/.skillator-installed" && { echo "FAIL: command skill in manifest $d"; exit 1; }
     [ -e "$T/$d/skillator-pending/.skillator-owned" ] && { echo "FAIL: command skill carries an ownership marker in $d"; exit 1; }
   done
   [ -x "$T/.local/bin/ops" ] || { echo "FAIL: missing .local/bin/ops"; exit 1; }

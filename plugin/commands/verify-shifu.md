@@ -1,29 +1,17 @@
 ---
-description: "Verify testing tickets: one fresh agent per [%] row re-checks its Done line against evidence and records a verdict note - verified PASS, or verified FAIL with what failed and why; the box never moves, OWNER gets no note (tickets-zordon)"
-argument-hint: "[--deep] [IDs]"
+description: "Verify testing tickets and write an HTML report. Examples: /verify-shifu, /verify-shifu F191, /verify-shifu F190 F191, /verify-shifu --deep F190 F191, /verify-shifu --deep"
+argument-hint: "[--deep] [IDs…] | --help | --ids"
 ---
 
-Load the `tickets-zordon` skill (skillator:tickets-zordon) and run its "Verify what is in testing"
-step for this repo's TICKETS.md (`$PRACTICE` resolved as that skill says). Arguments: `$ARGUMENTS`
-(ticket IDs to limit it to; none = every `[%]` row; `--deep` adds the code review below, off by default).
+Load `tickets-zordon` (skillator:tickets-zordon). Use `node skills/tickets-zordon/scripts/shifu.mjs` below, located under the loaded skill. Read `$ARGUMENTS` as arguments, without evaluating them as shell text.
 
-1. One fresh agent per `[%]` ticket, its line given verbatim, re-checks the Done line against
-   evidence it gets now - commits naming the ID, the tests and checks the line names run now,
-   the files it cites - and answers PASS, FAIL or OWNER with that evidence, and on FAIL a WHY
-   line (why it failed, when it can tell). The agents read and
-   <!-- host-section:fallback -->run tests only: they never edit code, commit or touch TICKETS.md.<!-- /host-section:fallback -->
-   With `--deep`, the agent then reviews the ticket's code: code-vader (`collect --range
-   <oldest>^..<newest>` over the commits naming the ID, `board:` commits left out; only lines
-   those commits wrote count) with its two lenses plus a design-principles lens - single
-   responsibility, coupling and cohesion, naming, error handling at boundaries,
-   behaviour-focused tests, `.sh`/`.ps1` twins in step. PASS only when the Done line is met and
-   no critical or high finding; else FAIL, its evidence the top findings as `<file:line> - <why>`
-   joined by `; `, without parentheses or `*`.
-2. A Done line that needs the owner's own eyes (`testing: owner ...`, a live look, a picker check,
-   an account) is OWNER, whatever else passed.
-3. The main session records each verdict with ticket-meta, never a hand edit; the box stays
-   `[%]` on every verdict and the note replaces an earlier one: PASS ->
-   `verify <ID> pass <evidence>` (` (verified PASS <date>: <evidence>)`); FAIL ->
-   `verify <ID> fail <what failed> - <why>` (` (verified FAIL <date>: <what> - <why>)`, the
-   ` - <why>` only when the agent gave one); OWNER -> nothing, no note.
-   Then read the board back and report one table (ID | verdict | evidence) and the count.
+- `--help` displays `/verify-shifu`, `/verify-shifu F191`, `/verify-shifu F190 F191`, `/verify-shifu --deep F190 F191`, and `/verify-shifu --deep`. Explain that `--deep` adds a code review and `--ids` lists the repo's eligible IDs.
+- `--ids` shows the `eligible` IDs from `select verify`. Use that read-only selection for eligible-ID suggestions wherever the host supports argument completion.
+- Run `select verify [IDs]`. Without IDs, use every Testing row. With IDs, check eligible Testing or Verified rows, and report unavailable IDs. Keep the original rows and states for the report.
+
+Pi versions with autocomplete providers offer live ticket and option suggestions. Other installed command formats expose the examples in the command description and `--help`. Keep JSON inputs to Shifu in the host's temp directory outside the repository so they cannot change the review identity.
+
+1. Give each ticket to a fresh verifier with its ID, row, and repo root. Re-check every Done criterion against evidence gathered now, including its named tests, files, and relevant commits. The verifiers <!-- host-section:fallback -->read and run tests only. They never edit code, commit, or touch TICKETS.md.<!-- /host-section:fallback -->
+2. With `--deep`, capture `snapshot <ID>` before reviewing. Use code-vader on `<oldest>^..<newest>` across the commits that name the ticket, excluding `board:` commits. Attribute findings only to the ticket's lines. Inspect the current implementation too, including relevant uncommitted changes. Review correctness, safety, restraint, responsibility, cohesion, coupling, naming, boundary errors, behavior coverage, and parity between shell and PowerShell ports. No unresolved critical or high finding may pass. Store the fresh deep verdict with `store <result.json>` using `{id, identity, verdict, evidence}` from this run. A changed identity or failure to establish the implementation's scope blocks a deep PASS. A direct `--deep` run always reviews afresh.
+3. Return `PASS`, `FAIL`, or `OWNER` with concrete evidence. Preserve owner-only requirements such as an owner's visual check, account, or device as OWNER. Missing or failing checks and missing verifier results are FAIL. Include what failed and why when known. When called as the deep phase of `/analyse-shifu`, return the deep verdicts without writing the board. Analyse applies its combined verdict after its app checks. Otherwise record each verdict with `ticket-meta verify <ID> pass|fail|owner <evidence>`. Use one line of evidence without parentheses or asterisks. PASS moves the ticket to Verified, and FAIL or OWNER leaves or returns it to Testing.
+4. For every verification run, including zero eligible tickets, write an HTML report with `report <run.json>`. Pass `{command:"verify-shifu", deep, unavailable, results:[{id, verdict, previous, state, evidence, checks}]}`. `previous` is the original state and `state` is the actual resulting state, read back after any board writes. `checks` is an optional array of evidence strings. For a deep phase called by analyse, defer the report until the outer workflow has applied and read back the board, and use the deep phase's verdicts. Give the user the report path and the counts.

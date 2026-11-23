@@ -98,7 +98,7 @@ test('status line: pending | in progress | total · 5h, 7d while short; stale sa
   // [%] testing is in the total only; a 244-box board's line is too long for 7d.
   const testing = countsOf(parseBoard('- [~] F1 — a\n- [%] F2 — b\n- [%] F3 — c\n- [!] F4 — d\n- [>] F5 — e\n- [x] F6 — f\n', 'T', 0, 0))
   expect(statusText(testing, null, NOW, null)).toBe('ops 0 pending | 1 in progress | 4 total')
-  expect(statusText({ open: 244, progress: 13, testing: 200, blocked: 2, decision: 1 }, USAGE, NOW, null))
+  expect(statusText({ open: 244, progress: 13, testing: 200, verified: 0, blocked: 2, decision: 1 }, USAGE, NOW, null))
     .toBe('ops 28 pending | 13 in progress | 244 total · 5h 41%')
 })
 
@@ -107,7 +107,7 @@ test('status line: F97 the session owner after ops; 7d dropped first, then the h
   expect(statusText(COUNTS, USAGE, NOW, '@sher')).toBe('ops @sher 2 pending | 1 in progress | 5 total · 5h 41%')   // 63 with 7d > 60
   expect(statusText(COUNTS, USAGE, NOW, null)).toBe('ops 2 pending | 1 in progress | 5 total · 5h 41% · 7d 55%')
   expect(statusText(null, USAGE, NOW, '@sher')).toBe('ops @sher - · 5h 41% · 7d 55%')
-  const big = { open: 244, progress: 13, testing: 200, blocked: 2, decision: 1 }
+  const big = { open: 244, progress: 13, testing: 200, verified: 0, blocked: 2, decision: 1 }
   expect(statusText(big, USAGE, NOW, '@sher')).toBe('ops @sher 28 pending | 13 in progress | 244 total · 5h 41%')     // 58
   expect(statusText(big, USAGE, NOW, '@shamsher-rao')).toBe('ops 28 pending | 13 in progress | 244 total · 5h 41%')   // 66 > 60: handle off
 })
@@ -131,7 +131,7 @@ test('band: F109 the session sid after the handle', () => {
 
 // F130: status band shows the addressee of a pending handoff
 test('status line & band: F130 pending handoff to teammate ends with → @handle', () => {
-  const big = { open: 258, progress: 1, testing: 0, blocked: 0, decision: 0 }
+  const big = { open: 258, progress: 1, testing: 0, verified: 0, blocked: 0, decision: 0 }
   const u = usageFrom([{ kind: 'five_hour', percentUsed: 1 }, { kind: 'seven_day', percentUsed: 33 }], null, NOW)
   expect(statusText(big, u, NOW, null, '@vidul')).toBe('ops 257 pending | 1 in progress | 258 total · 5h 1% · 7d 33% → @vidul')
   expect(statusText(big, u, NOW, null, null)).toBe('ops 257 pending | 1 in progress | 258 total · 5h 1% · 7d 33%')
@@ -152,14 +152,14 @@ test('status line & band: F130 pending handoff to teammate ends with → @handle
 })
 
 test('countsOf: open excludes deferred and closed', () => {
-  expect(COUNTS).toEqual({ open: 5, progress: 1, testing: 0, blocked: 1, decision: 1 })
+  expect(COUNTS).toEqual({ open: 5, progress: 1, testing: 0, verified: 0, blocked: 1, decision: 1 })
   expect(countsOf(null)).toBeNull()
 })
 
 // F62: [%] testing is open; on the narrow band its dot sits after in progress, before blocked.
 test('countsOf: [%] testing counts as open; the narrow band dots it after in progress', () => {
   const c = countsOf(parseBoard('- [~] F1 — a\n- [%] F2 — b (testing: x)\n- [%] F3 — c\n- [!] F4 — d\n- [>] F5 — e\n', 'T', 0, 0))
-  expect(c).toEqual({ open: 4, progress: 1, testing: 2, blocked: 1, decision: 0 })
+  expect(c).toEqual({ open: 4, progress: 1, testing: 2, verified: 0, blocked: 1, decision: 0 })
   const segs = bandSegs(input(GREEN_KV, { narrow: true, cols: 96, counts: c }))[0]!
   const dots = segs.filter(s => s.text.startsWith('●') && s.text.length > 1)
   expect(dots.map(s => [s.text, s.color])).toEqual([['●1', 'warning'], ['●2', 'suggestion'], ['●1', 'error']])

@@ -97,8 +97,6 @@ const PEEK: Plugin = {
         : e.args === 'narrow' ? await $.state.get({ plugin: 'ops-board', key: 'narrow' })
         : e.args === 'tab' ? await $.state.get({ plugin: 'ops-board', key: 'tab' })
         : e.args === 'openGroups' ? await $.state.get({ plugin: 'ops-board', key: 'openGroups' })
-        : e.args === 'assignedFolded' ? await $.state.get({ plugin: 'ops-board', key: 'assignedFolded' })
-        : e.args === 'decideFolded' ? await $.state.get({ plugin: 'ops-board', key: 'decideFolded' })
         : await $.state.get({ plugin: 'ops-board', key: 'me' })
       return { text: JSON.stringify(v.value ?? null) }
     })
@@ -106,7 +104,7 @@ const PEEK: Plugin = {
 }
 const WITH = { plugins: [PEEK] }
 const RUN = { origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 120 } }
-const state = async ($: Engine, key: 'selected' | 'expanded' | 'narrow' | 'tab' | 'me' | 'openGroups' | 'assignedFolded' | 'decideFolded') =>
+const state = async ($: Engine, key: 'selected' | 'expanded' | 'narrow' | 'tab' | 'me' | 'openGroups') =>
   JSON.parse((await $.command.run({ command: 'peek', args: key, ...RUN })).text ?? 'undefined') as unknown
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -508,15 +506,17 @@ test('open counts [ ] [~] [%] [!] [?] only; deferred keeps its own dim dot after
 })
 
 // F62: [%] testing is its own group between In progress and Blocked, open, drawn in suggestion.
-test('[%] testing: its own group after in progress, counted open, its own colour', WITH, async ($, on) => {
-  const [, clock] = world(on, { '/r/TICKETS.md': '- [!] B1 — stuck\n- [%] F7 — built thing (testing: owner live check)\n- [~] F8 — working\n- [ ] F9 — later\n' })
+test('Testing and Verified are distinct open groups with their own colours', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': '- [!] B1 — stuck\n- [%] F7 — built thing (testing: owner live check)\n- [~] F8 — working\n- [ ] F9 — later\n- [v] F10 — verified\n- [x] F11 — done\n' })
   await start($, clock)
   const ui = await mountPane($, 'terminal')
   await openAll(ui)
-  expect(await heads(ui)).toEqual(['IN PROGRESS  1', 'TESTING  1', 'BLOCKED  1', 'PENDING  1'])
+  expect(await heads(ui)).toEqual(['IN PROGRESS  1', 'TESTING  1', 'VERIFIED  1', 'BLOCKED  1', 'PENDING  1'])
   expect((await ui.find({ key: 'row:F7' }))?.text).toMatch(/^▌  F7  built thing/)
   expect(((await ui.find({ key: 'head:%' }))!.children[0] as { props: { color?: string } }).props.color).toBe('suggestion')
-  expect((await ui.find({ key: 'count' }))!.text).toBe('4 open●1●1●1●1')
+  expect((await ui.find({ key: 'row:F10' }))?.text).toMatch(/^▌  F10  verified/)
+  expect(((await ui.find({ key: 'head:v' }))!.children[0] as { props: { color?: string } }).props.color).toBe('permission')
+  expect((await ui.find({ key: 'count' }))!.text).toBe('5 open●1●1●1●1●1· 1 done hidden')
   await ui.unmount()
 })
 
@@ -870,11 +870,11 @@ for (const surface of SURFACES) {
 
     // Pointer fold/unfold on head:assigned
     await ui.press({ key: 'head:assigned' })
-    expect(await state($, 'assignedFolded')).toBe(true)
+    expect(await state($, 'openGroups')).not.toContain('unfold:assigned')
     expect(await userHeads(ui)).toEqual(['▸ Assigned (1)', '▾ Mine to decide (0)'])
     expect(await ui.find({ key: 'row:assigned:F3' })).toBeUndefined()
     await ui.press({ key: 'head:assigned' })
-    expect(await state($, 'assignedFolded')).toBe(false)
+    expect(await state($, 'openGroups')).toContain('unfold:assigned')
     expect(await ui.find({ key: 'row:assigned:F3' })).toBeDefined()
 
     // Keyboard navigation (ui.scroll) up into personalized sections and folding Decide
@@ -882,10 +882,10 @@ for (const surface of SURFACES) {
     expect(await state($, 'selected')).toBe('head:decide')
     expect((await ui.find({ key: 'head:decide' }))?.props.hotkey).toBe('o')
     await ui.press({ key: 'head:decide' })
-    expect(await state($, 'decideFolded')).toBe(true)
+    expect(await state($, 'openGroups')).not.toContain('unfold:decide')
     expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▸ Mine to decide (0)'])
     await ui.press({ key: 'head:decide' })
-    expect(await state($, 'decideFolded')).toBe(false)
+    expect(await state($, 'openGroups')).toContain('unfold:decide')
 
     // Switch active user in Team view to @asha -> Assigned (0), Mine to decide (1) with F2
     await ui.press({ key: 'key:team' })

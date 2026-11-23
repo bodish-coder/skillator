@@ -3,7 +3,7 @@ import type { BoxProps, ButtonProps, Color, ElementConstructor, EngineInterface,
   SelectProps, TextProps } from 'claude-code'
 import type { Filter } from '../types'
 import { STATE_COLOR } from './lib/board'
-import { buildModel, chipsOf, headKey, isDecidable, toggleGroup, UNI, ASCII, cutTo, headText, userHeadText, rowText, chromeRows, windowOf } from './lib/ticketsmodel'
+import { buildModel, chipsOf, headKey, isDecidable, toggleGroup, toggleUserSection, UNI, ASCII, cutTo, headText, userHeadText, rowText, chromeRows, windowOf } from './lib/ticketsmodel'
 import type { Model, UserSection, View } from './lib/ticketsmodel'
 export { buildModel, lineKey, offsetFor } from './lib/ticketsmodel'
 export type { View, Model } from './lib/ticketsmodel'
@@ -53,19 +53,13 @@ const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 // F61: the boxes of the open groups, this session; empty = every group collapsed. Only
 // the set is held, never rows: the board's own value stays within $.state's cap (B4).
 const openA = atom({ plugin: 'ops-board', key: 'openGroups' } as const, [])
-// F180: the personal sections start collapsed too; a press opens one for this session
-const assignedFoldedA = atom({ plugin: 'ops-board', key: 'assignedFolded' } as const, true)
-const decideFoldedA = atom({ plugin: 'ops-board', key: 'decideFolded' } as const, true)
-const sessionFoldedA = atom({ plugin: 'ops-board', key: 'sessionFolded' } as const, true)
 const sessionA = atom({ plugin: 'ops-board', key: 'session' } as const, null)   // F109: register.tsx sets it
 // F76: the Workflows tab's open sections (Runs, Workflows, F93 Agents), this session; all start open.
 const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows', 'agents'])
 
 export async function toggleUserGroup($: EngineInterface, sec: UserSection) {
   await update($, ticketOffsetA, () => null)
-  if (sec === 'assigned') await update($, assignedFoldedA, x => !x)
-  else if (sec === 'decide') await update($, decideFoldedA, x => !x)
-  else await update($, sessionFoldedA, x => !x)
+  await update($, openA, x => toggleUserSection(x, sec))
 }
 
 const CHIP_KEY: Color = 'permission'
@@ -141,13 +135,14 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
     )
     if (chipsOf(t)) {
       const parts: (RenderElement | string)[] = ['    ']
-      const groupCount = [t.apps.length, t.owner, t.assignedSession, t.decide, t.tester, t.by.length, t.session].filter(Boolean).length
+      const groupCount = [t.apps.length, t.owner, t.workingSession, t.assignedSession, t.decide, t.tester, t.by.length, t.session].filter(Boolean).length
       let room = v.cols - 4 - (isDecidable(t) ? (isSel ? 13 : 10) : 0) - Math.max(0, groupCount - 1) * 2
       const take = (s: string) => { const text = cutTo(s, Math.max(0, room), glyphs.cut); room -= text.length; return text }
       const chip = (k: string, val: string) => [<Text color={k === 'decide' ? 'autoAccept' : CHIP_KEY}>{take(k + ':')}</Text>, <Text color={CHIP_VALUE}>{take(val)}</Text>]
       const groupsOf: (RenderElement | string)[][] = []
       if (t.apps.length) groupsOf.push(t.apps.flatMap((a, i) => [...(i ? [take(' ')] : []), ...chip('app', a)]))
       if (t.owner) groupsOf.push(chip('owner', t.owner))
+      if (t.box === '~' && t.workingSession) groupsOf.push(chip('working', t.workingSession + (t.workingState ? ' (' + t.workingState + ')' : '')))
       if (t.assignedSession) groupsOf.push(chip('session', t.assignedSession))
       if (t.decide) groupsOf.push(chip('decide', t.decide))
       if (t.tester) groupsOf.push(chip('tester', t.tester))
@@ -169,22 +164,20 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
     }
   }
 
-  if (v.assignedFolded !== undefined || v.decideFolded !== undefined || v.sessionFolded !== undefined) {
-    for (const ug of m.userGroups) {
-      const hk = headKey(ug.id)
-      const head = cutTo(userHeadText(ug, glyphs, !!v.ascii), v.cols - (v.ascii ? 0 : 2) - (hk === m.selected ? 3 : 0), glyphs.cut)
-      entries.push(
-        <Button key={hk} hotkey={hk === m.selected ? 'o' : undefined} plain onPress={() => {
-          void update($, selectedA, x => (hk === m.selected && x && x.startsWith(ug.id + ':') && ug.tickets.some(t => `${ug.id}:${t.id}` === x) ? x : hk))
-          void toggleUserGroup($, ug.id)
-        }}>
-          {!v.ascii && <Text color={ug.open ? ug.color : undefined} dimColor={!ug.open} inverse={hk === m.selected}>{ug.open ? glyphs.rail : glyphs.railDim}</Text>}
-          <Text color={v.ascii ? undefined : ug.color} bold inverse={hk === m.selected}>{head}</Text>
-        </Button>,
-      )
-      if (!ug.open) continue
-      for (const t of ug.tickets) pushTicketEntry(t, `${ug.id}:${t.id}`, false)
-    }
+  for (const ug of m.userGroups) {
+    const hk = headKey(ug.id)
+    const head = cutTo(userHeadText(ug, glyphs, !!v.ascii), v.cols - (v.ascii ? 0 : 2) - (hk === m.selected ? 3 : 0), glyphs.cut)
+    entries.push(
+      <Button key={hk} hotkey={hk === m.selected ? 'o' : undefined} plain onPress={() => {
+        void update($, selectedA, x => (hk === m.selected && x && x.startsWith(ug.id + ':') && ug.tickets.some(t => `${ug.id}:${t.id}` === x) ? x : hk))
+        void toggleUserGroup($, ug.id)
+      }}>
+        {!v.ascii && <Text color={ug.open ? ug.color : undefined} dimColor={!ug.open} inverse={hk === m.selected}>{ug.open ? glyphs.rail : glyphs.railDim}</Text>}
+        <Text color={v.ascii ? undefined : ug.color} bold inverse={hk === m.selected}>{head}</Text>
+      </Button>,
+    )
+    if (!ug.open) continue
+    for (const t of ug.tickets) pushTicketEntry(t, `${ug.id}:${t.id}`, false)
   }
 
   const shownIds = new Set(m.rows.map(t => t.id))
@@ -260,8 +253,7 @@ export async function readView($: EngineInterface, cols: number, rows: number | 
     board: await read($, boardA), team: await read($, teamA), me: await read($, meA),
     filter: await read($, filterA), filterOpen: await read($, filterOpenA),
     selected: await read($, selectedA), expanded: await read($, expandedA), open: await read($, openA),
-    assignedFolded: await read($, assignedFoldedA), decideFolded: await read($, decideFoldedA),
-    sessionFolded: await read($, sessionFoldedA), session: await read($, sessionA),
+    session: await read($, sessionA),
     cols, ascii: await read($, asciiA), rows, unread, offset: await read($, ticketOffsetA),
   }
 }

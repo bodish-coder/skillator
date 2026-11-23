@@ -16,7 +16,7 @@
 #                                     <branch>|-|-|-, upstream gone: <branch>|<up>|-|-,
 #                                     detached or no commit: -|-|-|-
 #   UNPUSHED=<n> | UNPUSHED=-         commits ahead of the upstream (none: -)
-#   OPEN= PENDING= PROGRESS= BLOCKED= DECISION= TESTING= DEFERRED=   counts on the main checkout's TICKETS.md
+#   OPEN= PENDING= PROGRESS= BLOCKED= DECISION= TESTING= VERIFIED= DEFERRED=   counts on the main checkout's TICKETS.md
 #   TICKET=<box>|<ID>|<tag>|<title>   per open or deferred ticket line, board order. tag:
 #                                     [owner: @x] -> @x, a [?] row's [decide: @y] -> decide @y,
 #                                     the session tag (@cc-...) -> @cc-..., space-joined.
@@ -50,7 +50,7 @@
 #                                     board write (<git dir>/skillator/board-fresh)
 #   WATCHDOG=red|amber|green          red: disk or memory free < 1 GB; amber: disk < 5 GB,
 #                                     memory < 2 GB, a stale lock or a hold; else green
-# OPEN = [ ] [~] [!] [?] [%], as tickets-zordon's count line has it; deferred [>]
+# OPEN = [ ] [~] [!] [?] [%] [v], as tickets-zordon's count line has it; deferred [>]
 # is not open and has its own key.
 #
 # Creates nothing: `queue-run list` (which creates the queue file when absent)
@@ -143,7 +143,7 @@ board() {
       i = index($0, "- ["); m = substr($0, i + 3, 1)
       r = substr($0, i + 5); sub(/^[ \t]+/, "", r); match(r, /^[A-Z]+[0-9]+[a-z]?/); id = substr(r, 1, RLENGTH)
       c[m]++
-      if (m != " " && m != "~" && m != "!" && m != "?" && m != "%" && m != ">") next
+      if (m != " " && m != "~" && m != "!" && m != "?" && m != "%" && m != "v" && m != ">") next
       if (m != ">" && tolower($0) ~ /(^|[^a-z0-9_])owed([^a-z0-9_]|$)/) ow = ow "OWED=" id "\n"
       r = substr(r, RLENGTH + 1)
       al = ""
@@ -170,8 +170,8 @@ board() {
       if (m == "%") te = te "TEST=" id "|" (note == "" ? "-" : note) "\n"
     }
     END {
-      p = c[" "] + 0; g = c["~"] + 0; b = c["!"] + 0; q = c["?"] + 0; t = c["%"] + 0; d = c[">"] + 0
-      printf "OPEN=%d\nPENDING=%d\nPROGRESS=%d\nBLOCKED=%d\nDECISION=%d\nTESTING=%d\nDEFERRED=%d\n", p + g + b + q + t, p, g, b, q, t, d
+      p = c[" "] + 0; g = c["~"] + 0; b = c["!"] + 0; q = c["?"] + 0; t = c["%"] + 0; v = c["v"] + 0; d = c[">"] + 0
+      printf "OPEN=%d\nPENDING=%d\nPROGRESS=%d\nBLOCKED=%d\nDECISION=%d\nTESTING=%d\nVERIFIED=%d\nDEFERRED=%d\n", p + g + b + q + t + v, p, g, b, q, t, v, d
       printf "%s%s%s", tk, te, ow
     }' "$f"
 }
@@ -485,9 +485,9 @@ human() {
       if (length(h) <= 80) out(h); else wrap("REPO      ", repo " " bt " " civil(now), "          ")
 
       out("TICKETS   " (no + 0) " open, " (nd + 0) " deferred")
-      LB["~"] = "in progress"; LB["%"] = "testing"; LB["!"] = "blocked"; LB["?"] = "decide"; LB[" "] = "pending"
-      G = "~%!? "
-      for (gi = 1; gi <= 5; gi++) {
+      LB["~"] = "in progress"; LB["%"] = "testing"; LB["v"] = "verified"; LB["!"] = "blocked"; LB["?"] = "decide"; LB[" "] = "pending"
+      G = "~%v!? "
+      for (gi = 1; gi <= length(G); gi++) {
         m = substr(G, gi, 1); if (!N[m]) continue
         out("  " LB[m] " (" N[m] ")")
         lim = (m == " " && N[m] > 10) ? 10 : N[m]
@@ -641,7 +641,7 @@ EOF
   export PENDING_RELAY PENDING_DF_CMD PENDING_MEM_CMD PENDING_SESSIONS_DIR PENDING_NOW PENDING_T
   unset RELAY_DIR 2>/dev/null || :
 
-  eq "kv" "$(run --kv)" "REPO=repo${NL}BRANCH=main|base|2|0${NL}UNPUSHED=2${NL}OPEN=8${NL}PENDING=2${NL}PROGRESS=2${NL}BLOCKED=1${NL}DECISION=1${NL}TESTING=2${NL}DEFERRED=2${NL}TICKET=~|B1|@cc-aaaaaa|cart drawer keeps items${NL}TICKET=!|B2|@vidul|orders 500 past page 3${NL}TICKET=?|F1|decide @asha|pick the chart library${NL}TICKET=>|F2||later thing${NL}TICKET=%|F4||built, under test${NL}TICKET= |F3||pending one${NL}TICKET= |F3a||a towed car, slowed down${NL}TICKET=~|F5|@cc-bbbbbb|a very long title that goes on and on well past the eighty column limit of any terminal${NL}TICKET=>|F6||deferred too${NL}TICKET=%|F7||en dash title \"quoted\" -> arrow${NL}TEST=F4|live check${NL}TEST=F7|owner looks at it${NL}OWED=B2${NL}RUN=RUN-0012|2/4|@vidul|stage three title|14${NL}ACTIVE=RUN-0012|stage three title${NL}ACTIVE=RUN-0012|stage four${NL}RUN=RUN-0014|1/2|-|later stage|44794${NL}ACTIVE=RUN-0014|later stage${NL}SESSION=repo-c0|busy|$M|4${NL}SESSION=other-1|busy|C:\\elsewhere|94${NL}DRIVE=X:${NL}DISK_FREE=858993459${NL}DISK_TOTAL=1000000000000${NL}MEM_FREE=3435973836${NL}LOCK=.skillator/run.md.lock|34|1234 sh MINGW${NL}HOLD=-${NL}WATCHDOG=red"
+  eq "kv" "$(run --kv)" "REPO=repo${NL}BRANCH=main|base|2|0${NL}UNPUSHED=2${NL}OPEN=8${NL}PENDING=2${NL}PROGRESS=2${NL}BLOCKED=1${NL}DECISION=1${NL}TESTING=2${NL}VERIFIED=0${NL}DEFERRED=2${NL}TICKET=~|B1|@cc-aaaaaa|cart drawer keeps items${NL}TICKET=!|B2|@vidul|orders 500 past page 3${NL}TICKET=?|F1|decide @asha|pick the chart library${NL}TICKET=>|F2||later thing${NL}TICKET=%|F4||built, under test${NL}TICKET= |F3||pending one${NL}TICKET= |F3a||a towed car, slowed down${NL}TICKET=~|F5|@cc-bbbbbb|a very long title that goes on and on well past the eighty column limit of any terminal${NL}TICKET=>|F6||deferred too${NL}TICKET=%|F7||en dash title \"quoted\" -> arrow${NL}TEST=F4|live check${NL}TEST=F7|owner looks at it${NL}OWED=B2${NL}RUN=RUN-0012|2/4|@vidul|stage three title|14${NL}ACTIVE=RUN-0012|stage three title${NL}ACTIVE=RUN-0012|stage four${NL}RUN=RUN-0014|1/2|-|later stage|44794${NL}ACTIVE=RUN-0014|later stage${NL}SESSION=repo-c0|busy|$M|4${NL}SESSION=other-1|busy|C:\\elsewhere|94${NL}DRIVE=X:${NL}DISK_FREE=858993459${NL}DISK_TOTAL=1000000000000${NL}MEM_FREE=3435973836${NL}LOCK=.skillator/run.md.lock|34|1234 sh MINGW${NL}HOLD=-${NL}WATCHDOG=red"
   # No queue.md: queue-run list is never called (it would create the file).
   [ ! -e .skillator/queue.md ] || { echo "FAIL: pending created .skillator/queue.md"; fail=1; }
   echo '# Run queue' > .skillator/queue.md

@@ -162,6 +162,16 @@
       ]
     },
     {
+      "name": "analyse-shifu",
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ]
+    },
+    {
       "name": "skillator-ops",
       "source": "skillator-ops.txt",
       "hosts": [
@@ -192,7 +202,7 @@
       "all": "a code review of the staged diff (`/code-review` where the host has it);"
     },
     "verify-shifu.fallback": {
-      "all": "run tests only: they never edit code, commit or touch TICKETS.md. No subagent on this host ->\n   check each ticket yourself in turn, under the same read-and-run-only rule."
+      "all": "read and run tests only. They never edit code, commit, or touch TICKETS.md. If the host has no subagents, check each ticket yourself in turn under the same rule."
     },
     "code-vader.execute": {
       "gemini": "1. **Collect diff & debt markers** - Run `!{sh \"{{SKILLS}}/code-vader/scripts/code-vader.sh\" collect {{args}}}` Read the changed files and callers of modified symbols before judging.",

@@ -88,7 +88,7 @@ export function parseGitConfigEmail(text: string): string | null {
   return null
 }
 
-// "lead · (you) · 3 owned · 1 decide" over the open tickets ([ ] [~] [%] [!] [?]).
+// "lead · (you) · 3 owned · 1 decide" over the open tickets ([ ] [~] [%] [v] [!] [?]).
 export function ticketsOf(m: Member, board: Board | null, me: string | null): string {
   const open = (board?.tickets ?? []).filter(isOpen)
   const owned = open.filter(t => sameHandle(t.owner, m.handle)).length

@@ -20,11 +20,11 @@ section. A board of 1-3 tickets is `tickets-zordon` plain dispatch, not a chain.
 ## Step 1 — plan from the board (main session, before anything is dispatched)
 
 ```sh
-grep -nE '^\s*- \[[ ~%!?]\]' TICKETS.md
+grep -nE '^\s*- \[[ ~%v!?]\]' TICKETS.md
 ```
 
 1. `[ ]` and `[~]` go in. A `[~]` stamped by another session's tag is skipped
-   with a ruling. `[%]` (waiting on a test result) and `[?]` (waiting on a
+   with a ruling. `[%]` (waiting on a test result), `[v]` (verification passed), and `[?]` (waiting on a
    person's decision) are open but not planned — list them in the run file as
    owed, and plan one only once its result or decision is in. `[>]` is never
    planned and never re-checked.

@@ -4,15 +4,16 @@ import { ansi, frame, frameSegs, fit, cells, glyph, plain, paintScreen, screen }
 import { COMMANDS, filteredSkills, HELP_ITEMS, initial, onBoard, onInbox, onMachine, onRuns, onUsage, openHelp, openStartRun, reduce, SKILLS } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
-import { parseBoard } from '../../hooks/lib/board'
+import { listView, parseBoard } from '../../hooks/lib/board'
 import { parseInbox, pendingHandoffOf } from '../../hooks/lib/inbox'
 import { headKey } from '../../hooks/lib/ticketsmodel'
 import { BOARD } from '../../tests/fixtures'
-import { bandLines, statusText } from '../../hooks/lib/bandlines'
+import { bandLines, countsOf, statusText } from '../../hooks/lib/bandlines'
+import { eligibleRunTickets } from '../../hooks/lib/runlines'
 // The block's excerpt, with the layout the owner approved in the mock (controller ruling
 // 2026-10-20: where the mock and the excerpt differ on what the user sees, the mock wins).
 // F61: groups start collapsed; the row tests run with every group open, the first row selected.
-const ALL: Box[] = ['~', '%', '!', '?', ' ', '>', 'x', '-']
+const ALL: Box[] = ['~', '%', 'v', '!', '?', ' ', '>', 'x', '-']
 const fresh = onBoard(initial(80, 24, 0), parseBoard(BOARD, 'T', 1, 1), [{ handle: '@asha', emails: [] }], null)
 const s: State = { ...fresh, open: ALL, selected: 'B2' }
 const opened = (x: State): State => ({ ...x, open: ALL })
@@ -193,6 +194,18 @@ test('filter row, tags, expanded chips and raw line, count line, done shown', ()
   assert.match(text(fm), /←→ field/)
   assert.match(frame(fm, { color: true, ascii: false }).find(l => l.startsWith('\x1b[2mfilter'))!, /\x1b\[1;97;44mall\x1b\[0m/)
 })
+test('[v] is open and visible in its own group and excluded from run selection', () => {
+  const b = parseBoard('- [ ] F1 - ready\n- [%] F2 - testing\n- [v] F3 - verified\n- [x] F4 - done\n', 'T', 1, 1)
+  const state = opened(onBoard(initial(80, 24, 0), b, [], null))
+  const rendered = text(state)
+  assert.match(rendered, /3 open \(1 pending · 0 in progress · 1 testing · 1 verified\)/)
+  assert.match(rendered, /Testing \(1\)[\s\S]*Verified \(1\)[\s\S]*F3 +verified/)
+  assert.doesNotMatch(rendered, /F4 +done/)
+  assert.match(listView(b, 'status'), /Verified\n  \[v\] F3/)
+  assert.equal(statusText(countsOf(b), null, 0, null), 'ops 1 pending | 0 in progress | 3 total')
+  assert.deepEqual(eligibleRunTickets(b).map(t => t.id), ['F1'])
+})
+
 // F62: [%] testing - its own group between In progress and Blocked, cyan, named in the count line.
 test('[%] testing: group after in progress, cyan dot, counted open', () => {
   const t = opened(onBoard(initial(80, 24, 0), parseBoard('- [!] B1 — stuck\n- [%] F7 — built thing (testing: owner live check)\n- [~] F8 — working\n', 'T', 1, 1), [], null))
@@ -789,7 +802,7 @@ test('F130 / A178: Ops band shows the addressee of a pending handoff from serial
   assert.equal(pendingHandoffOf(parseInbox(badJsonl), null, team), null)
 
   // 1. statusText ends with ' → @vidul' when pending handoff is derived from parsed inbox, unchanged when read
-  const counts = { open: 258, progress: 1, testing: 0, blocked: 0, decision: 0 }
+  const counts = { open: 258, progress: 1, testing: 0, verified: 0, blocked: 0, decision: 0 }
   const usage = {
     five: { pct: 1, resetsAt: null, source: 'host' as const, at: 0 },
     seven: { pct: 33, resetsAt: null, source: 'host' as const, at: 0 },

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, FsEntry, RenderElement, RenderInput } from 'claude-code'
 import type { AssignDraft, Box as State, LiveSession, Member, PersonDraft, Ticket } from '../types'
-import { parseBoard, STATE_NAME, ticketById } from './lib/board'
+import { parseBoard, SESSION_HEARTBEAT_MS, STATE_NAME, ticketById } from './lib/board'
 export { isOpen } from './lib/board'
 import { runCall } from './lib/host'
 import { norm } from './lib/calls'
@@ -56,9 +56,8 @@ const notes = (out: string) => out.split(/\r?\n/).map(l => l.trimEnd()).filter(l
 const titleOf = (d: AssignDraft, t: Ticket | null) =>
   `Assign ${t ? t.id : 'a ticket'}${d.kind === 'decide' ? ' for a decision' : d.kind === 'tester' ? ' for testing' : d.kind === 'session' ? ' to a session' : ''}`
 
-// F178: the sessions the picker lists - this one, then each <repo>/.skillator/sessions/<code>.owner
-// (ticket-meta iam) written in the last 12 h (pending.sh's busy window), its owner on line 1.
-const LIVE_MS = 12 * 3600_000
+// A239: an owner identifies the participant; a recent matching heartbeat proves activity.
+let sessionLoad = 0
 async function liveSessions($: EngineInterface): Promise<LiveSession[]> {
   const own = await read($, sessionA)
   const out: LiveSession[] = own ? [{ code: own, owner: await read($, meA) }] : []
@@ -68,14 +67,18 @@ async function liveSessions($: EngineInterface): Promise<LiveSession[]> {
   let entries: FsEntry[] = []
   try { entries = await $.fs.list(dir) } catch { return out }
   const now = await $.clock.now()
-  for (const e of entries) {
-    const code = /^([a-z0-9_]+-[a-z0-9_-]+)\.owner$/.exec(e.name)?.[1]
-    if (e.kind !== 'file' || !code || code === own || now - e.mtimeMs > LIVE_MS) continue
-    let owner: string | null = null
-    try { owner = (await $.fs.read(dir + '/' + e.name)).split(/\r?\n/)[0]!.trim() || null } catch { /* unread: no owner */ }
-    out.push({ code, owner })
-  }
-  return out
+  const files = new Map(entries.filter(e => e.kind === 'file' && !e.isLink).map(e => [e.name, e]))
+  const others = await Promise.all([...files.values()].map(async e => {
+    const code = /^([a-z0-9_]+-[a-z0-9_-]+)\.live$/.exec(e.name)?.[1]
+    if (!code || code === own || now - e.mtimeMs >= SESSION_HEARTBEAT_MS || !files.has(code + '.owner')) return null
+    try {
+      const [heartbeat, record] = await Promise.all([$.fs.read(dir + '/' + e.name), $.fs.read(dir + '/' + code + '.owner')])
+      const [owner, identity] = record.split(/\r?\n/)
+      if (!identity?.startsWith('session: ') || identity === 'session: ' || identity !== heartbeat.trimEnd()) return null
+      return { code, owner: owner?.trim() || null }
+    } catch { return null }
+  }))
+  return [...out, ...others.filter((session): session is LiveSession => session !== null)]
 }
 // The ticket an ID names on the loaded board, typed in any case (F77).
 async function findTicket($: EngineInterface, id: string): Promise<Ticket | null> {
@@ -119,7 +122,8 @@ export async function openAssign($: EngineInterface, kind: AssignDraft['kind'], 
   await update($, actionFocusA, () => null)
   const t = shown ? ((await read($, boardA))?.tickets.find(x => x.id === shown) ?? null) : null
   if (!t && !canType) { say($, 'ops board: select a ticket first'); return }
-  const sessions = await liveSessions($)
+  sessionLoad++
+  const sessions = kind === 'session' ? await liveSessions($) : []
   const draft: AssignDraft = { id: t?.id ?? '', kind, handle: startHandle(t, kind, await read($, teamA), await read($, meA)), result: null,
     sessions, session: t?.assignedSession ?? sessions[0]?.code ?? null }
   await clearStatus($)
@@ -135,6 +139,7 @@ export async function isFormUp($: EngineInterface): Promise<boolean> {
 }
 
 export async function clearForm($: EngineInterface) {
+  sessionLoad++
   await clearStatus($)
   await update($, actionFocusA, () => null)
   await update($, assignA, () => null)
@@ -353,8 +358,13 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
   const radioKey = (kind: AssignDraft['kind']) => (kind === 'owner' ? 'kind:implementation' : kind === 'decide' ? 'kind:decision' : kind === 'session' ? 'kind:session' : 'kind:tester')
   const radioHotkey = (kind: AssignDraft['kind']) => (kind === 'owner' ? 'a' : kind === 'decide' ? 'd' : kind === 'session' ? 'e' : 't')
   const radio = (kind: AssignDraft['kind'], text: string) => (
-    <Button key={radioKey(kind)} hotkey={armed ? radioHotkey(kind) : undefined} plain onPress={() => {
-      set(x => ({ ...x, kind }))
+    <Button key={radioKey(kind)} hotkey={armed ? radioHotkey(kind) : undefined} plain onPress={async () => {
+      const load = ++sessionLoad
+      if (kind === 'session') {
+        const sessions = await liveSessions($)
+        if (load !== sessionLoad) return
+        await update($, assignA, x => x ? { ...x, kind, sessions, session: x.session ?? sessions[0]?.code ?? null, result: null } : x)
+      } else set(x => ({ ...x, kind }))
       // the old ring (a person or session row) may not be drawn under the new kind: keep it on a drawn control
       void (async () => { await $.ui.focus({ requestId: PANE, key: radioKey(kind) }).catch(() => {}); await update($, actionFocusA, () => radioKey(kind)) })()
     }}>

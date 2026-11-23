@@ -1,5 +1,6 @@
 {
   "outputs": [
+    "host-commands/antigravity/analyse-shifu/SKILL.md",
     "host-commands/antigravity/archive-zordon/SKILL.md",
     "host-commands/antigravity/code-vader/SKILL.md",
     "host-commands/antigravity/decision-matrix/SKILL.md",
@@ -17,6 +18,7 @@
     "host-commands/antigravity/team-messages/SKILL.md",
     "host-commands/antigravity/team/SKILL.md",
     "host-commands/antigravity/verify-shifu/SKILL.md",
+    "host-commands/cursor/analyse-shifu.md",
     "host-commands/cursor/archive-zordon.md",
     "host-commands/cursor/code-vader.md",
     "host-commands/cursor/decision-matrix.md",
@@ -33,6 +35,7 @@
     "host-commands/cursor/team-messages.md",
     "host-commands/cursor/team.md",
     "host-commands/cursor/verify-shifu.md",
+    "host-commands/gemini/analyse-shifu.toml",
     "host-commands/gemini/archive-zordon.toml",
     "host-commands/gemini/code-vader.toml",
     "host-commands/gemini/decision-matrix.toml",
@@ -49,6 +52,7 @@
     "host-commands/gemini/team-messages.toml",
     "host-commands/gemini/team.toml",
     "host-commands/gemini/verify-shifu.toml",
+    "host-commands/opencode/analyse-shifu.md",
     "host-commands/opencode/archive-zordon.md",
     "host-commands/opencode/code-vader.md",
     "host-commands/opencode/decision-matrix.md",
@@ -66,6 +70,7 @@
     "host-commands/opencode/team-messages.md",
     "host-commands/opencode/team.md",
     "host-commands/opencode/verify-shifu.md",
+    "host-commands/pi/analyse-shifu.md",
     "host-commands/pi/archive-zordon.md",
     "host-commands/pi/code-vader.md",
     "host-commands/pi/decision-matrix.md",

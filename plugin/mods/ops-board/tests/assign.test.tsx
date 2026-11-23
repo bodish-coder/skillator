@@ -716,15 +716,33 @@ for (const surface of SURFACES) {
   })
 }
 
-// F178: the session option lists the live sessions as `@owner code`; a pick runs assign-session
+// F178 / A239: the session option loads heartbeat-backed sessions and runs assign-session
 for (const surface of SURFACES) {
-  test(`${surface}: F178 the assign form's session option lists live sessions and sets the [session:] tag`, WITH, async ($, on) => {
-    const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM, '/r/.skillator/sessions/cc-2abc.owner': '@asha\nsession: s2\n' }, { SKILLATOR_SESSION: '@cc-1ir0' })
+  test(`${surface}: A239 the session option lazily loads active matching heartbeats and sets the [session:] tag`, WITH, async ($, on) => {
+    const [w, clock] = world(on, {
+      '/r/TICKETS.md': BOARD,
+      '/r/.skillator/team.md': TEAM,
+      '/r/.skillator/sessions/cc-2abc.owner': '@asha\nsession: s2\n',
+      '/r/.skillator/sessions/cc-2abc.live': 'session: s2\n',
+      '/r/.skillator/sessions/cc-collision.owner': '@vidul\nsession: old\n',
+      '/r/.skillator/sessions/cc-collision.live': 'session: other\n',
+      '/r/.skillator/sessions/cc-stale.owner': '@vidul\nsession: s3\n',
+      '/r/.skillator/sessions/cc-stale.live': 'session: s3\n',
+      '/r/.skillator/sessions/cc-ended.owner': '@vidul\nsession: s4\n',
+      '/r/.skillator/sessions/cc-ended.live': 'ended: s4\n',
+    }, { SKILLATOR_SESSION: '@cc-1ir0' })
     on('session.id', () => ({ value: 'sid-1' }))
-    on('fs.list', ($, e) => e.path.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '') === '/r/.skillator/sessions'
-      ? { value: [{ name: 'cc-2abc.owner', kind: 'file' as const, size: 20, mtimeMs: 999_000, isLink: false },
-          { name: 'notes.txt', kind: 'file' as const, size: 1, mtimeMs: 999_000, isLink: false }] }
-      : { deny: 'ENOENT ' + e.path })
+    let sessionScans = 0
+    on('fs.list', ($, e) => {
+      if (e.path.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '') !== '/r/.skillator/sessions') return { deny: 'ENOENT ' + e.path }
+      sessionScans++
+      const entries = Object.entries(w.files).filter(([path]) => path.startsWith('/r/.skillator/sessions/'))
+      return { value: entries.map(([path, contents]) => {
+        const name = path.split('/').at(-1)!
+        const mtimeMs = name === 'cc-2abc.owner' ? -50_000_000 : name === 'cc-stale.live' ? 699_000 : 999_000
+        return { name, kind: 'file' as const, size: contents.length, mtimeMs, isLink: false }
+      }) }
+    })
     w.answer = argv => argv.includes('assign-session')
       ? ran('- [~] F3 — cart drawer keeps items on reload [app: web] [owner: @vidul] [session: cc-2abc] (@cc-4ae496)\n')
       : null
@@ -733,12 +751,16 @@ for (const surface of SURFACES) {
     await pane.press({ key: 'head:~' })
     await pane.press({ key: 'row:F3' })
     await pane.press({ key: 'key:assign' })
+    expect(sessionScans).toBe(0)
     await pane.press({ key: 'kind:session' })
+    expect(sessionScans).toBe(1)
     expect((await pane.find({ key: 'kind:session' }))?.text).toBe('(•) session')
     expect(await pane.find({ key: 'warn' })).toBeUndefined()
     expect((await pane.find({ key: 'ses:cc-1ir0' }))?.text).toContain('@vidul cc-1ir0')
     expect((await pane.find({ key: 'ses:cc-2abc' }))?.text).toContain('@asha cc-2abc')
-    expect(await pane.find({ key: 'ses:notes' })).toBeUndefined()
+    expect(await pane.find({ key: 'ses:cc-collision' })).toBeUndefined()
+    expect(await pane.find({ key: 'ses:cc-stale' })).toBeUndefined()
+    expect(await pane.find({ key: 'ses:cc-ended' })).toBeUndefined()
     await pane.press({ key: 'ses:cc-2abc' })
     expect((await pane.find({ key: 'runs' }))?.text).toBe('Runs    ticket-meta assign-session F3 cc-2abc')
     await pane.press({ key: 'go' })

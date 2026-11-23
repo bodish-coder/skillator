@@ -11,7 +11,7 @@ test('by type matches tickets-zordon', () => {
 test('by status matches tickets-zordon', () => {
   expect(listView(parseBoard(BOARD, 'T', 0, 0), 'status')).toBe(BY_STATUS)
 })
-test('empty board prints all eight states', () => {
+test('empty board prints the count summary', () => {
   expect(countLine([])).toBe('0 open (0 pending · 0 in-progress · 0 testing · 0 blocked · 0 decide) · 0 deferred · 0 closed (0 done · 0 cancelled) · 0 total')
 })
 // F62: [%] testing - built, waiting on a test result. Open; its own group and status
@@ -24,7 +24,7 @@ test('[%] testing parses, is open, groups and lists between in progress and bloc
   expect(STATE_NAME['%']).toBe('testing')
   expect(STATE_COLOR['%']).toBe('cyan')
   expect(paint('%')).toBe('suggestion')
-  expect(GROUPS.map(g => g.box).slice(0, 3)).toEqual(['~', '%', '!'])
+  expect(GROUPS.map(g => g.box).slice(0, 4)).toEqual(['~', '%', 'v', '!'])
   expect(GROUPS.find(g => g.box === '%')!.title).toBe('TESTING')
   expect(countLine(b.tickets)).toBe('4 open (1 pending · 1 in-progress · 1 testing · 1 blocked · 0 decide) · 0 deferred · 0 closed (0 done · 0 cancelled) · 4 total')
   expect(listView(b, 'status').split('\n').filter(l => l && !l.startsWith(' ')).slice(0, 4)).toEqual(['In progress', 'Testing', 'Blocked', 'Pending'])

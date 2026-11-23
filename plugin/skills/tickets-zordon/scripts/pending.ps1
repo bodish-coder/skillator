@@ -129,7 +129,7 @@ function Get-Board {
       $alias = ''
       if ($m.Groups[3].Success) { $alias = $m.Groups[3].Value }
       if ($c.ContainsKey($k)) { $c[$k] = $c[$k] + 1 } else { $c[$k] = 1 }
-      if (@(' ', '~', '!', '?', '%', '>') -cnotcontains $k) { continue }
+      if (@(' ', '~', '!', '?', '%', 'v', '>') -cnotcontains $k) { continue }
       if ($k -cne '>' -and $l.ToLowerInvariant() -cmatch '(^|[^a-z0-9_])owed([^a-z0-9_]|$)') { [void]$owed.Add('OWED=' + $id) }
       $dash = $m.Groups[4]
       $r = ConvertTo-Ascii $l.Substring($dash.Index + $dash.Length)
@@ -170,12 +170,12 @@ function Get-Board {
     }
   }
   $n = @{}
-  foreach ($k in @(' ', '~', '!', '?', '%', '>')) { $n[$k] = 0; if ($c.ContainsKey($k)) { $n[$k] = [int]$c[$k] } }
+  foreach ($k in @(' ', '~', '!', '?', '%', 'v', '>')) { $n[$k] = 0; if ($c.ContainsKey($k)) { $n[$k] = [int]$c[$k] } }
   $out = New-Object System.Collections.ArrayList
   foreach ($l in @(
-    ('OPEN=' + ($n[' '] + $n['~'] + $n['!'] + $n['?'] + $n['%'])),
+    ('OPEN=' + ($n[' '] + $n['~'] + $n['!'] + $n['?'] + $n['%'] + $n['v'])),
     ('PENDING=' + $n[' ']), ('PROGRESS=' + $n['~']), ('BLOCKED=' + $n['!']),
-    ('DECISION=' + $n['?']), ('TESTING=' + $n['%']), ('DEFERRED=' + $n['>']))) { [void]$out.Add($l) }
+    ('DECISION=' + $n['?']), ('TESTING=' + $n['%']), ('VERIFIED=' + $n['v']), ('DEFERRED=' + $n['>']))) { [void]$out.Add($l) }
   foreach ($set in @($tk, $te, $owed)) { foreach ($l in $set) { [void]$out.Add($l) } }
   return @($out)
 }
@@ -567,7 +567,7 @@ function Format-Human($facts) {
 
   $j = Get-Judge $facts
   $repo = ''; $br = ''; $up = ''; $ah = ''; $be = ''; $hasbr = $false; $no = 0; $nd = 0
-  $tix = @{}; foreach ($k in @('~', '%', '!', '?', ' ', '>')) { $tix[$k] = New-Object System.Collections.ArrayList }
+  $tix = @{}; foreach ($k in @('~', '%', 'v', '!', '?', ' ', '>')) { $tix[$k] = New-Object System.Collections.ArrayList }
   $tests = New-Object System.Collections.ArrayList
   $runs = New-Object System.Collections.ArrayList
   $q = New-Object System.Collections.ArrayList
@@ -628,8 +628,8 @@ function Format-Human($facts) {
   if ($h.Length -le 80) { & $add $h } else { & $wrap 'REPO      ' "$repo $bt $when" '          ' }
 
   & $add "TICKETS   $no open, $nd deferred"
-  $labels = @{ '~' = 'in progress'; '%' = 'testing'; '!' = 'blocked'; '?' = 'decide'; ' ' = 'pending' }
-  foreach ($m in @('~', '%', '!', '?', ' ')) {
+  $labels = @{ '~' = 'in progress'; '%' = 'testing'; 'v' = 'verified'; '!' = 'blocked'; '?' = 'decide'; ' ' = 'pending' }
+  foreach ($m in @('~', '%', 'v', '!', '?', ' ')) {
     $rows = $tix[$m]
     if ($rows.Count -eq 0) { continue }
     & $add "  $($labels[$m]) ($($rows.Count))"
@@ -849,7 +849,7 @@ function Invoke-Selftest {
     $env:RELAY_DIR = $null
 
     Eq 'kv' (Run --kv) ([string]::Join("`n", @('REPO=repo', 'BRANCH=main|base|2|0', 'UNPUSHED=2',
-      'OPEN=8', 'PENDING=2', 'PROGRESS=2', 'BLOCKED=1', 'DECISION=1', 'TESTING=2', 'DEFERRED=2',
+      'OPEN=8', 'PENDING=2', 'PROGRESS=2', 'BLOCKED=1', 'DECISION=1', 'TESTING=2', 'VERIFIED=0', 'DEFERRED=2',
       'TICKET=~|B1|@cc-aaaaaa|cart drawer keeps items', 'TICKET=!|B2|@vidul|orders 500 past page 3',
       'TICKET=?|F1|decide @asha|pick the chart library', 'TICKET=>|F2||later thing', 'TICKET=%|F4||built, under test',
       'TICKET= |F3||pending one', 'TICKET= |F3a||a towed car, slowed down',

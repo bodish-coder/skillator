@@ -3,7 +3,7 @@
 #
 #   ticket-meta.ps1 apps | app-of <path>... | by <ID> | apps-of <ID>
 #   ticket-meta.ps1 assign <ID> @handle | assign-app <ID> <app,...> | assign-tester <ID> @handle | assign-session <ID> <code>|- | decide <ID> @handle | decided <ID>
-#   ticket-meta.ps1 testing <ID> <what test> | tested <ID> pass|fail | verify <ID> pass|fail <evidence>
+#   ticket-meta.ps1 testing <ID> <what test> | tested <ID> pass|fail | verify <ID> pass|fail|owner <evidence>
 #   ticket-meta.ps1 done <ID> [evidence] | block <ID> <on what> | defer <ID> <until what>
 #   ticket-meta.ps1 tag <ID> | selftest
 #   ticket-meta.ps1 team add @handle "Name" email[,email...] | team remove @handle | team list
@@ -333,7 +333,7 @@ function Set-Tag([string]$line, [string]$key, [string]$val) {
   $tag = " [$key" + ": $val]"
   $m = Find-Tag $line $key
   if ($m.Success) { return $line.Substring(0, $m.Index) + $tag + $line.Substring($m.Index + $m.Length) }
-  $ord = @('app', 'decide', 'owner', 'session', 'tester', 'by')
+  $ord = @('app', 'decide', 'owner', 'session', 'tester', 'by', 'working', 'work-history')
   $pos = -1
   for ($i = [array]::IndexOf($ord, $key) + 1; $i -lt $ord.Length; $i++) {
     $m = Find-Tag $line $ord[$i]
@@ -434,6 +434,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
       }
     }
     if ($o.need -and $mk -cne $o.need) { Fail "$id is [$mk], not [$($o.need)] - nothing to change" }
+    if ($o.verify -and @('%', 'v') -cnotcontains $mk) { Fail "$id is [$mk] - verify requires [%] or [v]" }
     # F64: refuse lists the boxes this change may not start from.
     if ($o.refuse -and $o.refuse.Contains($mk)) { Fail "$id is [$mk] (closed) - reopen it first (assign), then $($o.cmd)" }
     # F62/F64: the same note on a line already in that box is a no-op, like a
@@ -502,6 +503,15 @@ function Edit-Line([string]$id, [hashtable]$o) {
     # F109: every write stamps this session's tag - not a move out of [~] (A143)
     $tagText = ''
     if (-not $moved) { $tagText = Get-TagText ([string]$o.me) }
+    if ($o.working) {
+      $oldWorker = [regex]::Match($line, '\[working: ([a-z0-9_]+-[a-z0-9_-]+)\]').Groups[1].Value
+      if ($o.expectedworker -and $oldWorker -cne $o.expectedworker) { Fail "${id}: working session is '$oldWorker'; refresh before transferring work" }
+      if ($oldWorker -and $oldWorker -cne $o.working) {
+        $history = [regex]::Match($line, '\[work-history: ([^\]]+)\]').Groups[1].Value
+        $line = Set-Tag $line 'work-history' (@($history, $oldWorker).Where({ $_ }) -join ', ')
+      }
+      $line = Set-Tag $line 'working' $o.working
+    }
     if ($o.keepsession -and $line -cmatch '\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$') { $tagText = '' }
     if ($moved) {
       $sm = [regex]::Match($line, '[ \t]*\((@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+)\)[ \t]*$')
@@ -537,9 +547,9 @@ function Edit-Line([string]$id, [hashtable]$o) {
     if ($o.unblock) { $line = ([regex]'[ \t]*\(blocked:[^()]*\)').Replace($line, '', 1) }   # F81 unblock
     if ($o.done) { $line = Set-Note $line (' **Done ' + $o.done + '**') '[ \t]*\*\*Done [^*]*\*\*' }
     # F72/F167: one verify note - it drops every earlier dated one, new
-    # (verified PASS|FAIL ..) or old (verify failed ..); the date keeps title words safe
+    # (verified PASS|FAIL|OWNER ..) or old (verify failed ..); the date keeps title words safe
     if ($o.verify) {
-      $vp = '[ \t]*\(verif(ied PASS|ied FAIL|y failed) [0-9]{4}-[0-9]{2}-[0-9]{2}: [^()]*\)'
+      $vp = '[ \t]*\(verif(ied (PASS|FAIL|OWNER)|y failed) [0-9]{4}-[0-9]{2}-[0-9]{2}: [^()]*\)'
       $line = ([regex]$vp).Replace($line, '')
       $line = Set-Note $line (' (verified ' + $o.verify + ')') $vp
     }
@@ -831,6 +841,7 @@ function Do-Pick([string[]]$a) {
   $res = New-Object System.Collections.ArrayList
   [void]$res.Add("you: $you")
   foreach ($id in $ids) {
+    if ($mk[$id] -ceq 'v') { [void]$res.Add("skip $id verified"); continue }
     $o = ''
     if ($ow.ContainsKey($id)) { $o = $ow[$id] }
     elseif ($id -cmatch '^(.+\d)[a-z]$' -and $ow.ContainsKey($Matches[1])) { $o = $ow[$Matches[1]] }   # a sub-part with no row takes its parent owner
@@ -918,18 +929,16 @@ function Do-Tested([string[]]$a) {
   return (Edit-Line $id @{ mark = $mk; need = '%' })
 }
 
-# F72/F167: /verify-shifu's verdict on a [%] ticket, with the evidence (one
-# line, no parentheses, no *; a fail's is "<what failed> - <why>"). A note, never
-# a status: the box stays [%], ` (verified PASS|FAIL <date>: <evidence>)` replaces
-# any earlier verify note.
+# Record a verdict on a Testing or Verified ticket and replace its earlier verdict.
 function Do-Verify([string[]]$a) {
-  if ($a.Count -lt 3) { Fail 'usage: verify <ID> pass|fail <evidence>' }
+  if ($a.Count -lt 3) { Fail 'usage: verify <ID> pass|fail|owner <evidence>' }
   $id = Get-NormId $a[0]
   $v = $a[1].ToUpperInvariant()
-  if ($v -cne 'PASS' -and $v -cne 'FAIL') { Fail "usage: verify <ID> pass|fail <evidence> - not '$($a[1])'" }
+  if (@('PASS', 'FAIL', 'OWNER') -cnotcontains $v) { Fail "usage: verify <ID> pass|fail|owner <evidence> - not '$($a[1])'" }
   $t = Get-NoteText 'verify' 'evidence' $false @($a[1..($a.Count - 1)])
   if ($t.Contains('*')) { Fail 'the evidence cannot hold * - it sits on the line as a note' }
-  return (Edit-Line $id @{ need = '%'; verify = "$v " + [DateTime]::UtcNow.ToString('yyyy-MM-dd') + ': ' + $t; cmd = 'verify' })
+  $mark = '%'; if ($v -ceq 'PASS') { $mark = 'v' }
+  return (Edit-Line $id @{ mark = $mark; verify = "$v " + [DateTime]::UtcNow.ToString('yyyy-MM-dd') + ': ' + $t; cmd = 'verify' })
 }
 
 # F81: the wait is over: [!] -> [ ], its (blocked: ..) note dropped. Only from [!].
@@ -961,9 +970,23 @@ function Do-Start([string[]]$a) {
   if ($a.Count -ne 1) { Fail 'usage: start <ID>' }
   $id = Get-NormId $a[0]
   # F106: an unowned ticket is claimed to me on the way; another's is left alone and said.
-  $opt = @{ mark = '~'; need = ' ' }
+  $opt = @{ mark = '~'; need = ' '; working = (Get-SessionTag); keepsession = $true }
   if ($null -ne (Get-TeamFile)) { $me = Get-Me; $opt.claimfree = $true; $opt.me = $me.me; $opt.mewhy = $me.why }
   return (Edit-Line $id $opt)
+}
+
+function Do-Handoff([string[]]$a) {
+  if ($a.Count -ne 2 -or $a[1] -cnotmatch '\A[a-z0-9_]+-[a-z0-9_-]+\z') { Fail 'usage: handoff <ID> <session-code>' }
+  $worker = Get-SessionTag
+  if (-not $worker) { Fail 'handoff requires a session identity' }
+  return (Edit-Line (Get-NormId $a[0]) @{ need = '~'; working = $a[1]; expectedworker = $worker; keepsession = $true })
+}
+
+function Do-Takeover([string[]]$a) {
+  if ($a.Count -ne 3 -or $a[1] -cne '--from' -or $a[2] -cnotmatch '\A[a-z0-9_]+-[a-z0-9_-]+\z') { Fail 'usage: takeover <ID> --from <current-session-code>' }
+  $worker = Get-SessionTag
+  if (-not $worker) { Fail 'takeover requires a session identity' }
+  return (Edit-Line (Get-NormId $a[0]) @{ need = '~'; working = $worker; expectedworker = $a[2]; keepsession = $true })
 }
 
 # F81: read-only - the status each open row really has, from evidence. The rules
@@ -1431,6 +1454,8 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'status' { return (Do-Status $a) }
     'unblock' { return (Do-Unblock $a) }
     'start' { return (Do-Start $a) }
+    'handoff' { return (Do-Handoff $a) }
+    'takeover' { return (Do-Takeover $a) }
     default { Fail "unknown subcommand: $c" }
   }
 }
@@ -1753,8 +1778,8 @@ function Invoke-Selftest {
     Eq 'tested pass, any case' (Run tested F43 PaSs) "- [x] F43 $dash Passing (testing: unit run)"
     Eq 'tested fail, any case' (Run tested F44 fAiL) "- [~] F44 $dash Failing (testing: live check)"
     $f62a = $Utf8.GetString([System.IO.File]::ReadAllBytes($board))
-    if (-not (Refused tested F46 pass)) { Write-Output 'FAIL: tested flipped a ticket that is not [%]'; $script:fail = 1 }
-    if (-not (Refused tested F42 maybe)) { Write-Output 'FAIL: tested took a verdict that is not pass/fail'; $script:fail = 1 }
+    if (-not (Refused tested F46 pass)) { Write-Output 'FAIL: tested flipped a ticket outside Testing and Verified'; $script:fail = 1 }
+    if (-not (Refused tested F42 maybe)) { Write-Output 'FAIL: tested took an unknown verdict'; $script:fail = 1 }
     if (-not (Refused tested F42)) { Write-Output 'FAIL: tested took no verdict'; $script:fail = 1 }
     if (-not (Refused testing F46)) { Write-Output 'FAIL: testing took no test'; $script:fail = 1 }
     if (-not (Refused testing F46 '  ')) { Write-Output 'FAIL: testing took a blank test'; $script:fail = 1 }
@@ -1826,7 +1851,7 @@ function Invoke-Selftest {
     }
 
     # --- F72/F167: verify - /verify-shifu's verdict on a [%] ticket; one
-    # (verified PASS|FAIL ..) note, the box never moves
+    # (verified PASS|FAIL|OWNER ..) note and Testing/Verified transitions
     $V = "$T/f72"
     Init-Repo $V
     W "$V/apps/web/f.txt" "x`n"
@@ -1834,21 +1859,25 @@ function Invoke-Selftest {
     Commit 'vidul@ikran.in' 'init' 'README.md'
     Commit 'vidul@ikran.in' 'F60: built' 'apps/web/a.js'
     $board = "$V/TICKETS.md"
-    Eq 'verify pass, any case, box stays' (Run verify F60 PaSs 'RED/GREEN' '3/3,' 'abc1234') "- [%] F60 $dash Built (testing: unit run) (verified PASS ${today}: RED/GREEN 3/3, abc1234) (@cc-gggggg)"
-    Eq 'verify pass again replaces the note' (Run verify F60 pass again) "- [%] F60 $dash Built (testing: unit run) (verified PASS ${today}: again) (@cc-gggggg)"
+    Eq 'verify pass, any case, moves to [v]' (Run verify F60 PaSs 'RED/GREEN' '3/3,' 'abc1234') "- [v] F60 $dash Built (testing: unit run) (verified PASS ${today}: RED/GREEN 3/3, abc1234) (@cc-gggggg)"
+    Eq 'verify pass again replaces the note' (Run verify F60 pass again) "- [v] F60 $dash Built (testing: unit run) (verified PASS ${today}: again) (@cc-gggggg)"
     Eq 'verify fail stays [%]' (Run verify F61 fail unit run 'red,' 2 of 5 - exit 1 on the fixture) "- [%] F61 $dash Failing (testing: live check) (verified FAIL ${today}: unit run red, 2 of 5 - exit 1 on the fixture)"
     Eq 'verify fail replaces the note' (Run verify F61 FAIL '  still red ') "- [%] F61 $dash Failing (testing: live check) (verified FAIL ${today}: still red)"
-    Eq 'verify replaces a legacy verify-failed note' (Run verify F63 pass ok) "- [%] F63 $dash Legacy (verified PASS ${today}: ok)"
+    Eq 'verify replaces a legacy verify-failed note' (Run verify F63 pass ok) "- [v] F63 $dash Legacy (verified PASS ${today}: ok)"
+    Eq 'owner check demotes [v]' (Run verify F60 owner 'needs device') "- [%] F60 $dash Built (testing: unit run) (verified OWNER ${today}: needs device) (@cc-gggggg)"
+    Eq 'pass replaces owner check' (Run verify F60 pass 'device checked') "- [v] F60 $dash Built (testing: unit run) (verified PASS ${today}: device checked) (@cc-gggggg)"
+    Eq 'explicit pick skips verified' (Run pick F60) 'you: - (no .skillator/team.md: every ticket) skip F60 verified'
+    Eq 'fail demotes [v]' (Run verify F60 fail 'regression') "- [%] F60 $dash Built (testing: unit run) (verified FAIL ${today}: regression) (@cc-gggggg)"
     $f72a = $Utf8.GetString([System.IO.File]::ReadAllBytes($board))
-    if (-not (Refused verify F62 fail red)) { Write-Output 'FAIL: verify took a ticket that is not [%]'; $script:fail = 1 }
-    if (-not (Refused verify F61 maybe red)) { Write-Output 'FAIL: verify took a verdict that is not pass/fail'; $script:fail = 1 }
+    if (-not (Refused verify F62 fail red)) { Write-Output 'FAIL: verify took a ticket outside Testing and Verified'; $script:fail = 1 }
+    if (-not (Refused verify F61 maybe red)) { Write-Output 'FAIL: verify took an unknown verdict'; $script:fail = 1 }
     if (-not (Refused verify F61 pass)) { Write-Output 'FAIL: verify took no evidence'; $script:fail = 1 }
     if (-not (Refused verify F61 fail '  ')) { Write-Output 'FAIL: verify took blank evidence'; $script:fail = 1 }
     if (-not (Refused verify F61 pass 'ran (it)')) { Write-Output 'FAIL: verify took parentheses'; $script:fail = 1 }
     if (-not (Refused verify F61 pass 'a ** b')) { Write-Output 'FAIL: verify took an asterisk'; $script:fail = 1 }
     if (-not (Refused verify F61 fail "a`nb")) { Write-Output 'FAIL: verify took a line break'; $script:fail = 1 }
     if (-not (& $same $f72a)) { Write-Output 'FAIL: a refused verify changed the board'; $script:fail = 1 }
-    Eq 'verify pass after a fail replaces the fail note' (Run verify F61 pass green now) "- [%] F61 $dash Failing (testing: live check) (verified PASS ${today}: green now)"
+    Eq 'verify pass after a fail replaces the fail note' (Run verify F61 pass green now) "- [v] F61 $dash Failing (testing: live check) (verified PASS ${today}: green now)"
 
     # --- team add / remove / list: .skillator/team.md written under the board lock
     $G = "$T/team"
@@ -1989,8 +2018,13 @@ function Invoke-Selftest {
     # F109: with a session id every write stamps (@sid:owner:mode); a move out of [~] keeps the worker's tag (A143)
     W $board ([System.IO.File]::ReadAllText($board, $Utf8) + "- [ ] F14 $dash Fresh two`n")
     Commit 'asha@x.com' 'board: f109 row'
-    Eq 'stamp on start' @(AsSess '0a1b-4c5d-AB12CD' '' { Run start F14 })[0] "- [~] F14 $dash Fresh two [owner: @asha] (@cc-o0kb:asha:direct)"
-    Eq 'stamp replaces, mode run' @(AsSess '0a1b-4c5d-AB12CD' '' { AsMode 'run' { Run testing F14 live look } })[0] "- [%] F14 $dash Fresh two [owner: @asha] (testing: live look) (@cc-o0kb:asha:run)"
+    Eq 'stamp on start' @(AsSess '0a1b-4c5d-AB12CD' '' { Run start F14 })[0] "- [~] F14 $dash Fresh two [owner: @asha] [working: cc-o0kb] (@cc-o0kb:asha:direct)"
+    if (-not (AsSess '' '@cx-next' { Refused handoff F14 cx-third })) { Write-Output 'FAIL: handoff accepted from another worker'; $script:fail = 1 }
+    if (-not (AsSess '' '@cx-next' { Refused start F14 })) { Write-Output 'FAIL: start replaced an active worker'; $script:fail = 1 }
+    Eq 'handoff preserves owner and stamp' (AsSess '' '@cc-o0kb' { Run handoff F14 cx-next }) "- [~] F14 $dash Fresh two [owner: @asha] [working: cx-next] [work-history: cc-o0kb] (@cc-o0kb:asha:direct)"
+    if (-not (AsSess '' '@cx-third' { Refused takeover F14 --from cc-o0kb })) { Write-Output 'FAIL: takeover accepted a stale worker'; $script:fail = 1 }
+    Eq 'takeover preserves worker history' (AsSess '' '@cc-o0kb' { Run takeover F14 --from cx-next }) "- [~] F14 $dash Fresh two [owner: @asha] [working: cc-o0kb] [work-history: cc-o0kb, cx-next] (@cc-o0kb:asha:direct)"
+    Eq 'stamp replaces, mode run' @(AsSess '0a1b-4c5d-AB12CD' '' { AsMode 'run' { Run testing F14 live look } })[0] "- [%] F14 $dash Fresh two [owner: @asha] [working: cc-o0kb] [work-history: cc-o0kb, cx-next] (testing: live look) (@cc-o0kb:asha:run)"
     Eq 'stamp replaces an old-shape tag' @(AsSess '0a1b-4c5d-AB12CD' '' { AsMode 'agent' { Run tag F7 } })[0] "- [~] F7 $dash Working [owner: @asha] (@cc-o0kb:asha:agent)"
     $o = @(AsSess 'x-ffffff' '' { AsMe 'asha' { Run assign F7 '@neo' } })
     Eq "A143: a move out of [~] keeps the worker's tag" $o[0] "- [ ] F7 $dash Working [owner: @neo] (@cc-o0kb:asha:agent)"

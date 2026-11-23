@@ -14,7 +14,7 @@
 #   ticket-meta.sh decided <ID>         [?] -> [ ]; the [decide:] tag stays
 #   ticket-meta.sh testing <ID> <test>  box -> [%] testing, the line says ` (testing: <test>)`
 #   ticket-meta.sh tested <ID> pass|fail  [%] -> [x] (pass) or [~] (fail); the note stays
-#   ticket-meta.sh verify <ID> pass|fail <evidence>  F72/F167: stays [%], ` (verified PASS|FAIL <date>: ..)` replaces an earlier one
+#   ticket-meta.sh verify <ID> pass|fail|owner <evidence>  PASS -> [v]; FAIL or OWNER -> [%], with a dated verdict
 #   ticket-meta.sh done <ID> [evidence] box -> [x], tagged, ` **Done <date>: <evidence>**`
 #   ticket-meta.sh block <ID> <on what> box -> [!], the line says ` (blocked: <on what>)`
 #   ticket-meta.sh defer <ID> <until>   box -> [>], the line says ` (deferred: <until>)`
@@ -360,6 +360,18 @@ edit_line() {
   [ "$n" = 1 ] || die "$ID: $n matching lines in $f, need exactly 1"
   cur=$(RE=$re awk '$0 ~ ENVIRON["RE"]' "$f" | tr -d '\r')
   mk=$(printf '%s\n' "$cur" | awk '{ match($0, /- \[/); print substr($0, RSTART + 3, 1) }')
+  if [ -n "${WORKING:-}" ]; then
+    old_worker=$(printf '%s\n' "$cur" | sed -n 's/.*\[working: \([a-z0-9_]*-[a-z0-9_-]*\)\].*/\1/p')
+    if [ -n "${EXPECTED_WORKER:-}" ] && [ "$old_worker" != "$EXPECTED_WORKER" ]; then
+      die "$ID: working session is '$old_worker'; refresh before transferring work"
+    fi
+    WORK_HISTORY=''
+    if [ -n "$old_worker" ] && [ "$old_worker" != "$WORKING" ]; then
+      WORK_HISTORY=$(printf '%s\n' "$cur" | sed -n 's/.*\[work-history: \([^]]*\)\].*/\1/p')
+      WORK_HISTORY="${WORK_HISTORY:+$WORK_HISTORY, }$old_worker"
+    fi
+    export WORKING WORK_HISTORY
+  fi
   if [ -n "$GUARDED_STATUS" ]; then
     # Match parseBoard's token: only indentation and separator spaces are removed.
     body=$(printf '%s\n' "$cur" | sed 's/^[ \t]*- \[.\][ \t]*//')
@@ -371,6 +383,9 @@ edit_line() {
   fi
   if [ -n "${NEED_MARK:-}" ] && [ "$mk" != "$NEED_MARK" ]; then
     die "$ID is [$mk], not [$NEED_MARK] - nothing to change"
+  fi
+  if [ -n "${VERIFY_NOTE:-}" ]; then
+    case "$mk" in '%'|v) ;; *) die "$ID is [$mk] - verify requires [%] or [v]" ;; esac
   fi
   # F64: REFUSE_MARKS lists the boxes this change may not start from.
   case ${REFUSE_MARKS:-} in *"$mk"*)
@@ -461,15 +476,15 @@ edit_line() {
       return out
     }
     function find(line, key) { return match(line, "[ \t]*\\[" key ":[ \t]*[^]]*\\]") }
-    # A tag goes where it is, else before the next tag in app/decide/owner/session/tester/by order,
+    # A tag goes where it is, else before the next tag in ORD,
     # else before the trailing (..) groups and a bare "Plan: S<n>" before them
     # (check-tickets must still see that pointer as bare).
     function settag(line, key, val,    i, pos, head) {
       if (find(line, key))
         return substr(line, 1, RSTART - 1) " [" key ": " val "]" substr(line, RSTART + RLENGTH)
       pos = 0
-      for (i = 1; i <= 6; i++) if (ORD[i] == key) break
-      for (i = i + 1; i <= 6; i++)
+      for (i = 1; i <= ord_count; i++) if (ORD[i] == key) break
+      for (i = i + 1; i <= ord_count; i++)
         if (find(line, ORD[i]) && (pos == 0 || RSTART < pos)) pos = RSTART
       if (pos == 0) {
         pos = length(line) + 1
@@ -492,7 +507,7 @@ edit_line() {
       sub(/[ \t]+$/, "", line)
       return line note
     }
-    BEGIN { ORD[1] = "app"; ORD[2] = "decide"; ORD[3] = "owner"; ORD[4] = "session"; ORD[5] = "tester"; ORD[6] = "by"; re = ENVIRON["RE"] }
+    BEGIN { ord_count = split("app decide owner session tester by working work-history", ORD); re = ENVIRON["RE"] }
     { line = $0; cr = ""
       if (sub(/\r$/, "", line)) cr = "\r"
       if (line ~ re) {
@@ -504,6 +519,8 @@ edit_line() {
         if (ENVIRON["SET_OWNER"] != "") line = settag(line, "owner", ENVIRON["SET_OWNER"])
         if (ENVIRON["SET_SESSION"] != "") line = settag(line, "session", ENVIRON["SET_SESSION"])
         if (ENVIRON["DROP_SESSION"] != "" && find(line, "session")) line = substr(line, 1, RSTART - 1) substr(line, RSTART + RLENGTH)
+        if (ENVIRON["WORK_HISTORY"] != "") line = settag(line, "work-history", ENVIRON["WORK_HISTORY"])
+        if (ENVIRON["WORKING"] != "") line = settag(line, "working", ENVIRON["WORKING"])
         if (ENVIRON["SET_TESTER"] != "") line = settag(line, "tester", ENVIRON["SET_TESTER"])
         if (ENVIRON["SET_BY"] != "") line = settag(line, "by", ENVIRON["SET_BY"])
         # (testing: ..) replaces only itself; (blocked: ..) and (deferred: ..)
@@ -517,9 +534,9 @@ edit_line() {
         if (ENVIRON["DONE_NOTE"] != "")
           line = setnote(line, " **Done " ENVIRON["DONE_NOTE"] "**", "[ \t]*\\*\\*Done [^*]*\\*\\*")
         # F72/F167: one verify note - it drops every earlier dated one, new
-        # (verified PASS|FAIL ..) or old (verify failed ..); the date keeps title words safe
+        # (verified PASS|FAIL|OWNER ..) or old (verify failed ..); the date keeps title words safe
         if (ENVIRON["VERIFY_NOTE"] != "") {
-          vp = "[ \t]*\\(verif(ied PASS|ied FAIL|y failed) [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]: [^()]*\\)"
+          vp = "[ \t]*\\(verif(ied (PASS|FAIL|OWNER)|y failed) [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]: [^()]*\\)"
           while (match(line, vp)) line = substr(line, 1, RSTART - 1) substr(line, RSTART + RLENGTH)
           line = setnote(line, " (verified " ENVIRON["VERIFY_NOTE"] ")", vp)
         }
@@ -777,6 +794,7 @@ cmd_pick() {
     me = tolower(ENVIRON["ME"]); m = split(ENVIRON["IDS"], L, " ")
     if (m == 0) for (i = 1; i <= no; i++) if (mk[ord[i]] ~ /^[ ~!]$/) L[++m] = ord[i]
     for (i = 1; i <= m; i++) { o = ow[L[i]]; b = L[i]; sub(/[a-z]$/, "", b)
+      if (mk[L[i]] == "v") { print "skip " L[i] " verified"; continue }
       if (!(L[i] in mk) && b != L[i]) o = ow[b]   # a sub-part with no row takes its parent owner
       if (ENVIRON["TEAM"] == "" || o == "" || tolower(o) == me) print "pick " L[i]; else print "skip " L[i] " " o } }'
 }
@@ -848,20 +866,17 @@ cmd_done() {
   SET_MARK='x' SET_APP=$a SET_DECIDE='' SET_OWNER='' SET_BY=$b NOTE_VAL='' DONE_NOTE=$dn REFUSE_MARKS='-' SAME_KEY='' NEED_MARK='' edit_line
 }
 
-# F72/F167: /verify-shifu's verdict on a [%] ticket, with the evidence (one
-# line, no parentheses, no *; a fail's is "<what failed> - <why>"). A note, never
-# a status: the box stays [%], ` (verified PASS|FAIL <date>: <evidence>)` replaces
-# any earlier verify note.
+# Record a verdict on a Testing or Verified ticket and replace its earlier verdict.
 cmd_verify() {
   CMD=verify
-  [ $# -ge 3 ] || die "usage: verify <ID> pass|fail <evidence>"
+  [ $# -ge 3 ] || die "usage: verify <ID> pass|fail|owner <evidence>"
   norm_id "$1"; shift
   vd=$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')
-  case $vd in PASS|FAIL) ;; *) die "usage: verify <ID> pass|fail <evidence> - not '$1'" ;; esac
+  case $vd in PASS) target=v ;; FAIL|OWNER) target='%' ;; *) die "usage: verify <ID> pass|fail|owner <evidence> - not '$1'" ;; esac
   shift
   note_text evidence 0 "$@"
   case $NOTE in *'*'*) die "the evidence cannot hold * - it sits on the line as a note" ;; esac
-  SET_MARK='' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' VERIFY_NOTE="$vd $(date -u +%Y-%m-%d): $NOTE" SAME_KEY='' NEED_MARK='%' edit_line
+  SET_MARK=$target SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' VERIFY_NOTE="$vd $(date -u +%Y-%m-%d): $NOTE" SAME_KEY='' edit_line
 }
 
 # F64: can't proceed until something outside it lands: [!], ` (blocked: <on what>)`.
@@ -914,7 +929,27 @@ cmd_start() {
   norm_id "$1"
   cf=''
   if team_file > /dev/null; then cf=1; me_of || :; fi
-  SET_MARK='~' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' SAME_KEY='' NEED_MARK=' ' CLAIM_FREE=$cf edit_line
+  session_tag
+  SET_MARK='~' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' SAME_KEY='' NEED_MARK=' ' CLAIM_FREE=$cf WORKING="$STAG" KEEP_SESSION=1 edit_line
+}
+
+cmd_handoff() {
+  [ $# -eq 2 ] || die "usage: handoff <ID> <session-code>"
+  norm_id "$1"
+  one_line "$2" && printf '%s\n' "$2" | grep -Eq '^[a-z0-9_]+-[a-z0-9_-]+$' || die "invalid session code"
+  session_tag
+  worker=$STAG
+  [ -n "$worker" ] || die "handoff requires a session identity"
+  NEED_MARK='~' WORKING="$2" EXPECTED_WORKER="$worker" KEEP_SESSION=1 edit_line
+}
+
+cmd_takeover() {
+  [ $# -eq 3 ] && [ "$2" = '--from' ] || die "usage: takeover <ID> --from <current-session-code>"
+  norm_id "$1"
+  one_line "$3" && printf '%s\n' "$3" | grep -Eq '^[a-z0-9_]+-[a-z0-9_-]+$' || die "invalid session code"
+  session_tag
+  [ -n "$STAG" ] || die "takeover requires a session identity"
+  NEED_MARK='~' WORKING="$STAG" EXPECTED_WORKER="$3" KEEP_SESSION=1 edit_line
 }
 
 # F81: read-only - the status each open row really has, from evidence. One line per
@@ -1482,8 +1517,8 @@ selftest() {
   eq "tested pass, any case" "$(run tested F43 PaSs)" "- [x] F43 $D Passing (testing: unit run)"
   eq "tested fail, any case" "$(run tested F44 fAiL)" "- [~] F44 $D Failing (testing: live check)"
   cp TICKETS.md "$T/f62a.md"
-  sh "$self" tested F46 pass > /dev/null 2>&1 && { echo "FAIL: tested flipped a ticket that is not [%]"; fail=1; }
-  sh "$self" tested F42 maybe > /dev/null 2>&1 && { echo "FAIL: tested took a verdict that is not pass/fail"; fail=1; }
+  sh "$self" tested F46 pass > /dev/null 2>&1 && { echo "FAIL: tested flipped a ticket outside Testing and Verified"; fail=1; }
+  sh "$self" tested F42 maybe > /dev/null 2>&1 && { echo "FAIL: tested took an unknown verdict"; fail=1; }
   sh "$self" tested F42 > /dev/null 2>&1 && { echo "FAIL: tested took no verdict"; fail=1; }
   sh "$self" testing F46 > /dev/null 2>&1 && { echo "FAIL: testing took no test"; fail=1; }
   sh "$self" testing F46 '  ' > /dev/null 2>&1 && { echo "FAIL: testing took a blank test"; fail=1; }
@@ -1575,7 +1610,7 @@ selftest() {
   done
 
   # --- F72/F167: verify - /verify-shifu's verdict on a [%] ticket; one
-  # (verified PASS|FAIL ..) note, the box never moves
+  # (verified PASS|FAIL|OWNER ..) note and Testing/Verified transitions
   V="$T/f72"
   mkdir -p "$V/apps/web" && cd "$V" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
   {
@@ -1587,21 +1622,25 @@ selftest() {
   } > TICKETS.md
   commit vidul@ikran.in "init" README.md
   commit vidul@ikran.in "F60: built" apps/web/a.js
-  eq "verify pass, any case, box stays" "$(run verify F60 PaSs RED/GREEN 3/3, abc1234)" "- [%] F60 $D Built (testing: unit run) (verified PASS $TODAY: RED/GREEN 3/3, abc1234) (@cc-gggggg)"
-  eq "verify pass again replaces the note" "$(run verify F60 pass again)" "- [%] F60 $D Built (testing: unit run) (verified PASS $TODAY: again) (@cc-gggggg)"
+  eq "verify pass, any case, moves to [v]" "$(run verify F60 PaSs RED/GREEN 3/3, abc1234)" "- [v] F60 $D Built (testing: unit run) (verified PASS $TODAY: RED/GREEN 3/3, abc1234) (@cc-gggggg)"
+  eq "verify pass again replaces the note" "$(run verify F60 pass again)" "- [v] F60 $D Built (testing: unit run) (verified PASS $TODAY: again) (@cc-gggggg)"
   eq "verify fail stays [%]" "$(run verify F61 fail unit run red, 2 of 5 - exit 1 on the fixture)" "- [%] F61 $D Failing (testing: live check) (verified FAIL $TODAY: unit run red, 2 of 5 - exit 1 on the fixture)"
   eq "verify fail replaces the note" "$(run verify F61 FAIL '  still red ')" "- [%] F61 $D Failing (testing: live check) (verified FAIL $TODAY: still red)"
-  eq "verify replaces a legacy verify-failed note" "$(run verify F63 pass ok)" "- [%] F63 $D Legacy (verified PASS $TODAY: ok)"
+  eq "verify replaces a legacy verify-failed note" "$(run verify F63 pass ok)" "- [v] F63 $D Legacy (verified PASS $TODAY: ok)"
+  eq "owner check demotes [v]" "$(run verify F60 owner needs device)" "- [%] F60 $D Built (testing: unit run) (verified OWNER $TODAY: needs device) (@cc-gggggg)"
+  eq "pass replaces owner check" "$(run verify F60 pass device checked)" "- [v] F60 $D Built (testing: unit run) (verified PASS $TODAY: device checked) (@cc-gggggg)"
+  eq "explicit pick skips verified" "$(run pick F60)" "you: - (no .skillator/team.md: every ticket) skip F60 verified"
+  eq "fail demotes [v]" "$(run verify F60 fail regression)" "- [%] F60 $D Built (testing: unit run) (verified FAIL $TODAY: regression) (@cc-gggggg)"
   cp TICKETS.md "$T/f72a.md"
-  sh "$self" verify F62 fail red > /dev/null 2>&1 && { echo "FAIL: verify took a ticket that is not [%]"; fail=1; }
-  sh "$self" verify F61 maybe red > /dev/null 2>&1 && { echo "FAIL: verify took a verdict that is not pass/fail"; fail=1; }
+  sh "$self" verify F62 fail red > /dev/null 2>&1 && { echo "FAIL: verify took a ticket outside Testing and Verified"; fail=1; }
+  sh "$self" verify F61 maybe red > /dev/null 2>&1 && { echo "FAIL: verify took an unknown verdict"; fail=1; }
   sh "$self" verify F61 pass > /dev/null 2>&1 && { echo "FAIL: verify took no evidence"; fail=1; }
   sh "$self" verify F61 fail '  ' > /dev/null 2>&1 && { echo "FAIL: verify took blank evidence"; fail=1; }
   sh "$self" verify F61 pass 'ran (it)' > /dev/null 2>&1 && { echo "FAIL: verify took parentheses"; fail=1; }
   sh "$self" verify F61 pass 'a ** b' > /dev/null 2>&1 && { echo "FAIL: verify took an asterisk"; fail=1; }
   sh "$self" verify F61 fail "a${NL}b" > /dev/null 2>&1 && { echo "FAIL: verify took a line break"; fail=1; }
   cmp -s TICKETS.md "$T/f72a.md" || { echo "FAIL: a refused verify changed the board"; diff "$T/f72a.md" TICKETS.md; fail=1; }
-  eq "verify pass after a fail replaces the fail note" "$(run verify F61 pass green now)" "- [%] F61 $D Failing (testing: live check) (verified PASS $TODAY: green now)"
+  eq "verify pass after a fail replaces the fail note" "$(run verify F61 pass green now)" "- [v] F61 $D Failing (testing: live check) (verified PASS $TODAY: green now)"
 
   # --- team add / remove / list: .skillator/team.md written under the board lock
   G="$T/team"
@@ -1756,8 +1795,14 @@ selftest() {
   # F109: with a session id every write stamps (@sid:owner:mode); a move out of [~] keeps the worker's tag (A143)
   printf -- '- [ ] F14 %s Fresh two\n' "$D" >> TICKETS.md
   commit asha@x.com "board: f109 row"
-  eq "stamp on start" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD sh "$self" start F14 2>/dev/null | head -n 1 | tr -d '\r')" "- [~] F14 $D Fresh two [owner: @asha] (@cc-o0kb:asha:direct)"
-  eq "stamp replaces, mode run" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD SKILLATOR_MODE=run sh "$self" testing F14 live look 2>/dev/null | head -n 1 | tr -d '\r')" "- [%] F14 $D Fresh two [owner: @asha] (testing: live look) (@cc-o0kb:asha:run)"
+  eq "stamp on start" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD sh "$self" start F14 2>/dev/null | head -n 1 | tr -d '\r')" "- [~] F14 $D Fresh two [owner: @asha] [working: cc-o0kb] (@cc-o0kb:asha:direct)"
+  SKILLATOR_SESSION=@cx-next sh "$self" handoff F14 cx-third > /dev/null 2>&1 && { echo 'FAIL: handoff accepted from another worker'; fail=1; }
+  SKILLATOR_SESSION=@cx-next sh "$self" start F14 > /dev/null 2>&1 && { echo 'FAIL: start replaced an active worker'; fail=1; }
+  SKILLATOR_SESSION=@cc-o0kb sh "$self" handoff F14 "cx-next${NL}invalid" > /dev/null 2>&1 && { echo 'FAIL: handoff accepted a multiline session'; fail=1; }
+  eq 'handoff preserves owner and stamp' "$(SKILLATOR_SESSION=@cc-o0kb run handoff F14 cx-next)" "- [~] F14 $D Fresh two [owner: @asha] [working: cx-next] [work-history: cc-o0kb] (@cc-o0kb:asha:direct)"
+  SKILLATOR_SESSION=@cx-third sh "$self" takeover F14 --from cc-o0kb > /dev/null 2>&1 && { echo 'FAIL: takeover accepted a stale worker'; fail=1; }
+  eq 'takeover preserves worker history' "$(SKILLATOR_SESSION=@cc-o0kb run takeover F14 --from cx-next)" "- [~] F14 $D Fresh two [owner: @asha] [working: cc-o0kb] [work-history: cc-o0kb, cx-next] (@cc-o0kb:asha:direct)"
+  eq "stamp replaces, mode run" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD SKILLATOR_MODE=run sh "$self" testing F14 live look 2>/dev/null | head -n 1 | tr -d '\r')" "- [%] F14 $D Fresh two [owner: @asha] [working: cc-o0kb] [work-history: cc-o0kb, cx-next] (testing: live look) (@cc-o0kb:asha:run)"
   eq "stamp replaces an old-shape tag" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD SKILLATOR_MODE=agent sh "$self" tag F7 2>/dev/null | head -n 1 | tr -d '\r')" "- [~] F7 $D Working [owner: @asha] (@cc-o0kb:asha:agent)"
   CLAUDE_CODE_SESSION_ID=x-ffffff SKILLATOR_ME=asha sh "$self" assign F7 @neo > "$T/out" 2>&1
   eq "A143: a move out of [~] keeps the worker's tag" "$(head -n 1 "$T/out" | tr -d '\r')" "- [ ] F7 $D Working [owner: @neo] (@cc-o0kb:asha:agent)"
@@ -2095,5 +2140,7 @@ case $c in
   status) cmd_status "$@" ;;
   unblock) cmd_unblock "$@" ;;
   start) cmd_start "$@" ;;
+  handoff) cmd_handoff "$@" ;;
+  takeover) cmd_takeover "$@" ;;
   *) die "unknown subcommand: $c" ;;
 esac

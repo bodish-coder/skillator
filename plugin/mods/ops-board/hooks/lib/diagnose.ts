@@ -13,7 +13,7 @@ export type Verdict = 'finished' | 'still running' | 'stalled' | 'inconsistent'
 export type ShaState = 'head' | 'off' | 'none'
 export type Diagnosis = { verdict: Verdict; lines: string[]; closable: { n: number }[] }
 
-const BUILT = ['x', '%']            // the ticket's work exists: verified, or testing
+const BUILT = ['x', '%', 'v']       // the ticket's work exists: done, testing or verified
 const CLOSED = ['x', '>', 'rejected']           // a stage row no longer open (a > row names where its work went)
 const CLOSABLE = ['pending', '~', 'open']   // parked (?) and failed (!) are said, never closed
 const WORD: Record<string, string> = { '~': 'in flight', open: 'in flight', '!': 'failed', '?': 'parked' }

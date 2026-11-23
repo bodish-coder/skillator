@@ -18,7 +18,8 @@ const STATES = {
   "~": ["in-progress", "[~]"],
   "!": ["blocked", "[!]"],
   "?": ["decision", "[?]"],   // F45: decide - open, waiting on a [decide:] person
-  "%": ["testing", "[%]"],    // F62: testing - built, waiting on a test result; open
+  "%": ["testing", "[%]"],
+  "v": ["verified", "[v]"],
   ">": ["deferred", "[>]"],
   "x": ["done", "[x]"],
   "-": ["cancelled", "[-]"],
@@ -29,7 +30,7 @@ const GROUPS = [["B", "Bugs"], ["F", "Features"], ["A", "Agent-found"]];
 const inGroups = (id) => GROUPS.some(([p]) => id.startsWith(p));
 // ponytail: ID + em-dash + title is the whole line format the skill enforces.
 // A hyphen separator is tolerated because hand-typed tickets use one.
-const LINE = /^(\s*)- \[([ x~!?%>-])\]\s+([A-Za-z]+\d+[a-z]?)\s*[—-]\s*(.*)$/;
+const LINE = /^(\s*)- \[([ x~!?%v>-])\]\s+([A-Za-z]+\d+[a-z]?)\s*[—-]\s*(.*)$/;
 // F43/F45: trailing `[app: ..] [decide: @x] [owner: @x] [by: @y, a@b]` tags. Lifted out of the
 // title and drawn as chips; a line without them parses exactly as before.
 const TAG = /\s*\[(app|decide|owner|by|session):\s*([^\]]*)\]/g;
@@ -52,10 +53,10 @@ export function parse(md) {
 export function tally(ts) {
   const n = (s) => ts.filter((t) => t.status === s).length;
   const c = {
-    pending: n("pending"), inprogress: n("in-progress"), testing: n("testing"), blocked: n("blocked"),
+    pending: n("pending"), inprogress: n("in-progress"), testing: n("testing"), verified: n("verified"), blocked: n("blocked"),
     decision: n("decision"), deferred: n("deferred"), done: n("done"), cancelled: n("cancelled"),
   };
-  c.open = c.pending + c.inprogress + c.testing + c.blocked + c.decision;
+  c.open = c.pending + c.inprogress + c.testing + c.verified + c.blocked + c.decision;
   c.closed = c.done + c.cancelled;
   c.total = c.open + c.deferred + c.closed;
   return c;
@@ -64,7 +65,7 @@ export function tally(ts) {
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
 function countLine(c) {
-  return `${c.open} open (${c.pending} pending · ${c.inprogress} in-progress · ${c.testing} testing · ${c.blocked} blocked` +
+  return `${c.open} open (${c.pending} pending · ${c.inprogress} in-progress · ${c.testing} testing · ${c.verified} verified · ${c.blocked} blocked` +
     ` · ${c.decision} decide)` +
     ` · ${c.deferred} deferred · ${c.closed} closed (${c.done} done · ${c.cancelled} cancelled)` +
     ` · ${c.total} total`;
@@ -89,7 +90,7 @@ function section(name, ts) {
 }
 
 const CHIPS = [
-  ["pending", "pending"], ["inprogress", "in progress"], ["testing", "testing"], ["blocked", "blocked"], ["decision", "decide"],
+  ["pending", "pending"], ["inprogress", "in progress"], ["testing", "testing"], ["verified", "verified"], ["blocked", "blocked"], ["decision", "decide"],
   ["deferred", "deferred"], ["done", "done"], ["cancelled", "cancelled"],
 ];
 
@@ -158,7 +159,7 @@ h1 .repo{color:var(--mid);font-weight:400}
 .c-inprogress .v{color:var(--amber)}
 .c-blocked .v{color:var(--red)}
 .c-decision .v{color:var(--pink)}
-.c-testing .v{color:var(--teal)}
+.c-testing .v,.c-verified .v{color:var(--teal)}
 .c-total{background:color-mix(in oklab,var(--ground) 60%,var(--surface))}
 section{margin:0 0 2rem}
 h2{display:flex;align-items:baseline;gap:.5rem;font-family:var(--mono);font-size:.6875rem;font-weight:700;
@@ -177,7 +178,7 @@ li.sub{padding-left:1.4rem;grid-template-columns:1.9rem 3.4rem 1fr auto}
 .s-inprogress .id,.s-inprogress .g,.s-inprogress .st{color:var(--amber)}
 .s-blocked .id,.s-blocked .g,.s-blocked .st{color:var(--red)}
 .s-decision .id,.s-decision .g,.s-decision .st{color:var(--pink)}
-.s-testing .id,.s-testing .g,.s-testing .st{color:var(--teal)}
+.s-testing .id,.s-testing .g,.s-testing .st,.s-verified .id,.s-verified .g,.s-verified .st{color:var(--teal)}
 .s-deferred .id,.s-deferred .t{color:var(--mid)}
 .s-done .t,.s-cancelled .t{color:var(--mid);text-decoration:line-through;text-decoration-color:var(--rule)}
 details{margin-top:2.5rem;border-top:1px solid var(--rule);padding-top:.75rem}
@@ -227,7 +228,7 @@ not a ticket line
   const html = render(md, "demo");
   ok(html.includes("Working &lt;thing&gt; &amp; more"), "escapes html");
   ok(!/<(!doctype|html|head|body)\b/i.test(html), "no wrapper tags");
-  ok(html.includes('data-count-line="5 open (3 pending · 1 in-progress · 0 testing · 1 blocked · 0 decide) · 1 deferred · 3 closed (2 done · 1 cancelled) · 9 total"'), "count line");
+  ok(html.includes('data-count-line="5 open (3 pending · 1 in-progress · 0 testing · 0 verified · 1 blocked · 0 decide) · 1 deferred · 3 closed (2 done · 1 cancelled) · 9 total"'), "count line");
   // every ticket the chips count must appear in a list — see inGroups
   const shown = (html.match(/<li /g) || []).length;
   ok(shown === 9, "every ticket rendered", shown);
@@ -266,7 +267,7 @@ not a ticket line
   const dc = tally(dts);
   ok(dc.decision === 1 && dc.open === 2 && dc.closed === 1 && dc.total === 3, "[?] counts as open", dc);
   const dh = render(dmd, "demo");
-  ok(dh.includes('data-count-line="2 open (1 pending · 0 in-progress · 0 testing · 0 blocked · 1 decide) · 0 deferred · 1 closed (1 done · 0 cancelled) · 3 total"'), "count line names decide", dh.match(/data-count-line="[^"]*"/)?.[0]);
+  ok(dh.includes('data-count-line="2 open (1 pending · 0 in-progress · 0 testing · 0 verified · 0 blocked · 1 decide) · 0 deferred · 1 closed (1 done · 0 cancelled) · 3 total"'), "count line names decide", dh.match(/data-count-line="[^"]*"/)?.[0]);
   ok(dh.includes('<li class="s-decision">') && dh.includes('<span class="st">decide<'), "[?] row has its own class and label");
   ok(dh.includes('c-decision"><span class="v">1</span><span class="k">decide<'), "a decide chip");
   ok(dh.indexOf(">F30<") < dh.indexOf("<details"), "[?] is listed open, not closed");
@@ -287,15 +288,16 @@ not a ticket line
   // F62: [%] is "testing" - built, waiting on a test result; open, its own row and chip.
   const tmd = `## Features
 - [%] F40 — Built thing (testing: owner live check)
+- [v] F43 — Checked thing (verified PASS 2026-01-01: green)
 - [ ] F41 — Plain
 - [x] F42 — Done
 `;
   const tts = parse(tmd);
-  ok(tts.length === 3 && tts[0].status === "testing" && tts[0].glyph === "[%]", "[%] parses as testing", tts[0]);
+  ok(tts.length === 4 && tts[0].status === "testing" && tts[0].glyph === "[%]", "[%] parses as testing", tts[0]);
   const tc = tally(tts);
-  ok(tc.testing === 1 && tc.open === 2 && tc.closed === 1 && tc.total === 3, "[%] counts as open", tc);
+  ok(tc.testing === 1 && tc.verified === 1 && tc.open === 3 && tc.closed === 1 && tc.total === 4, "[%] counts as open", tc);
   const thh = render(tmd, "demo");
-  ok(thh.includes('data-count-line="2 open (1 pending · 0 in-progress · 1 testing · 0 blocked · 0 decide) · 0 deferred · 1 closed (1 done · 0 cancelled) · 3 total"'), "count line names testing", thh.match(/data-count-line="[^"]*"/)?.[0]);
+  ok(thh.includes('data-count-line="3 open (1 pending · 0 in-progress · 1 testing · 1 verified · 0 blocked · 0 decide) · 0 deferred · 1 closed (1 done · 0 cancelled) · 4 total"'), "count line names testing", thh.match(/data-count-line="[^"]*"/)?.[0]);
   ok(thh.includes('<li class="s-testing">') && thh.includes('>testing<'), "[%] row has its own class and label");
   ok(thh.includes('c-testing'), "a testing chip");
   ok(thh.indexOf(">F40<") < thh.indexOf("<details"), "[%] is listed open, not closed");

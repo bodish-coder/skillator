@@ -305,12 +305,16 @@ function Write-Cmd([string]$tpl, [string]$skillsDir, [string]$target) {
 # UTF-8 without BOM, LF - the bytes install.sh writes. Same as install.sh put_pi_ext.
 function Write-PiExt([string]$skillsDir) {
   $ext = "$HOME\.pi\agent\extensions\skillator-ops.ts"
-  if ($DryRun) { Write-Host "        would write $ext"; return }
+  $shifuExt = "$HOME\.pi\agent\extensions\skillator-shifu.ts"
+  if ($DryRun) { Write-Host "        would write $ext"; Write-Host "        would write $shifuExt"; return }
   New-Item -ItemType Directory -Force (Split-Path -Parent $ext) | Out-Null
   $to = $skillsDir.Replace('\', '/').Replace('"', '\"')
   $text = "// skillator ops board in pi (/ops) - written by the skillator installer, rewritten every run.`nexport { default } from `"$to/ops-board/pi/index.ts`";`n"
   [IO.File]::WriteAllText($ext, $text, (New-Object Text.UTF8Encoding $false))
+  $shifuText = "// Shifu command completion - written by the skillator installer.`nexport { default } from `"$to/tickets-zordon/scripts/shifu-pi.mjs`";`n"
+  [IO.File]::WriteAllText($shifuExt, $shifuText, (New-Object Text.UTF8Encoding $false))
   Write-Host "        * $ext"
+  Write-Host "        * $shifuExt"
 }
 
 # Write-PiIgnore <dest>: A145 - pi (0.74) loads every top-level .md in its skills dir as a
@@ -628,7 +632,7 @@ function Remove-RetiredDir([string]$dir) {
 }
 function Write-Commands([string]$cli, [string]$dest) {
   $c = Join-Path $PSScriptRoot 'host-commands'
-  $names = 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'gauntlet-plan', 'gauntlet-run', 'team',
+  $names = 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'analyse-shifu', 'gauntlet-plan', 'gauntlet-run', 'team',
            'code-vader', 'skillator-sync', 'message-uhura', 'decision-matrix'
   $opsNames = @('skillator-ops')
   switch ($cli) {
@@ -966,7 +970,7 @@ function Invoke-SelfTest([string]$T) {
   foreach ($f in $cmds + @('.gemini\antigravity-cli\skills\tickets-zordon\SKILL.md', '.codex\skills\ops-board\ops\app.ts', '.codex\skills\ops-board\commands\skillator-ops.txt', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
                            '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json',
                            '.pi\agent\skills\ops-board\pi\index.ts', '.pi\agent\skills\ops-board\pi\ops.ts', '.pi\agent\skills\ops-board\ops\engine.ts',
-                           '.pi\agent\extensions\skillator-ops.ts', '.config\opencode\skills\tickets-zordon\SKILL.md',
+                           '.pi\agent\extensions\skillator-ops.ts', '.pi\agent\extensions\skillator-shifu.ts', '.config\opencode\skills\tickets-zordon\SKILL.md',
                            '.config\opencode\skills\teams-uhura\scripts\team.mjs', '.config\opencode\skills\ops-board\ops\ops.ps1',
                            '.codex\skills\clone-odo\scripts\odo.ps1', '.codex\skills\clone-odo\scripts\parity.py',
                            '.config\opencode\skills\clone-odo\templates\features.csv',
@@ -977,7 +981,7 @@ function Invoke-SelfTest([string]$T) {
   # F67: opencode - the skills in its global skills dir, the seven commands in its commands\
   # dir, each substituted with that dest, arguments by $ARGUMENTS (BOM, CR, placeholder: the $cmds loop)
   $oc = '.config\opencode'
-  foreach ($n in 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'gauntlet-plan', 'gauntlet-run') {
+  foreach ($n in 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'analyse-shifu', 'gauntlet-plan', 'gauntlet-run') {
     $ot = & $read "$oc\commands\$n.md"
     if (-not $ot.StartsWith("---`n")) { return "opencode $n has no frontmatter" }
     if ($ot -cnotmatch '(?m)^description: ') { return "opencode $n description" }
@@ -993,7 +997,7 @@ function Invoke-SelfTest([string]$T) {
   if ([IO.File]::ReadAllText((Join-Path $T "$oc\skills\.skillator-source")) -cne "$PSScriptRoot`n") { return "source pointer in $oc\skills" }
   if (-not (Test-Path -LiteralPath (Join-Path $T "$oc\skills\tickets-zordon\.skillator-owned") -PathType Leaf)) { return 'opencode skill has no ownership marker' }
   $mf = @([IO.File]::ReadAllLines((Join-Path $T "$oc\skills\.skillator-installed")))
-  foreach ($n in 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'gauntlet-plan', 'gauntlet-run', 'skillator-ops') { if ($mf -ccontains $n) { return 'command in opencode manifest' } }
+  foreach ($n in 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'analyse-shifu', 'gauntlet-plan', 'gauntlet-run', 'skillator-ops') { if ($mf -ccontains $n) { return 'command in opencode manifest' } }
   # /skillator-update names opencode among the hosts it refreshes, on every host
   foreach ($f in '.codex\skills\skillator-update\SKILL.md', '.cursor\commands\skillator-update.md', '.pi\agent\prompts\skillator-update.md',
                  '.gemini\commands\skillator-update.toml', '.gemini\skills\skillator-update\SKILL.md',
@@ -1080,7 +1084,9 @@ function Invoke-SelfTest([string]$T) {
   if (@((& $read '.pi\agent\extensions\skillator-ops.ts').Split("`n")) -cnotcontains $piExt) { return 'pi extension target' }
   $pb = [IO.File]::ReadAllBytes((Join-Path $T '.pi\agent\extensions\skillator-ops.ts'))
   if ($pb[0] -ne 0x2F -or $pb -contains 13) { return 'pi extension has a BOM or CR' }
-  if (@(Get-ChildItem -LiteralPath (Join-Path $T '.pi\agent\extensions')).Count -ne 1) { return 'pi extensions dir holds more than skillator-ops.ts' }
+  $shifuPiExt = $piExt.Replace('/ops-board/pi/index.ts', '/tickets-zordon/scripts/shifu-pi.mjs')
+  if (@((& $read '.pi\agent\extensions\skillator-shifu.ts').Split("`n")) -cnotcontains $shifuPiExt) { return 'pi Shifu extension target' }
+  if (@(Get-ChildItem -LiteralPath (Join-Path $T '.pi\agent\extensions')).Count -ne 2) { return 'pi extensions dir has an unexpected file' }
   # A145: pi's skills dirs list the three docs in .ignore (pi skips them as skills); the
   # docs are still there at ..\ from every skill, and no other host gets a .ignore
   foreach ($d in '.pi\agent\skills', '.pi\skills') {
@@ -1106,7 +1112,7 @@ function Invoke-SelfTest([string]$T) {
   }
   # F90: codex runs the commands as skills - <codex home>\skills\<n>\SKILL.md with name and
   # description (no placeholder, BOM or CR: the $cmds loop), and no custom prompt written
-  foreach ($n in 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'gauntlet-plan', 'gauntlet-run') {
+  foreach ($n in 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'analyse-shifu', 'gauntlet-plan', 'gauntlet-run') {
     $ct = & $read ".codex\skills\$n\SKILL.md"
     if (-not $ct.StartsWith("---`n") -or $ct -cnotmatch "(?m)^name: $n`$" -or $ct -cnotmatch '(?m)^description: ') { return "codex skill $n frontmatter" }
     if (Test-Path -LiteralPath (Join-Path $T ".codex\prompts\$n.md")) { return "codex prompt $n.md written" }
@@ -1146,7 +1152,7 @@ function Invoke-SelfTest([string]$T) {
   }
   foreach ($d in '.codex\skills', '.gemini\config\skills', '.gemini\skills', '.gemini\antigravity-cli\skills') {
     $mf =@([IO.File]::ReadAllLines((Join-Path $T "$d\.skillator-installed")))
-    if ($mf -ccontains 'skillator-pending' -or $mf -ccontains 'list-ticket-zordon' -or $mf -ccontains 'engage-picard' -or $mf -ccontains 'archive-zordon' -or $mf -ccontains 'sync-zordon' -or $mf -ccontains 'skillator-update' -or $mf -ccontains 'team-messages' -or $mf -ccontains 'pending-sentinel' -or $mf -ccontains 'verify-shifu' -or $mf -ccontains 'gauntlet-plan' -or $mf -ccontains 'gauntlet-run' -or $mf -ccontains 'skillator-ops') { return "command skill in manifest $d" }
+    if ($mf -ccontains 'skillator-pending' -or $mf -ccontains 'list-ticket-zordon' -or $mf -ccontains 'engage-picard' -or $mf -ccontains 'archive-zordon' -or $mf -ccontains 'sync-zordon' -or $mf -ccontains 'skillator-update' -or $mf -ccontains 'team-messages' -or $mf -ccontains 'pending-sentinel' -or $mf -ccontains 'verify-shifu' -or $mf -ccontains 'analyse-shifu' -or $mf -ccontains 'gauntlet-plan' -or $mf -ccontains 'gauntlet-run' -or $mf -ccontains 'skillator-ops') { return "command skill in manifest $d" }
     if (Test-Path -LiteralPath (Join-Path $T "$d\skillator-pending\.skillator-owned")) { return "command skill carries an ownership marker in $d" }
   }
   $opsLine = "-File '$T\.cursor\skills\ops-board\ops\ops.ps1' @args"
