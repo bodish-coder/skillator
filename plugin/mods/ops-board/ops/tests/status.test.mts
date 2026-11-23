@@ -2,12 +2,12 @@ import { mock, test } from 'node:test'
 import fs from 'node:fs'
 import { syncBuiltinESMExports } from 'node:module'
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { calculateCursorUsage, discover, getBillingCycleStart, ownProfile, profileRows, recordCursorRun, render, row } from '../status'
+import { calculateCursorUsage, discover, getBillingCycleStart, ownProfile, profileRows, recordCursorRun, render, row, status } from '../status'
 import type { Reader } from '../status'
 
 // F94: `ops --status` - one row per CLI profile found under a fake HOME (never the owner's
@@ -21,6 +21,65 @@ const dir = (h: string, d: string, ...files: string[]) => {
 }
 const said = (out: string): Reader => async () => ({ code: 0, out, err: '' })
 const NONE = said('src=none 5h=- 7d=- ctx=- max=-\n')
+
+test('status reports each completed profile outside the returned table', async () => {
+  const h = home()
+  dir(h, '.cursor-one')
+  dir(h, '.cursor-two')
+  const progress: number[][] = []
+  const table = await status({ HOME: h }, h, false, (complete, total) => progress.push([complete, total]))
+  assert.deepEqual(progress, [[0, 2], [1, 2], [2, 2]])
+  assert.match(table, /^profile +5h used +7d used\n/)
+  assert.doesNotMatch(table, /profiles read/)
+})
+
+test('piped --status emits the quota table on stdout and keeps stderr quiet', () => {
+  const h = home()
+  dir(h, '.cursor-one')
+  const opsDir = fileURLToPath(new URL('../', import.meta.url))
+  const result = spawnSync(process.execPath, ['--import', './loader.mjs', 'app.ts', '--status'], {
+    cwd: opsDir, env: { ...process.env, HOME: h }, encoding: 'utf8',
+  })
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /^profile +5h used +7d used\ncursor-one /)
+  assert.equal(result.stderr, '')
+})
+
+test('an active refresh displays last-known cache values including zero', async () => {
+  const h = home()
+  const d = dir(h, '.claude', '.credentials.json', 'quota-cache.json.refreshing')
+  const cache = join(d, 'quota-cache.json')
+  writeFileSync(cache, JSON.stringify({ src: 'claude-code', '5h': 0, weekly: 38,
+    models: [{ name: 'Sonnet', '7d': 0 }, { name: 'Empty', '7d': null }] }))
+  utimesSync(cache, 1, 1)
+  const p = discover(h)[0]!
+  const read = said('src=none 5h=- 7d=- note=refresh_pending\n')
+  assert.deepEqual(await profileRows(p, read, {}, false, false), [
+    ['claude', '0%', '38%', 'last known, refresh pending'],
+    ['  Sonnet', '-', '0%', 'last known, refresh pending'],
+  ])
+
+  const current = said('src=claude-code 5h=18 7d=-\n')
+  assert.deepEqual((await profileRows(p, current, {}, false, false))[0], ['claude', '18%', '-', 'refresh pending'])
+
+  const lock = join(d, 'quota-cache.json.refreshing')
+  const expired = (Date.now() / 1000) - 91
+  utimesSync(lock, expired, expired)
+  assert.deepEqual(await profileRows(p, read, {}, false, false), [
+    ['claude', '-', '-', 'no quota source: no reading in the last 3 h'],
+  ])
+})
+
+test('refresh fallback accepts carried windows but rejects invalid and mismatched cache values', async () => {
+  const h = home()
+  const d = dir(h, '.codex', 'auth.json', 'quota-cache.json.refreshing')
+  const cache = join(d, 'quota-cache.json')
+  const p = discover(h)[0]!
+  writeFileSync(cache, JSON.stringify({ src: 'codex', last: { at: 1, '5h': -1, '7d': 0 } }))
+  assert.deepEqual(await profileRows(p, NONE, {}, false, false), [['codex', '-', '0%', 'last known, refresh pending']])
+  writeFileSync(cache, JSON.stringify({ src: 'claude-code', '5h': 0 }))
+  assert.deepEqual(await profileRows(p, NONE, {}, false, false), [['codex', '-', '-', 'refresh pending']])
+})
 
 test('a profile with a reading shows its 5h and 7d % used; the reader sees only that profile', async () => {
   const h = home()

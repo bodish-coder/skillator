@@ -386,6 +386,8 @@ if ($Mode -eq 'refresh') {
   $lock = Join-Path $Dir 'quota-cache.json.refreshing'
   $cache = Join-Path $Dir 'quota-cache.json'
   $oldAgy = $env:AGY_CONFIG_DIR; $oldApp = $env:ANTIGRAVITY_APP_DATA_DIR
+  $oldGemini = $env:ANTIGRAVITY_GEMINI_DIR
+  $oldHome = $env:HOME; $oldUserProfile = $env:USERPROFILE
   $oldCfg = $env:CLAUDE_CONFIG_DIR; $oldMuse = $env:MUSE_CONFIG_DIR
   try {
     New-Item $Dir -ItemType Directory -Force | Out-Null
@@ -415,6 +417,17 @@ if ($Mode -eq 'refresh') {
     } elseif ($Cli -eq 'agy') {
       $env:AGY_CONFIG_DIR = $Dir
       $env:ANTIGRAVITY_APP_DATA_DIR = $Dir
+      # Named launchers use a profile home with nested Gemini and CLI data directories.
+      $agyHome = Convert-Path -LiteralPath $Dir
+      $agyApp = Join-Path $agyHome '.gemini/antigravity-cli'
+      if ([IO.Directory]::Exists($agyApp)) {
+        $env:ANTIGRAVITY_APP_DATA_DIR = $agyApp
+      } elseif ($agyHome -match '[\\/]\.gemini[\\/]antigravity-cli$') {
+        $agyHome = Split-Path -Parent (Split-Path -Parent $agyHome)
+      }
+      $env:HOME = $agyHome
+      $env:USERPROFILE = $agyHome
+      $env:ANTIGRAVITY_GEMINI_DIR = Join-Path $agyHome '.gemini'
       try { $raw = & agy -p "/usage" --output-format json 2>$null | Out-String } catch { $raw = '' }
       if ($raw) {
         $parsed = try { ConvertFrom-Json $raw -ErrorAction Stop } catch { $null }
@@ -591,6 +604,8 @@ if ($Mode -eq 'refresh') {
     [IO.File]::WriteAllText($absCache, (ConvertTo-Json $res -Compress -Depth 4), (New-Object Text.UTF8Encoding $false))
   } finally {
     $env:AGY_CONFIG_DIR = $oldAgy; $env:ANTIGRAVITY_APP_DATA_DIR = $oldApp
+    $env:ANTIGRAVITY_GEMINI_DIR = $oldGemini
+    $env:HOME = $oldHome; $env:USERPROFILE = $oldUserProfile
     $env:CLAUDE_CONFIG_DIR = $oldCfg; $env:MUSE_CONFIG_DIR = $oldMuse
     Remove-Item -LiteralPath $lock -ErrorAction SilentlyContinue
   }

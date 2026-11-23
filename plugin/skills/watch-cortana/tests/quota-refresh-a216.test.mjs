@@ -30,7 +30,7 @@ const selectors = [
   'CODEX_THREAD_ID', 'CODEX_SESSION_ID', 'CLAUDE_CODE_SESSION_ID',
   'SKILLATOR_CLI', 'SKILLATOR_PROFILE_DIR', 'CODEX_HOME',
   'CLAUDE_CONFIG_DIR', 'CLAUDE_USAGE_WATCH_DIR', 'AGY_CONFIG_DIR',
-  'ANTIGRAVITY_APP_DATA_DIR', 'MUSE_CONFIG_DIR', 'CURSOR_LEDGER_PATH',
+  'ANTIGRAVITY_APP_DATA_DIR', 'ANTIGRAVITY_GEMINI_DIR', 'MUSE_CONFIG_DIR', 'CURSOR_LEDGER_PATH',
   'SKILLATOR_CONFIG_DIR', 'CLAUDE_USAGE_HANDOFF_PCT', 'CLAUDE_USAGE_HANDOFF_WEEKLY_PCT',
 ]
 
@@ -46,13 +46,14 @@ function makeFixture(port) {
 
   const source = readFileSync(`${hooksDir}/usage-watch.${port}`, 'utf8')
   const script = `${root}/usage-watch.${port}`
+  const agyFixture = `${root}/agy-fixture.cjs`
   copyFileSync(`${hooksDir}/quota-policy.cjs`, `${root}/quota-policy.cjs`)
 
   if (port === 'ps1') {
     const stub = [
       `function Start-Process { param($FilePath, $ArgumentList, $WindowStyle) [IO.File]::AppendAllText('${launchesFile}', "$ArgumentList\`n") }`,
       `function claude { [IO.File]::AppendAllText('${argsFile}', "claude|1|$($args -join ' ')\`n"); [IO.File]::WriteAllText('${stdinFile}', (@($input) -join "\`n")); $n = @([IO.File]::ReadAllLines('${argsFile}')).Count; [IO.File]::AppendAllText('${root}/cli-wait.log', "w=$env:SKILLATOR_QUOTA_REFRESH_WAIT\`n"); if (Test-Path "${root}/cli-cache-$n.txt") { [IO.File]::WriteAllText("$env:CLAUDE_CONFIG_DIR/quota-cache.json", [IO.File]::ReadAllText("${root}/cli-cache-$n.txt")) }; if (Test-Path "${root}/cli-child-$n.txt") { $si = New-Object Diagnostics.ProcessStartInfo 'ping', '-n 120 127.0.0.1'; $si.UseShellExecute = $false; $si.CreateNoWindow = $true; [IO.File]::WriteAllText('${root}/child.pid', "$([Diagnostics.Process]::Start($si).Id)") }; if (Test-Path "${root}/cli-sleep-$n.txt") { Start-Sleep -Seconds ([int][IO.File]::ReadAllText("${root}/cli-sleep-$n.txt")) }; $f = "${root}/cli-response-$n.txt"; if (Test-Path $f) { [IO.File]::ReadAllText($f) } elseif (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
-      `function agy { [IO.File]::AppendAllText('${argsFile}', "agy|1|$($args -join ' ')\`n"); if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
+      `function agy { [IO.File]::AppendAllText('${argsFile}', "agy|1|$($args -join ' ')\`n"); if (Test-Path '${agyFixture}') { & node '${agyFixture}' } elseif (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
       // F176: orphan.pid - a process that started before the refresh, listed as its child (a reused parent PID).
       `function Get-CimInstance { if (Test-Path '${root}/orphan.pid') { CimCmdlets\\Get-CimInstance Win32_Process -Filter "ProcessId=$([IO.File]::ReadAllText('${root}/orphan.pid').Trim())" } elseif (Test-Path '${root}/no-creation') { CimCmdlets\\Get-CimInstance @args | Select-Object ProcessId, @{ n = 'CreationDate'; e = { $null } } } else { CimCmdlets\\Get-CimInstance @args } }`,
       // A236: no-creation - a listed child's CreationDate cannot be read.
@@ -66,7 +67,7 @@ function makeFixture(port) {
     const stub = [
       `spawn_quota_refresh() { printf '%s|%s\\n' "$1" "$2" >> '${launchesFile}'; }`,
       `claude() { printf 'claude|%s|%s\\n' "\${MSYS_NO_PATHCONV:-}" "$*" >> '${argsFile}'; cat > '${stdinFile}'; n=$(wc -l < '${argsFile}' | tr -d ' '); printf 'w=%s\\n' "\${SKILLATOR_QUOTA_REFRESH_WAIT:-}" >> '${root}/cli-wait.log'; [ ! -f "${root}/cli-cache-$n.txt" ] || cp "${root}/cli-cache-$n.txt" "$CLAUDE_CONFIG_DIR/quota-cache.json"; [ ! -f "${root}/cli-sleep-$n.txt" ] || sleep "$(cat "${root}/cli-sleep-$n.txt")"; if [ -f "${root}/cli-response-$n.txt" ]; then cat "${root}/cli-response-$n.txt"; elif [ -f '${responseFile}' ]; then cat '${responseFile}'; fi; return "$(cat '${exitCodeFile}')"; }`,
-      `agy() { printf 'agy|%s|%s\\n' "\${MSYS_NO_PATHCONV:-}" "$*" >> '${argsFile}'; [ -f '${responseFile}' ] && cat '${responseFile}'; return "$(cat '${exitCodeFile}')"; }`,
+      `agy() { printf 'agy|%s|%s\\n' "\${MSYS_NO_PATHCONV:-}" "$*" >> '${argsFile}'; if [ -f '${agyFixture}' ]; then node '${agyFixture}'; elif [ -f '${responseFile}' ]; then cat '${responseFile}'; fi; return "$(cat '${exitCodeFile}')"; }`,
       `ps() { command ps "$@"; [ -f '${root}/orphan.pid' ] || return 0; command ps "$@" | awk -v o="$(cat '${root}/orphan.pid')" 'NR > 1 && $2 != o { print "x", o, $2, "?", "00:00:00", "orphan" }'; }`,
       `muse() { [ -f '${responseFile}' ] && cat '${responseFile}'; return "$(cat '${exitCodeFile}')"; }`,
       '',
@@ -404,6 +405,48 @@ for (const port of ['ps1', 'sh']) {
         { name: 'Gemini Models', '5h': 0, '7d': 24.5 },
         { name: 'Claude and GPT models', '5h': 0, '7d': 0 },
       ] })
+    } finally {
+      fx.cleanup()
+    }
+  })
+
+  test(`${port}: agy refresh uses each launcher's profile home and app data`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      writeFileSync(`${fx.root}/agy-fixture.cjs`, `
+        const { existsSync, readFileSync } = require('node:fs');
+        const { resolve } = require('node:path');
+        const { HOME, USERPROFILE, ANTIGRAVITY_GEMINI_DIR, ANTIGRAVITY_APP_DATA_DIR } = process.env;
+        const app = resolve(ANTIGRAVITY_APP_DATA_DIR);
+        const home = resolve(USERPROFILE);
+        const valid = resolve(HOME) === home && ANTIGRAVITY_GEMINI_DIR &&
+          resolve(ANTIGRAVITY_GEMINI_DIR) === resolve(home, '.gemini') &&
+          app === resolve(home, '.gemini/antigravity-cli') && existsSync(resolve(app, 'usage.json'));
+        const selected = valid ? app : ${JSON.stringify(`${fx.root}/home/.gemini/antigravity-cli`)};
+        process.stdout.write(readFileSync(resolve(selected, 'usage.json'), 'utf8'));
+      `)
+      for (let n = 0; n < 6; n++) {
+        const home = `${fx.root}/home${n ? `/.agy-test${n}` : ''}`
+        const app = `${home}/.gemini/antigravity-cli`
+        mkdirSync(app, { recursive: true })
+        const week = n ? 10 * n : 52
+        const name = `Account ${n}`
+        writeFileSync(`${app}/usage.json`, JSON.stringify({ command: { data: { groups: [
+          { name, buckets: [
+            { window: '5h', remaining_fraction: 1 },
+            { window: 'week', remaining_fraction: 1 - week / 100 },
+          ] },
+        ] } } }))
+        const profile = n ? home : app
+        const inherited = { ANTIGRAVITY_GEMINI_DIR: `${fx.root}/home/.gemini`, ANTIGRAVITY_APP_DATA_DIR: `${fx.root}/home/.gemini/antigravity-cli` }
+        const env = { ...inherited, SKILLATOR_CLI: 'agy', SKILLATOR_PROFILE_DIR: profile }
+        assert.match(fx.runLevel(env), /note=refresh_pending$/)
+        fx.runRefresh('agy', profile, env)
+        assert.deepEqual(JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8')), {
+          src: 'agy', '5h': 0, '7d': week, models: [{ name, '5h': 0, '7d': week }],
+        })
+        assert.equal(fx.runLevel(env), `src=agy 5h=0.0 7d=${week}.0 ctx=- max=${week}.0`)
+      }
     } finally {
       fx.cleanup()
     }

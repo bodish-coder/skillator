@@ -296,7 +296,9 @@ export async function row(p: Profile, read: Reader, base: Env, darwin: boolean):
   if (!kv.has('src')) return r(`unreadable: ${(res.err || res.out).trim().split(/\r?\n/)[0] || `exit ${res.code}`}`)
   const five = pct(kv.get('5h')), seven = pct(kv.get('7d'))
   if (kv.get('src') !== 'none' && (five !== '-' || seven !== '-')) return r('', five, seven)
-  if (kv.has('note') && kv.get('note')) return r(kv.get('note')!.replace(/_/g, ' '))
+  const note = kv.get('note')
+  // A completed foreground attempt can still emit this tag. profileRows checks the lock.
+  if (note && note !== 'refresh_pending') return r(note.replace(/_/g, ' '))
   if (!loggedIn(p, darwin)) return r('not logged in')
   return r('no quota source: no reading in the last 3 h')
 }
@@ -307,27 +309,54 @@ function loggedIn(p: Profile, darwin: boolean): boolean {
 }
 
 const FRESH_MS = 3 * 3600 * 1000
+// Matches the lock expiry in both watch-cortana readers and ops/reset.ts.
+const REFRESH_LOCK_MS = 90_000
+const PENDING = 'refresh pending'
+const LAST_KNOWN = `last known, ${PENDING}`
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const num = (v: unknown) => (isNum(v) ? `${Math.round(v)}%` : '-')
+const quotaNum = (v: unknown) => isNum(v) && v >= 0 && v <= 100 ? num(v) : '-'
+const hasQuota = (row: Row) => row[1] !== '-' || row[2] !== '-'
 // A236: one stat and one read of the profile cache, shared by everything a row needs from it.
 type Cache = { c: Record<string, any> | null; mtime: number | undefined }
 const loadCache = (p: Profile): Cache => {
   const f = `${p.dir}/quota-cache.json`
   let mtime: number | undefined, c: Record<string, any> | null = null
   try { mtime = statSync(f).mtimeMs } catch { return { c, mtime } }
-  try { c = JSON.parse(readFileSync(f, 'utf8').replace(/^﻿/, '')) } catch { /* corrupt */ }
+  try { c = JSON.parse(readFileSync(f, 'utf8').replace(/^\uFEFF/, '')) } catch { /* corrupt */ }
   return { c, mtime }
+}
+
+function refreshPending(p: Profile): boolean {
+  try { return Date.now() - statSync(`${p.dir}/quota-cache.json.refreshing`).mtimeMs < REFRESH_LOCK_MS }
+  catch { return false }
+}
+
+const matchesSource = (p: Profile, c: Cache['c']) => c?.src === (p.cli === 'claude' ? 'claude-code' : p.cli)
+
+function lastKnownRow(p: Profile, { c }: Cache): Row | undefined {
+  if (!c || !matchesSource(p, c)) return
+  for (const record of [c, c.last]) {
+    if (!record || typeof record !== 'object' || Array.isArray(record)) continue
+    const five = quotaNum(Object.hasOwn(record, '5h') ? record['5h'] : record.five)
+    const seven = quotaNum(Object.hasOwn(record, '7d') ? record['7d'] : record.weekly)
+    const old: Row = [p.name, five, seven, LAST_KNOWN]
+    if (hasQuota(old)) return old
+  }
 }
 
 // F176: the per-model windows under a profile - the cache usage-watch's refresh wrote
 // (claude get_usage, agy /usage groups), or for codex the newest fresh rollout's latest
 // rate_limits per named bucket (limit_name set; the unnamed one is the profile row).
-function modelRows(p: Profile, { c, mtime }: Cache): Row[] {
+function modelRows(p: Profile, { c, mtime }: Cache, pending: boolean): Row[] {
   if (p.cli === 'codex') return codexModels(p.dir)
-  if (mtime === undefined || Date.now() - mtime > FRESH_MS) return []
+  const stale = mtime === undefined || Date.now() - mtime > FRESH_MS
+  if (stale && (!pending || !matchesSource(p, c))) return []
   const models = c?.models
   if (!Array.isArray(models)) return []
-  return models.filter(m => typeof m?.name === 'string').map(m => [`  ${m.name}`, num(m['5h']), num(m['7d']), ''])
+  const rows = models.filter(m => typeof m?.name === 'string').map((m): Row =>
+    [`  ${m.name}`, quotaNum(m['5h']), quotaNum(m['7d']), stale ? LAST_KNOWN : ''])
+  return stale ? rows.filter(hasQuota) : rows
 }
 
 function codexModels(dir: string): Row[] {
@@ -418,11 +447,16 @@ export async function profileRows(p: Profile, read: Reader, base: Env, darwin: b
   }
   let main = await row(p, read, base, darwin)
   cache = loadCache(p)   // after row() and any forced read: via and models as they are now
-  if (unknown && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', 'not refreshed: last 7d unknown']
+  const pending = FORCED.has(p.cli) && refreshPending(p)
+  if (pending) {
+    if (hasQuota(main)) main[3] = cache.c?.via === 'turn' ? `via one turn, ${PENDING}` : PENDING
+    else main = lastKnownRow(p, cache) ?? [main[0], '-', '-', PENDING]
+  }
+  else if (unknown && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', 'not refreshed: last 7d unknown']
   else if (policy && held !== null && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', `not refreshed: last 7d ${Math.round(held)}% >= ${policy.WEEKLY_CAP}%`]
   else if (late && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', 'not refreshed: out of time - press p again']
   else if (!main[3] && (main[1] !== '-' || main[2] !== '-') && cache.c?.via === 'turn') main = [main[0], main[1], main[2], 'via one turn']
-  return [main, ...modelRows(p, cache)]
+  return [main, ...modelRows(p, cache, pending)]
 }
 
 export function render(rows: Row[]): string {
@@ -431,8 +465,13 @@ export function render(rows: Row[]): string {
   return all.map(x => x.map((c, i) => (i < 3 ? c.padEnd(w[i]! + 2) : c)).join('').trimEnd()).join('\n') + '\n'
 }
 
-export async function status(env: Env, appDir: string, refresh = false): Promise<string> {
+export async function status(env: Env, appDir: string, refresh = false,
+  progress?: (completed: number, total: number) => void,
+): Promise<string> {
   const home = norm(env.HOME || env.USERPROFILE || homedir())
+  const profiles = discover(home)
+  if (!profiles.length) return `ops --status: no CLI profiles found under ${home}\n`
+  progress?.(0, profiles.length)
   const skills = findSkillsDir(appDir, env, existsSync, p => JSON.parse(readFileSync(p, 'utf8')))
   const win = windowsScripts(env)
   const sh = await shellFor(win, process.platform === 'win32', { path: env.PATH ?? env.Path, systemRoot: env.SystemRoot ?? env.SYSTEMROOT }, async p => existsSync(p))
@@ -443,6 +482,10 @@ export async function status(env: Env, appDir: string, refresh = false): Promise
   }
   const rows: Row[] = [], deadline = Date.now() + BUDGET_MS
   const policy = loadPolicy(skills)
-  for (const p of discover(home)) rows.push(...await profileRows(p, read, env, process.platform === 'darwin', refresh, deadline, policy))
-  return rows.length ? render(rows) : `ops --status: no CLI profiles found under ${home}\n`
+  let completed = 0
+  for (const p of profiles) {
+    rows.push(...await profileRows(p, read, env, process.platform === 'darwin', refresh, deadline, policy))
+    progress?.(++completed, profiles.length)
+  }
+  return render(rows)
 }

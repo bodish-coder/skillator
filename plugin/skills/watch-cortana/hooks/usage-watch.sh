@@ -415,8 +415,17 @@ if [ "$mode" = refresh ]; then
       ;;
     agy)
       src_name=agy
+      # Named launchers use a profile home with nested Gemini and CLI data directories.
+      agy_app=${target_dir%/}
+      agy_home=$agy_app
+      if [ -d "$agy_home/.gemini/antigravity-cli" ]; then
+        agy_app="$agy_home/.gemini/antigravity-cli"
+      else
+        case $agy_app in */.gemini/antigravity-cli) agy_home=${agy_app%/.gemini/antigravity-cli} ;; esac
+      fi
       # B27: MSYS_NO_PATHCONV - Git Bash rewrites "/usage" to a path, a paid prompt.
-      raw=$(MSYS_NO_PATHCONV=1 AGY_CONFIG_DIR="$target_dir" ANTIGRAVITY_APP_DATA_DIR="$target_dir" agy -p "/usage" --output-format json 2>/dev/null)
+      raw=$(MSYS_NO_PATHCONV=1 AGY_CONFIG_DIR="$target_dir" HOME="$agy_home" USERPROFILE="$agy_home" \
+        ANTIGRAVITY_GEMINI_DIR="$agy_home/.gemini" ANTIGRAVITY_APP_DATA_DIR="$agy_app" agy -p "/usage" --output-format json 2>/dev/null)
       if [ -n "$raw" ]; then
         if command -v node >/dev/null 2>&1; then
           parsed=$(node -e '

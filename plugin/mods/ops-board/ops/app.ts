@@ -108,7 +108,15 @@ export const repoName = (root: string): string | null => root.split('/').filter(
 
 export async function main(argv: string[]): Promise<number> {
   if (argv.includes('--help') || argv.includes('-h')) { process.stdout.write(HELP + '\n'); return 0 }
-  if (argv.includes('--status')) { process.stdout.write(await status(process.env, import.meta.dirname, argv.includes('--refresh'))); return 0 }
+  if (argv.includes('--status')) {
+    const progress = process.stdout.isTTY && process.stderr.isTTY
+      ? (completed: number, total: number) => {
+        process.stderr.write(`\rReading quota profiles ${completed}/${total}${completed === total ? '\n' : ''}`)
+      }
+      : undefined
+    process.stdout.write(await status(process.env, import.meta.dirname, argv.includes('--refresh'), progress))
+    return 0
+  }
   if (argv.includes('--reset')) { process.stdout.write(await reset(process.env, import.meta.dirname)); return 0 }
   const opts = parseArgs(argv)
   if (opts.error) { process.stderr.write(`${opts.error}\n${USAGE}\n`); return 2 }
