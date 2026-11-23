@@ -336,19 +336,16 @@ Deactivating is deleting `.skillator/grayskull.md`.
   settling it. A second git user gets the project rules plus their own file,
   never the first user's. `scripts/rules-orko.{sh,ps1}` are the only writer.
   Armed by `grayskull-power`. Invoke with `/rules-orko`.
-- **audit-sherlock** — forensic audit of a whole application: parallel **Fable**
-  investigators sweep backend, frontend, boundaries, data, dependencies, error
-  paths, config, architecture, tests, dead code, project conventions
-  (`CLAUDE.md`, lint config) and git history, reporting only findings with
-  `file:line` evidence and a concrete failure. Findings are deduped, then
-  adversarially verified against a 0–100 confidence rubric — anything under 80 is
-  deleted and counted, not softened — written to `CASEFILE.md`,
-  ranked into an implementation plan — then **Opus** codes the fixes. Structural
-  changes are proposed as options for you to pick, never applied unasked. Point
-  it at a PR (`sherlock #482`) and it will scope the audit to that diff and, on
-  your yes, post the surviving findings back as inline `gh` comments with
-  sha-anchored permalinks. Merging is not its job — that hands off to
-  `merge-smith`. Invoke with `/audit-sherlock`.
+- **audit-sherlock** audits software from requirements and design through
+  release and operations. Use `/audit-sherlock --full-system max` to cover the
+  system represented in the repo and check active and archived ticket criteria
+  against current evidence. Sherlock merges duplicate findings and keeps those
+  with file-and-line evidence, a concrete failure, and at least 80% confidence.
+  `CASEFILE.md` and the interactive `CASEFILE.html` share the same findings.
+  The HTML includes an **Export PDF** action for the complete casefile.
+  Add `--audit-only` for reports and ticket matching without board edits.
+  Sherlock reports findings before asking which fixes to implement. Use
+  `sherlock #482` for a PR audit and approve any PR comments separately.
 - **live-friday** — starts the project's app or build in the background **before**
   the first edit and hands over the URL, watch command, or `[n/total]` progress
   stream in the opening reply, so you watch the thing run while the agent works

@@ -3,12 +3,10 @@ name: audit-sherlock
 description: >-
   Use when the user says "sherlock", "audit the app", "review everything",
   "find what's broken", "full code review", "what's wrong with this codebase",
-  "check the whole thing", "sherlock #482", wants a full-application forensic
-  audit for the defects nobody filed, or is before a release/handover. Can
-  also be pointed at a single GitHub PR. Merging and conflict resolution are
-  handed to `skillator:merge-smith`. NOT a security-only scan (use
-  /security-review), and for a quick pass over the working diff `/code-review`
-  is cheaper.
+  "check the whole thing", "sherlock #482", wants a full-system or ticket-aware
+  audit, or is preparing for a release or handover. Use `/code-review` for
+  a staged diff, `/security-review` for a security-only review, and
+  `skillator:merge-smith` for merging or conflict resolution.
 ---
 
 # audit-sherlock — the whole application, under a lens
@@ -18,39 +16,62 @@ what it *does*. Investigators find; the detective verifies; Opus fixes.
 
 Phases in order. Never skip to phase 3.
 
-1. **Investigate** — parallel Fable agents, one per dimension, evidence only.
-2. **Deduce** — dedupe, adversarially verify, rank, write `CASEFILE.md`.
-3. **Solve** — implementation plan, then Opus codes it.
+1. **Investigate** — map the system, trace ticket promises and examine paths nobody filed.
+2. **Deduce** — deduplicate, verify, rank and render the casefile.
+3. **Solve** — report the results and ask which repairs the owner wants.
 4. **Report to the PR** — only if the scene was a PR, only on a yes.
 
 Merging is out of scope throughout: that is `skillator:merge-smith`.
 
+### Invocation
+
+These are arguments to the **skill**. Accept equivalent plain language.
+
+| Request | Scope and action |
+|---|---|
+| `sherlock --full-system max` or “Sherlock, full system, max” | Inventory the repository, then run all applicable code and lifecycle dimensions across it. |
+| `sherlock --full-system max --audit-only` | Produce the complete casefile and match existing tickets. Leave proposed new tickets in the report and skip the repair question. |
+| `sherlock --full-system max just the API` | Apply the full lifecycle review to the API, its callers and dependencies. Mark the rest out of scope. |
+| `sherlock #482 --full-system max --audit-only` | Follow the PR's changes across the system. Attribute each finding to the diff and produce local reports. |
+
+Without a named PR or slice the scope is the whole repository. Depth changes
+the breadth of inspection. It never lowers the confidence threshold.
+`--audit-only` leaves source, ticket boards and external services untouched
+and ends after reporting. A local casefile is still a requested output.
+
 ## Phase 0 — the scene
 
-Before dispatching anything, spend one pass yourself:
+Start with the current checkout, its revision and any relevant uncommitted changes.
+Inventory user journeys and entry points, then follow one important request or
+job across its interfaces to the stored result and its recovery path. Read the
+applicable manifests, change history, tests, configuration, delivery and
+operational material. For a full-system audit, cover the whole system represented
+in the repository. Review external integrations through their local contracts,
+adapters, fixtures and existing evidence. Live external systems need explicit
+scope and authorization. Record inaccessible components and unrun checks.
 
-- Repo shape: languages, entry points, package manifests, build config, test
-  command. `git log --oneline -20` for what's been moving.
-- Scope. Whole repo by default. If the user named a slice ("just the API"),
-  audit that plus everything it touches, and say what you left out. If they named
-  a PR (`sherlock #482`), the scene is that PR's diff plus everything it touches
-  — `gh pr view` and `gh pr diff` for the change, and read the surrounding code
-  so a finding is about the change and not the file's whole history. Same for a
-  pre-commit sweep: `git diff --cached --name-only` is the scene — audit those
-  files and what they touch, and say what you left out.
-- Size check. If the tree is huge, split each dimension by directory rather than
-  handing one agent 4000 files. An investigator with too much to read reports
-  vagueness, and vague findings are worse than none.
-- Depth. `low`/`medium` → the 4–5 dimensions this repo most obviously needs, and
-  only findings you would stake the report on. `high`/`max` (default for a full
-  audit) → every applicable dimension. If the user named a level, use it; if they
-  named none, use the level they last named, else `high`.
+For a named slice, include its callers, dependencies and shared contracts. For
+a named PR, inspect `gh pr view`, `gh pr diff` and the affected behavior in
+context. Record the boundary. A whole-system finding can predate the audit.
+A PR finding must be attributable to the change.
+
+Use the [field guide](references/field-guide.md) to build a **coverage ledger**
+and a **ticket review** before dispatch. Read `TICKETS.md` and
+`TICKETS-archive.md` when present, including closed rows still on the active
+board. Match relevant acceptance criteria and decisions to paths, tests and
+commit history. Assign a separate pass over critical journeys and components
+without ticket matches. An empty board still gets the same system audit.
+
+At `high`/`max` depth, cover every applicable dimension below. At
+`low`/`medium`, take the 4–5 most consequential and identify the omitted
+ones. Use the user's stated depth, otherwise their last named depth or
+`high`. Divide large areas across investigators and record sampling limits.
 
 ## Phase 1 — dispatch the investigators
 
-**All in one message so they run concurrently.** Each is `Agent` with
-`model: 'fable'`, `subagent_type: 'general-purpose'`, read-only intent — an
-investigator never edits a file.
+Dispatch independent investigations concurrently using the host's **deep**
+reasoning tier (Fable on a host that offers it). If delegation is unavailable,
+make separate read-only passes in-session and record the limitation.
 
 Dimensions. Drop the ones that don't exist in this repo; never invent one to
 pad the report:
@@ -68,18 +89,22 @@ pad the report:
 | `tests` | What is untested that carries risk; tests that pass without asserting; fixtures that hide the bug |
 | `dead` | Unreachable code, unused exports, feature flags never flipped, TODOs older than the code around them |
 | `conventions` | `CLAUDE.md`/`AGENTS.md`, lint and type config, and code comments that state a rule — code that violates a rule the project wrote down for itself. Quote the rule and its file |
-| `history` | `git log`/`git blame` on the churn-heavy files: bugs that only show up against why the code changed — a fix reverted, a guard dropped in a refactor, two commits solving the same thing differently |
+| `history` | Trace ticket acceptance criteria and fixes through commits to current behavior. Use churn, reverted fixes and changed contracts to choose what to inspect |
+| `delivery and operations` | Build and packaging paths, CI and release gates, upgrade and rollback, deployment configuration, detection and recovery. Trace what the shipped artifact or operator actually uses |
 
 Give every investigator the same contract:
 
-> Investigate `<dimension>` across `<paths>`. Read the code; do not edit
-> anything. Report ONLY findings you can prove from what you read, each as:
-> `file:line`, one-sentence claim, the concrete failure (inputs/state → wrong
-> result), and severity `critical|high|medium|low`. If you cannot name the
-> failure, it is not a finding — drop it. No style opinions, no "consider
-> refactoring", no praise. Cap at your 15 strongest. Say what you did not read.
+> Investigate `<dimension>` across `<paths/journeys>`; read only. Return
+> up to 15 defects, each with a current `file:line`, claim, expected behavior,
+> ordinary input/state → actual failure, supporting evidence, severity and any
+> matching real ticket IDs. Return the coverage, ticket verdicts and any proven
+> strengths separately. Give the source or check behind each. List what you
+> sampled, could not inspect or did not exercise. Omit conjectures and generic
+> advice. For security controls use defensive source review and existing benign
+> evidence. Exclude secrets, exploit construction, reproduction and live probing.
 
-Use a `schema` on the agent call so findings come back structured, not prose.
+Request structured results (use a schema when supported). Each investigator
+applies the lifecycle questions in the field guide to the paths assigned.
 
 ## Phase 2 — deduction
 
@@ -89,67 +114,62 @@ Nothing reaches the user unverified. Investigators are optimistic; you are not.
    keeping the sharpest evidence.
 2. **Verify.** Open the cited `file:line` yourself, or dispatch verifier agents
    for the ones that would cost the most to be wrong about. Each verifier scores
-   confidence 0–100 against this rubric, given verbatim:
+   confidence 0–100 on the strength of the evidence. Trace the caller, the
+   asserted invariant and possible guards or recovery paths. A focused local
+   functional check with ordinary fixture data can resolve uncertainty. Cite
+   the command and observed result, or the complete source path and why it
+   proves the outcome. Label historical tests and checks not run in this audit.
 
-   > 0 — false positive, or a pre-existing issue the change never touched.
-   > 25 — might be real; you could not verify it. A style point nothing in the
-   > repo actually mandates scores here.
-   > 50 — verified real, but a nitpick or rare in practice.
-   > 75 — verified, will be hit in practice, the current code is insufficient;
-   > or it violates a rule the project wrote down (quote the rule).
-   > 100 — certain, frequent, and the evidence directly confirms it.
+   | Confidence | Basis |
+   |---|---|
+   | 0 | Evidence contradicts the claim. |
+   | 1–79 | Plausible through strongly suggested. A material link such as a supported caller, the actual outcome or the applicability of the rule is unverified. |
+   | 80–99 | Current evidence establishes each material link and the verifier checked plausible explanations. |
+   | 100 | The exact failure is directly demonstrated by a decisive check or an unambiguous source trace. |
 
-   **Anything under 80 is deleted, not downgraded.** Say how many died — that
-   number is the report's credibility.
+   **Discard every candidate below 80.** Count unique candidates rejected after
+   deduplication. Confidence measures proof. Assess frequency and user impact
+   separately when ranking. A rare, proven data-loss condition can rank high.
 
    Not findings, whatever an investigator claims: pre-existing issues outside
    the audited scope; anything a linter, typechecker or compiler already catches;
    nitpicks a senior engineer wouldn't raise; missing tests or docs as a general
    complaint; a rule violation the code explicitly silences with an ignore
-   comment; deliberate design you merely disagree with. Don't run the build to
-   check — CI does that.
+   comment; deliberate design you merely disagree with. Use the existing CI
+   evidence for routine build checks and record the revision it covers.
 3. **Rank.** Data loss and silent-wrong-answer first, then crashes, then
    degradation, then correctness-adjacent debt. Within a tier, cheapest fix
    first.
-4. **Split architecture out.** Anything requiring a structural change goes in its
-   own section — those are proposals, not tasks.
-
-Write `CASEFILE.md` at the repo root:
-
-```markdown
-# CASEFILE — <date>
-
-Scope: <what was read>  ·  Not read: <what wasn't>
-<N> findings verified, <M> discarded on verification.
-
-## Critical
-- **C1** `src/api/orders.ts:88` — Payment marked captured before the charge
-  resolves; a rejected charge leaves a paid order.
-  *Fix:* await the charge, capture on success only. ~20 lines, 1 test.
-
-## High
-...
-
-## Architectural proposals — need your call
-- **X1** Auth logic lives in 4 modules with divergent expiry rules. Consolidating
-  is ~2 days and touches every route. Options: (a) leave, document the drift;
-  (b) one auth module, routes call it; (c) middleware.
-```
+4. **Document what works.** For each strength give a current source or check,
+   the mechanism it demonstrates and the consequence for users or maintainers.
+   Record only what you can substantiate. Empty strengths are valid.
+5. **Identify decisions.** Put architectural trade-offs in proposals. Name the
+   observable constraints, options (including retaining the current design
+   when viable), costs and consequences. A proven defect still has its own
+   finding when the remedy needs an architectural decision.
 
 ### Then put the findings on the board
 
-A casefile is a document; a ticket is a thing someone works. **Every verified
-finding that names a change becomes an `A` ticket** — that is what stops the
-audit dying with the chat. A sweep this wide is the board's biggest single
-inflow, so it goes through `tickets-zordon`'s gate like everything else: a
-finding that implies no edit belongs in the casefile only, and two findings on
-one defect are one row.
+A change-worthy verified defect should lead to exactly one place to work it.
+Use `tickets-zordon` for board mutations. Immediately before allocating, check
+both board files for the same failing behavior and underlying cause.
 
-- **`TICKETS.md` exists** → log each verified finding that passes the gate as an
-  `A` ticket per `tickets-zordon`, and put the ticket ID on its casefile line
-  (findings that don't pass stay in the casefile, unnumbered). One board, never
-  two.
-- **No `TICKETS.md`** → **ask, once**: "`<N>` verified findings. Shall I open a
+- **`--audit-only` or an explicit read-only board.** Only match existing IDs
+  and record proposed actions in the casefile. Skip board creation and allocation.
+- **An active ticket already tracks the repair.** Link its real ID, regardless
+  of prefix, and its board reference. Preserve its state and owner. Multiple
+  reports of that defect link to the same finding. A related ticket for a
+  different behavior belongs in the evidence, with its relationship explained.
+- **An old fix regressed.** Link the original ID, source file, historical fix
+  evidence and current failure. Link an active successor if one exists.
+  Otherwise flag the regression against the original ID for the owner to
+  decide whether to reopen it or commission a successor. Preserve the archive.
+  Respect recorded cancellations, deferrals and owner decisions.
+- **A genuinely new defect needs an edit and `TICKETS.md` exists.** Allocate
+  one `A` ticket with `tickets-zordon`, including the concrete impact. Cite
+  its ID on the finding. Evidence-only notes, verified strengths, uncovered
+  scope and undecided architectural proposals stay in the report.
+- **No `TICKETS.md` and there are actionable findings** → **ask, once**: "`<N>` verified findings. Shall I open a
   ticket board (`TICKETS.md`) and log them as A-tickets?" On yes, create the file
   from `tickets-zordon`'s template and log them. On no, the casefile stands alone
   and say so plainly — the findings live only in that file.
@@ -160,8 +180,8 @@ one defect are one row.
   board in a repo that may already have one elsewhere, and it was a tested agent
   under exactly that pressure that did it. The ask is a gate, not a formality —
   when it cannot be answered the answer is no.
-- **IDs come from `tickets-zordon` or not at all.** `A<n>`, allocated by scanning
-  the whole board, never reused. Never invent a private series (`N1`, `F1`, `S1`)
+- **New IDs come from `tickets-zordon` or not at all.** Use its allocator,
+  which accounts for active and archived IDs. Never invent a private series (`N1`, `F1`, `S1`)
   for sherlock's findings: an ID that tickets-zordon does not define is one nobody
   can look up, and it silently collides the moment a real `A` ticket reaches that
   number. If you cannot allocate against a board, the finding has a casefile
@@ -177,11 +197,40 @@ one defect are one row.
 > "I have written it down twice: once as evidence, once as work. The first is for
 > the record; the second is for whoever has to do something about it."
 
+### Render and check the casefile
+
+Keep the run data at the audited repo root in `CASEFILE.json`. Follow the
+[worked data example](scripts/example-casefile.json) for the renderer's format.
+Use the evidence from this audit for every entry. Omit the example's
+`preview: true` marker for real evidence.
+Append each dated run to `runs` oldest first and use a unique run ID. Preserve
+earlier evidence and real ticket references. Before the first migration, copy
+the exact existing `CASEFILE.md` contents into `legacyMarkdown`. If a later run
+confirms a fix, annotate the historical finding with its verified `fixed` SHA.
+
+From the audited root, substitute the path to the loaded skill for `<skill>`.
+
+```sh
+node "<skill>/scripts/render-casefile.mjs" CASEFILE.json .
+```
+
+The two local reports, `CASEFILE.md` and `CASEFILE.html`, must agree on scope,
+gaps, findings, discarded count, ticket references, strengths and proposals.
+Open the HTML offline, exercise search and filters, and check a finding's
+evidence and ticket history. For a PDF use the report's print control and
+**Save as PDF**. The print layout must include the full audit despite an
+active search, severity filter or collapsed section. Check the printed scope
+and finding counts against the data for the represented runs. If PDF delivery
+was requested, save `CASEFILE.pdf` and verify that file before linking it.
+State any rendering or export failure precisely and retain the audit evidence.
+
 ## Phase 3 — solve it
 
-Report to the user first: counts by severity **with their ticket IDs**, the top
-three in one line each, and the architectural proposals as questions. **Then ask what to fix.** Do not
-start a 40-finding repair unasked.
+Report counts by severity **with their ticket IDs** and lead with the top
+three concrete failures. Include the significant strengths, verified ticket
+regressions, coverage gaps and owner decisions, plus links to the report files.
+End an `--audit-only` run here. Otherwise, **ask what to fix** when there are
+actionable findings. Do not start a 40-finding repair unasked.
 
 **No one to ask** — subagent, batch run, "don't ask, just act"? Then the answer is
 no, as it was at the board gate: the casefile and the report are the deliverable, so
@@ -189,7 +238,7 @@ end there and say `fixes: none (no user to direct them)`. A "go ahead" in the br
 that opened the audit authorised the *audit*; it cannot authorise a repair across
 findings nobody has read yet.
 
-Coding is **Opus**, working from the casefile:
+Use the host's **build** tier for authorized repairs, working from the casefile:
 
 - Small, batched by file so agents don't collide. One agent per file cluster,
   dispatched in parallel; findings in the same file are one job.
@@ -311,7 +360,7 @@ Rules the voice obeys:
   caveat lands intact. If flourish would displace evidence, drop the flourish.
 - **No fabricated certainty.** "Elementary" is for things you verified. Anything
   unverified is said plainly as unverified — Sherlock is arrogant, not wrong.
-- **Prose only.** `CASEFILE.md`, ticket lines, commit messages, code comments
+- **Prose only.** Casefile data and reports, ticket lines, commit messages, code comments
   and agent prompts stay plain. The character speaks to the user; it does not
   write to disk.
 - **Off on request.** "drop the accent" / "plain report" → plain report, same
@@ -326,11 +375,11 @@ Rules the voice obeys:
 - **Report what you didn't read.** Every agent, every phase, up to the final
   summary. An audit claiming completeness it doesn't have is the worst output
   here.
-- **No score, no grade, no "overall the codebase is healthy".** Findings or
-  nothing.
-- **A verified finding ends up on the board.** If there is no board, ask to make
-  one; if the user declines, say out loud that the findings live only in
-  `CASEFILE.md`. A finding nobody can look up next week was half-found.
+- **No overall score or health grade.** Report observable strengths and verified
+  failures with their evidence. Name unresolved questions and unreviewed areas.
+- **One repair, one work item.** Match existing tickets before creating any A
+  ticket. If there is no board, ask to create one. Respect the user's answer
+  and document the board outcome in the casefile.
 - **Nothing is posted, pushed or merged unasked.** The casefile is written; the
   PR comment, the fix and the merge each need their own yes.
 - **The casefile is append-friendly.** Re-running adds a dated section; fixed

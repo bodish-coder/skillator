@@ -198,6 +198,8 @@ their section.
 
 - [%] F191 — Browse intake files and generate sample files from Ops Board. Done = both Ops Board adapters support importing supported files through a picker or path, including optional XML and spreadsheet mappings. Generate a sample XLSX, ticket XML, and a paired ATS scenario XML and synthetic bug-results JSON without overwriting existing files. Drafts still require individual approval. [owner: @sher] (testing: both adapters and generated samples passed automated checks. Live Windows picker verification pending.)
 
+- [%] F193 — Add ticket-aware full-system audits and interactive reports to Audit Sherlock. Done = full-system audits trace active and archived ticket criteria to current code and evidence, apply an SDLC audit rubric, link existing issues instead of duplicating them, and record coverage gaps. Generate CASEFILE.md and an offline interactive HTML report from the same evidence. PDF export includes the full audit even with active filters. Verify on a fixture with an archived regression, incomplete active work, a duplicate candidate, and an unrelated defect. [owner: @sher] (testing: renderer tests, a full-system fixture audit, and live Chrome HTML and PDF checks passed.)
+
 ## Agent-found
 
 - [x] A62 — auto-invocation is untested on cursor, codex, antigravity and pi; `PLATFORMS.md` now says so rather than implying otherwise, which documents the hole without closing it. This is the real remainder of A57. Includes: prime-agent has no markdown-skill loader at all, so a user there must hand-write `.skillator/grayskull.md` — unverified whether anyone has (deferred: every host but prime-agent verified - A62a/b/c; the remainder is A62d, waiting on prime-agent being installed) (@cc-629d8e)

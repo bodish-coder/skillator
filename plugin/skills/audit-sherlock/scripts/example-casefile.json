@@ -1,0 +1,65 @@
+{
+  "runs": [
+    {
+      "id": "atlas-2026-11-23",
+      "date": "2026-11-23",
+      "project": "Atlas Desk",
+      "preview": true,
+      "revision": "c8a263f",
+      "scope": "Weekly planning, time entries, calendar rollovers and CSV exports.",
+      "summary": "Editing a time entry can erase its duration. Three further findings affect saved preferences, exports and month boundaries.",
+      "notRead": ["The hosted billing adapter requires a service account.", "Mobile clients were outside the web workspace scope."],
+      "discarded": 3,
+      "board": "Three findings link to existing work. A28 records the calendar defect discovered during this audit.",
+      "coverage": [
+        {"area":"Time entries","status":"reviewed","evidence":"Followed create, edit and restore paths through the store and local persistence."},
+        {"area":"Weekly planner","status":"reviewed","evidence":"Checked both settings entry points and the first render after reload."},
+        {"area":"CSV export","status":"reviewed","evidence":"Compared rows at the pagination boundary with the exported file."},
+        {"area":"Hosted billing","status":"unavailable","evidence":"The local fixture has no service account."},
+        {"area":"Mobile clients","status":"out-of-scope","evidence":"This audit covers the web workspace."}
+      ],
+      "findings": [
+        {
+          "severity":"high","title":"Editing a note erases the logged duration","location":"src/time/entries.ts:84",
+          "failure":"Change the note on a 42-minute entry and save. The weekly total drops by 42 minutes.",
+          "evidence":["The note editor omits duration when it submits a partial update.","The update path stores entry.total = 0 when duration is absent. Reloading confirms the persisted loss."],
+          "fix":"Retain the existing duration when the patch omits it. Cover a note-only edit in the store test.",
+          "confidence":100,
+          "tickets":[{"id":"B12","source":"archive","relation":"Regressed","reference":"TICKETS-archive.md · B12, closed 08 Oct"}]
+        },
+        {
+          "severity":"medium","title":"The planner forgets the chosen start of week","location":"src/planner/preferences.ts:51",
+          "failure":"Choose Monday, reload the workspace and reopen the planner. The grid starts on Sunday.",
+          "evidence":["The settings panel saves the new value to preferences.weekStart.","The initial planner state reads defaults, so weekStart resets to Sunday after a reload."],
+          "fix":"Initialise the planner from the saved preference before building the grid.",
+          "confidence":95,
+          "tickets":[{"id":"F24","source":"active","relation":"Incomplete","reference":"TICKETS.md · F24, in progress"}]
+        },
+        {
+          "severity":"medium","title":"CSV export skips a row between pages","location":"src/export/csv.ts:112",
+          "failure":"Export 19 rows with a page size of 10. The first row of the second page is missing.",
+          "evidence":["The cursor already points to the next unconsumed row. The export loop increments it again.","In the pagination fixture, 19 rows become 18 in the downloaded CSV."],
+          "fix":"Resume at the returned cursor and assert all row IDs across two pages.",
+          "confidence":100,
+          "tickets":[{"id":"B21","source":"active","relation":"Already tracked","reference":"TICKETS.md · B21, open"}]
+        },
+        {
+          "severity":"low","title":"March opens with two identical day labels","location":"src/calendar/month.ts:37",
+          "failure":"Open March after a non-leap February. Both leading cells show the first day of March.",
+          "evidence":["The grid builder mutates the first date while padding the previous month.","In the month-boundary fixture, 01 Mar appears twice."],
+          "fix":"Clone the padding date before advancing it and assert both boundary labels.",
+          "confidence":95,
+          "tickets":[{"id":"A28","source":"active","relation":"New finding","reference":"TICKETS.md · A28, filed during this audit"}]
+        }
+      ],
+      "strengths":[{"title":"Undo restores the original entry","evidence":"src/time/undo.test.ts:48 compares the full restored record with the saved snapshot.","benefit":"A mistaken deletion preserves the entry's project, duration and original timestamp after undo."}],
+      "ticketReviews":[
+        {"id":"B12","source":"archive","reference":"TICKETS-archive.md · B12","expectation":"Note edits preserve recorded minutes.","evidence":"The B12 regression test passed at the closing revision 9b2d760. At c8a263f the same note-only update replaced 42 minutes with zero.","verdict":"Regressed"},
+        {"id":"F24","source":"active","reference":"TICKETS.md · F24","expectation":"The preferred start of week survives a reload.","evidence":"The value is saved, but the planner reads the default on first render.","verdict":"Incomplete"},
+        {"id":"B21","source":"active","reference":"TICKETS.md · B21","expectation":"Export every row on both sides of the page boundary.","evidence":"The same row is missing in the existing ticket fixture.","verdict":"Already tracked"},
+        {"id":"F19","source":"archive","reference":"TICKETS-archive.md · F19","expectation":"Undo restores all entry fields.","evidence":"All fields in the restored record matched the pre-delete snapshot.","verdict":"Verified"}
+      ],
+      "proposals":[{"title":"Share the date-grid builder across calendar views","evidence":"src/calendar/month.ts:37 and src/planner/grid.ts:18 calculate leading cells independently.","options":["Keep both builders and add boundary tests to each.","Extract the date calculation into a shared function with a single fixture set."]}]
+    }
+  ]
+}
