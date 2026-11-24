@@ -577,8 +577,24 @@ test('/ops runs switches the tab; an unknown word says how to use it', WITH, asy
   const run = (args: string) => $.command.run({ command: 'ops', args, ...RUN })
   expect((await run('runs')).text).toBe('ops board opened on Workflows, Runs open.')   // F76: runs is an alias
   expect(await state($, 'tab')).toBe('runs')
-  expect((await run('bogus')).text).toBe('usage: /ops [tickets|workflows|health|messages|explorer|build|log|help|resume [force]|watchdog on|watchdog off|watchdog status] - runs and agents open Workflows too, run opens Build, guide opens Help;'
+  expect((await run('bogus')).text).toBe('usage: /ops [tickets|workflows|health|messages|explorer|build|log|help|dashboard|resume [force]|watchdog on|watchdog off|watchdog status] - runs and agents open Workflows too, run opens Build, guide opens Help;'
     + ' resume force releases the hold whatever the reading and mutes memory red until it reads green once (watchdog on unmutes)')
+})
+
+test('/ops dashboard shows ticket, health, missing relay facts and unread summaries', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  await start($, clock)
+  expect((await $.command.run({ command: 'ops', args: 'dashboard', ...RUN })).text).toBe('ops board opened on Dashboard.')
+  await clock.settle()
+  for (const bodyColumns of [60, 100]) {
+    const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns })
+    expect((await ui.find({ key: 'tab:dashboard' }))?.props.variant).toBe('primary')
+    expect(await ui.find({ type: 'Text', text: '5 open / 1 blocked / 1 to decide' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /5h .* \/ 7d/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'Relay runs unavailable' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '0 unread' })).toBeDefined()
+    await ui.unmount()
+  }
 })
 
 test('F162: Tickets tab bottom keys row displays the session owner handle', WITH, async ($, on) => {

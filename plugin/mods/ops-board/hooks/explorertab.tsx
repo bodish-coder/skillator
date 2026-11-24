@@ -11,6 +11,7 @@ import {
   withIncoming, withLog, withUpstream, withWorktree, xwItem,
 } from './lib/explorer'
 import type { Action, ActionKind, Explorer, Here, Need } from './lib/explorer'
+import type { Member } from '../types'
 import { say } from './logtab'
 
 // F75: the Explorer tab - the git-tracked files as a tree, the newest commits each
@@ -372,7 +373,7 @@ const ACTION_KEYS: [ActionKind, string, string][] = [
   ['revert', 'v', 'revert'],
 ]
 
-export function ExplorerTab($: EngineInterface, els: Els, x: Explorer, cols: number): RenderElement[] {
+export function ExplorerTab($: EngineInterface, els: Els, x: Explorer, cols: number, team: readonly Member[] = []): RenderElement[] {
   const { Box, Text, Button } = els
   const out: RenderElement[] = []
   if (conflictPlan) {
@@ -384,7 +385,7 @@ export function ExplorerTab($: EngineInterface, els: Els, x: Explorer, cols: num
       </Box>,
     )
   }
-  for (const l of explorerLines(x, cols - 3)) {
+  for (const l of explorerLines(x, cols - 3, team)) {
     const body = <Text wrap="truncate-end">{l.segs.map(s => <Text color={s.color} dimColor={s.dim} bold={s.bold} inverse={s.inverse}>{clean(s.text)}</Text>)}</Text>
     const item = l.item
     out.push(item

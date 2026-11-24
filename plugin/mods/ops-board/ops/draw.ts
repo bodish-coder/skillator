@@ -25,6 +25,7 @@ import { ticketsOf } from '../hooks/lib/team'
 import { FIVE_HOLD_PCT, resetsText, usageColor, WEEKLY_STOP_PCT } from '../hooks/lib/healthlines'
 import { runLines as runTabLines } from './runtab'
 import { explorerBody } from './explorer'
+import { DASHBOARD_WIDE, dashboardPanels } from '../hooks/lib/dashboard'
 
 export type Seg = BaseSeg & { action?: PointerAction }
 const hot = (text: string, name: string, shift = false, isDim = false): Seg => ({
@@ -147,20 +148,40 @@ function windowOf(lines: Keyed[], id: string | null, h: number, area?: 'tickets'
 
 // --- the fixed lines ---
 
-const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Workflows'], ['health', '3 Health'], ['messages', '4 Messages'], ['explorer', '5 Explorer'], ['run', '6 Build'], ['help', '7 Help']]
+const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Workflows'], ['health', '3 Health'], ['messages', '4 Messages'], ['explorer', '5 Explorer'], ['run', '6 Build'], ['help', '7 Help'], ['dashboard', '8 Dashboard']]
 
-function tabsLine(s: State): Seg[] {
+function tabsLines(s: State): Seg[][] {
   // F66: the unread count rides on the Messages label
   const unread = unreadCount(s.messages, s.msgRead)
-  const label = (id: State['tab'], l: string) => (id === 'messages' && unread ? `${l} (${unread})` : l)
-  const tabs = join(TABS.map(([id, l]): Seg[] => {
+  const label = (id: State['tab'], l: string) => {
+    if (id === 'messages') {
+      const word = s.cols < 48 ? '4 Msgs' : l
+      return unread ? `${word} (${unread})` : word
+    }
+    return s.cols < 48 && id === 'runs' ? '2 Runs' : l
+  }
+  const tabs = TABS.map(([id, l]): Seg[] => {
     const full = label(id, l)
     if (id === s.tab) return actionLine([{ text: full, inverse: true, bold: true }], { kind: 'tab', tab: id })
     if (id === 'messages' && unread) return actionLine([{ text: full, color: 'suggestion', bold: true }], { kind: 'tab', tab: id })
     return actionLine([{ text: full.slice(0, 2), color: 'suggestion' }, { text: full.slice(2) }], { kind: 'tab', tab: id })
-  }), '   ')
+  })
   const right: Seg[] = s.repo ? [{ text: 'ops', color: 'permission', bold: true }, dim(' · '), { text: s.repo, color: 'suggestion' }] : [{ text: 'ops', color: 'permission', bold: true }]
-  return spread([{ text: ' ' }, ...tabs], right, s.cols)
+  const rows: Seg[][] = []
+  const gap = s.cols < 48 ? ' ' : s.cols < 60 ? '  ' : '   '
+  let row: Seg[] = [{ text: ' ' }]
+  for (const tab of tabs) {
+    const separator = row.length > 1 ? gap : ''
+    if (row.length > 1 && width(row) + separator.length + width(tab) > s.cols) {
+      rows.push(row)
+      row = [{ text: ' ' }, ...tab]
+    } else {
+      row.push({ text: separator }, ...tab)
+    }
+  }
+  rows.push(spread(row, right, s.cols))
+  if (rows.length === 1) rows.push([])
+  return rows
 }
 
 // "7 open (6 pending · 1 in progress · 0 blocked · 0 decision) · 2 deferred", over the
@@ -246,6 +267,7 @@ function keysOf(s: State, m: Model): Seg[][] {
     return [move, h(enter, 'return'), h('s Start', 's'), h('Engage', 'e'), h('Rerun', 'r'), h('Push Pending', 'p'), h('Mode: ||/seq', 'm'), quit]
   }
   if (s.tab === 'health') return [[hot('r refresh', 'r')], [hot('R resume', 'R', true)], [hot('c resume CLI', 'c')], [hot('F force resume', 'F', true)], [hot('p re-read status', 'p')], quit]
+  if (s.tab === 'dashboard') return [h('tab switch', 'tab'), quit]
   if (s.tab === 'messages') return [move, h('enter open', 'return'), h('c connect', 'c'), h('d disconnect', 'd'), h('y copy URL', 'y'), h('m mark all read', 'm'), h('s setup', 's'), quit]
   if (s.tab === 'explorer' && s.explorer.action) {
     const a = s.explorer.action
@@ -1075,6 +1097,36 @@ export function helpBody(s: State, room: number): Seg[][] {
   return out
 }
 
+function dashboardBody(s: State, room: number): Seg[][] {
+  const panels = dashboardPanels({
+    board: s.board,
+    health: { usage: s.usage, machine: s.machine, relay: s.relay, now: s.now },
+    runs: s.runsRead ? s.runs : null,
+    unread: unreadCount(s.messages, s.msgRead),
+  }).map(panel => [
+    [{ text: panel.title, color: 'suggestion' as Color, bold: true }],
+    [{ text: panel.summary, color: panel.warning ? 'warning' as Color : undefined }],
+    ...(panel.details ?? []).map(detail => [dim(detail)]),
+  ])
+  if (s.cols < DASHBOARD_WIDE) {
+    if (room < 8) return panels.map(panel => [...panel[0]!, { text: '  ' }, ...panel[1]!])
+    const contentRows = panels.reduce((sum, panel) => sum + panel.length, 0)
+    if (room < contentRows) return panels.flatMap(panel => panel.slice(0, 2))
+    return room < contentRows + panels.length - 1 ? panels.flat() : panels.flatMap((panel, i) => i ? [[], ...panel] : panel)
+  }
+  const half = Math.floor((s.cols - 4) / 2)
+  const contentRows = Math.max(panels[0]!.length, panels[1]!.length) + Math.max(panels[2]!.length, panels[3]!.length)
+  const visibleRows = room < contentRows ? 2 : Infinity
+  return [0, 2].flatMap(i => {
+    const left = panels[i]!, right = panels[i + 1]!
+    const pair = Array.from({ length: Math.min(visibleRows, Math.max(left.length, right.length)) }, (_, row) => {
+      const l = fitSegs(left[row] ?? [], half)
+      return [...l, { text: ' '.repeat(half - width(l) + 4) }, ...fitSegs(right[row] ?? [], half)]
+    })
+    return i && room > contentRows ? [[], ...pair] : pair
+  })
+}
+
 function bodyOf(s: State, m: Model, h: number): Seg[][] {
   const tail = tailLines(s).slice(0, Math.floor(h / 2))
   const block = tail.length && h - tail.length >= 2 ? [[], ...tail] : tail
@@ -1118,6 +1170,7 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
       })
     : s.tab === 'runs' ? runsBody(s, room)
     : s.tab === 'health' ? healthBody(s, room)
+    : s.tab === 'dashboard' ? dashboardBody(s, room)
     : s.tab === 'messages' ? messagesBody(s, room)
     : s.tab === 'explorer' ? explorerBody(s, room)
     : s.tab === 'run' ? windowOf(runTabLines(s), s.runForm ? null : s.runSel, room, 'run')
@@ -1136,9 +1189,11 @@ export function frameSegs(s: State): Seg[][] {
   const m = buildModel(viewOf(s))
   const band = bandSegs(s)
   const kLines = keysLines(s, m)
-  const fixed = 2 + 2 + kLines.length + band.length // tabs, blank | blank, count, ...keys | band
+  const tabs = tabsLines(s)
+  const footer: Seg[][] = s.tab === 'dashboard' ? [[]] : [[], countLine(s, m)]
+  const fixed = tabs.length + footer.length + kLines.length + band.length
   const body = bodyOf(s, m, Math.max(0, rows - fixed))
-  let lines: Seg[][] = [tabsLine(s), [], ...body, [], countLine(s, m), ...kLines, ...band]
+  let lines: Seg[][] = [...tabs, ...body, ...footer, ...kLines, ...band]
   if (lines.length > rows) lines = rows ? [lines[0]!, ...lines.slice(lines.length - (rows - 1))] : []
   return lines.map(l => fitSegs(l, cols))
 }

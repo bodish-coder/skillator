@@ -25,7 +25,7 @@ import {
 const SHA1 = '1234567' + 'a'.repeat(33)
 const SHA2 = '89abcde' + 'b'.repeat(33)
 const FILES = ['README.md', 'mods/a/x.ts', 'mods/a/y.ts', 'mods/b.ts'].join('\0') + '\0'
-const LOG = `${SHA1}\x1f1234567\x1f2026-10-24\x1fVidul\x1fF75: explorer\n${SHA2}\x1f89abcde\x1f2026-10-23\x1fAsha\x1fF74: rename\n`
+const LOG = `${SHA1}\x1f1234567\x1f2026-10-24\x1fVidul\x1fOps@Example.test\0F75: explorer\n${SHA2}\x1f89abcde\x1f2026-10-23\x1fAsha\x1funlisted@example.test\0F74: rename\n`
 const CH1 = ':100644 100644 aaa bbb M\tmods/a/x.ts\n:000000 100644 000 ccc A\tmods/b.ts\n:100644 000000 ddd 000 D\told.md\n\n3\t1\tmods/a/x.ts\n10\t0\tmods/b.ts\n0\t4\told.md\n'
 
 const SHA3 = 'fedcba9' + 'c'.repeat(33)      // F103: the upstream's commit HEAD has not
@@ -37,7 +37,7 @@ const gitOut = (args: string[]): RunResult => {
   if (a === LOG_ARGS.join(' ')) return ok(LOG)
   if (a === UPSTREAM_ARGS.join(' ')) return ok('origin/main\n')
   if (a === COUNT_ARGS.join(' ')) return ok('1\t1\n')
-  if (a === INCOMING_ARGS.join(' ')) return ok(`${SHA3}\x1ffedcba9\x1f2026-10-26\x1fAsha\x1fF100: incoming\n`)
+  if (a === INCOMING_ARGS.join(' ')) return ok(`${SHA3}\x1ffedcba9\x1f2026-10-26\x1fAsha\x1fash@example.test\0F100: incoming\n`)
   if (a === changeArgs(SHA1).join(' ')) return ok(CH1)
   return { code: 128, out: '', err: 'fatal: bad revision', argv: ['git', ...args] }
 }
@@ -59,6 +59,7 @@ function settle(step: Step): State {
 const press = (s: State, ...keys: string[]) => keys.reduce((x, k) => settle(reduce(x, { name: k })), s)
 const P = { color: false, ascii: false, plain: true }
 const text = (s: State) => frame(s, P).join('\n')
+const team = [{ handle: '@Ops', emails: ['ops@example.test'] }, { handle: '@ash', name: 'Asha', emails: ['ash@example.test'] }]
 
 test('5 opens Explorer: git ls-files and git log asked as git effects, nothing run through the scripts table', () => {
   const st = reduce(initial(80, 24, 0), { name: '5' })
@@ -83,8 +84,10 @@ test('the tree: sections start collapsed; enter opens Files, then a folder; coun
 })
 
 test('the commits: one opens to its files with A/M/D and +/- counts, read only when opened; closing drops them', () => {
-  let s = press(initial(80, 24, 0), '5', 'down', 'return')     // the Commits section
-  assert.match(text(s), /^ {2}▸ 1234567 {2}2026-10-24 {2}F75: explorer$/m)
+  let s = press({ ...initial(80, 24, 0), team }, '5', 'down', 'return')     // the Commits section
+  assert.match(text(s), /^ {2}▸ 1234567 {2}2026-10-24 {2}@Ops {2}F75: explorer$/m)
+  assert.match(text(s), /^ {2}▸ 89abcde {2}2026-10-23 {2}Asha {2}F74: rename$/m)
+  assert.doesNotMatch(text(s), /example\.test/)
   const st = reduce(press(s, 'down'), { name: 'return' })
   assert.deepEqual(gits(st.effects).map(e => e.args), [changeArgs(SHA1)])
   s = settle(st)
@@ -131,7 +134,8 @@ test('a long file name or subject with an ESC and a CR is cut to the width of an
   const width = (re: RegExp) => rows.filter(l => re.test(l)).map(l => cells(l))
   const [a, b] = width(/^ {4}[ab]{5}/)
   assert.equal(b, a)
-  const [c, d] = width(/2026-10-2[34] {2}[cd]{5}/)
+  const [c, d] = width(/2026-10-2[34] {2}[VA] {2}[cd]{5}/)
+  assert.ok(c && d)
   assert.equal(d, c)
 })
 
@@ -158,11 +162,11 @@ test('the engine runs git effects through the host (--once too: git only reads)'
 
 // F103: read-only here - the upstream's ahead/behind and the incoming commits, no actions.
 test('F103 ahead/behind vs the upstream and the incoming commits, read-only; no upstream said', () => {
-  let s = settle(reduce(initial(80, 24, 0), { name: '5' }))
+  let s = settle(reduce({ ...initial(80, 24, 0), team }, { name: '5' }))
   assert.match(text(s), /↑1 ↓1 vs origin\/main/)
   assert.match(text(s), /^▸ Incoming \(1\)$/m)
   s = press(s, 'down', 'down', 'return')                          // Files, Commits, Incoming
-  assert.match(text(s), /^ {2}▸ fedcba9 {2}2026-10-26 {2}F100: incoming$/m)
+  assert.match(text(s), /^ {2}▸ fedcba9 {2}2026-10-26 {2}@ash {2}F100: incoming$/m)
   assert.match(text(s), /^\[↑↓ move\] · \[enter open\/close\] · \[r reload\] · \[q quit\]$/m)
   const st = reduce(initial(80, 24, 0), { name: '5' })
   let n = st.state

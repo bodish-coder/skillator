@@ -116,7 +116,7 @@ export type Job = {
 }
 // F75: the Explorer tab (hooks/lib/explorer.ts) - the tree's rows of open folders and
 // the changes of open commits only; `open` holds the open sections, folders and commits.
-export type Commit = { sha: string; short: string; date: string; author: string; subject: string }
+export type Commit = { sha: string; short: string; date: string; author: string; authorEmail?: string; subject: string }
 export type Change = { status: string; path: string; from: string | null; add: number | null; del: number | null }
 export type TreeRow = { path: string; name: string; depth: number; dir: boolean; count: number }
 export type StatusBadge = 'M' | 'A' | 'D' | 'R' | 'C' | '?' | 'U'

@@ -402,11 +402,13 @@ test('tabs, filter mode, team view, refresh, quit', () => {
   assert.equal(reduce(s0, key('3')).state.tab, 'health')
   assert.equal(reduce(press(s0, '3'), key('1')).state.tab, 'tickets')
   assert.equal(reduce(s0, key('tab')).state.tab, 'runs')
-  assert.equal(reduce(s0, key('tab', { shift: true })).state.tab, 'help')   // F160: Help is the 7th tab
+  assert.equal(reduce(s0, key('tab', { shift: true })).state.tab, 'dashboard')
   assert.equal(reduce(press(s0, '4'), key('tab')).state.tab, 'explorer')  // F75: Explorer after Messages
   assert.equal(reduce(press(s0, '5'), key('tab')).state.tab, 'run')
   assert.equal(reduce(press(s0, '6'), key('tab')).state.tab, 'help')
-  assert.equal(reduce(press(s0, '7'), key('tab')).state.tab, 'tickets')
+  assert.equal(reduce(press(s0, '7'), key('tab')).state.tab, 'dashboard')
+  assert.equal(reduce(press(s0, '7'), key('8')).state.tab, 'dashboard')
+  assert.equal(reduce(press(s0, '8'), key('tab')).state.tab, 'tickets')
   assert.equal(reduce(press(s0, '3'), key('tab')).state.tab, 'messages')
 
   const f = reduce(s0, key('f')).state

@@ -3,7 +3,7 @@ import type { BoxProps, ButtonProps, Color, ElementConstructor, EngineInterface,
   SelectProps, TextProps } from 'claude-code'
 import type { Filter } from '../types'
 import { STATE_COLOR } from './lib/board'
-import { buildModel, chipsOf, headKey, isDecidable, toggleGroup, toggleUserSection, UNI, ASCII, cutTo, headText, userHeadText, rowText, chromeRows, windowOf } from './lib/ticketsmodel'
+import { buildModel, chipsOf, headKey, isDecidable, toggleGroup, toggleUserSection, UNI, ASCII, cutTo, headText, userHeadText, rowText, chromeRows, windowOf, PANE_TABS } from './lib/ticketsmodel'
 import type { Model, UserSection, View } from './lib/ticketsmodel'
 export { buildModel, lineKey, offsetFor } from './lib/ticketsmodel'
 export type { View, Model } from './lib/ticketsmodel'
@@ -26,6 +26,7 @@ import { enterRun, isRunFormUp, RunTab } from './runtab'
 import { ActionConfirm, enterExplorer, ExplorerTab, readExplorer, readExplorerAction } from './explorertab'
 import { enterHelp, HelpTab } from './helptab'
 import { LogTab, readLog, say } from './logtab'
+import { DASHBOARD_WIDE, dashboardPanels } from './lib/dashboard'
 
 // The ops board pane (design §5): tab bar, the Tickets tab with its filter row,
 // status rails, a yielding list, and wrapping footer keys.
@@ -36,7 +37,7 @@ export const PANE_TITLE = 'ops board'
 // F76: one tab, id 'runs', labelled Workflows (owner: relay runs and workflows are one thing):
 // a Runs section and a Workflows section. /ops workflows opens it; /ops runs is an alias.
 // F93: its Agents section is the old Agents tab; tab 'run' is labelled Build.
-export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run' | 'help' | 'log'
+export type Tab = typeof PANE_TABS[number]['id']
 // Each file names the atoms it reads or writes as its own consts: the engine's scan
 // lists state access from those, not from an import (register.tsx repeats them).
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
@@ -248,22 +249,15 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
   return out
 }
 
-export async function readView($: EngineInterface, cols: number, rows: number | null = null, unread = 0): Promise<View> {
+export async function readView($: EngineInterface, cols: number, rows: number | null = null, unread = 0, logCount = 0): Promise<View> {
   return {
     board: await read($, boardA), team: await read($, teamA), me: await read($, meA),
     filter: await read($, filterA), filterOpen: await read($, filterOpenA),
     selected: await read($, selectedA), expanded: await read($, expandedA), open: await read($, openA),
     session: await read($, sessionA),
-    cols, ascii: await read($, asciiA), rows, unread, offset: await read($, ticketOffsetA),
+    cols, ascii: await read($, asciiA), rows, unread, logCount, offset: await read($, ticketOffsetA),
   }
 }
-
-const TABS: { id: Tab; label: string }[] = [{ id: 'tickets', label: 'Tickets' }, { id: 'runs', label: 'Workflows' },
-  { id: 'health', label: 'Health' }, { id: 'messages', label: 'Messages' },
-  { id: 'explorer', label: 'Explorer' },   // F75: git-tracked files and recent commits (explorertab.tsx)
-  { id: 'run', label: 'Build' },            // F79: the repo's entry points (runtab.tsx) - not Workflows (id 'runs')
-  { id: 'log', label: 'Log' },
-  { id: 'help', label: 'Help' }]            // F160 / A198: the Skills & Help guide (helptab.tsx)
 
 // F76: the Workflows tab (id 'runs') - a Runs section (relay runs, F50) and a Workflows section (F53),
 // each a header Button with its count that Enter or a click opens and closes, as F61's
@@ -307,13 +301,15 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   const log = await readLog($)
   const bar = (   // B14: whole tabs wrap to a second row in a narrow pane, never cut mid-word
     <Box key="tabs" flexDirection="row" flexWrap="wrap" gap={1}>
-      {TABS.map(x => (
+      {PANE_TABS.map(x => (
         <Button key={'tab:' + x.id} variant={x.id === tab ? 'primary' : undefined} dimColor={x.id !== tab}
           onPress={() => {
             if (x.id !== 'tickets') void clearForm($).catch(() => {})
             void update($, tabA, () => x.id)
-            if (x.id === 'runs') void pollRuns($).catch(() => {})       // read on entering the tab
-            if (x.id === 'runs') void pollAgents($).catch(() => {})     // F93: its Agents section likewise
+            if (x.id === 'runs' || (x.id === 'dashboard' && tab !== 'dashboard')) {
+              void pollRuns($).catch(() => {})
+              void pollAgents($).catch(() => {})
+            }
             if (x.id === 'messages' && tab !== 'messages') void enterMessages($).catch(() => {})
             if (x.id === 'explorer') void enterExplorer($).catch(() => {})        // F75: read on entering the tab
             if (x.id === 'run') void enterRun($).catch(() => {})            // F79: first open scans
@@ -325,6 +321,30 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   // F66: the Teams setup form draws in place of any view, as the assign forms do
   const setup = await renderSetup($, e)
   if (setup) return setup
+  if (tab === 'dashboard') {
+    const [board, health, { runs, loaded }, workflow] = await Promise.all([
+      read($, boardA), readHealth($), readRuns($, cols), readAgents($, cols),
+    ])
+    const wide = cols >= DASHBOARD_WIDE
+    const room = wide ? Math.floor((cols - 4) / 2) : cols
+    const panels = dashboardPanels({ board, health, runs: loaded ? runs : null, unread, workflow }).map(panel => (
+      <Box key={panel.title} width={room} flexDirection="column">
+        <Text bold color="suggestion">{panel.title}</Text>
+        <Text wrap="truncate-end" color={panel.warning ? 'warning' : undefined}>{panel.summary}</Text>
+        {panel.details?.map(text => <Text key={text} wrap="truncate-end" dimColor>{text}</Text>)}
+      </Box>
+    ))
+    return (
+      <Box flexDirection="column">
+        {bar}
+        <Text> </Text>
+        {wide ? <Box flexDirection="column" gap={1}>
+          <Box flexDirection="row" gap={4}>{panels.slice(0, 2)}</Box>
+          <Box flexDirection="row" gap={4}>{panels.slice(2)}</Box>
+        </Box> : <Box flexDirection="column" gap={1}>{panels}</Box>}
+      </Box>
+    )
+  }
   if (tab === 'help') {
     return (
       <Box flexDirection="column">
@@ -395,7 +415,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
       <Box flexDirection="column">
         {bar}
         <Text> </Text>
-        {ExplorerTab($, els, await readExplorer($), cols)}
+        {ExplorerTab($, els, await readExplorer($), cols, await read($, teamA))}
       </Box>
     )
   }
@@ -417,7 +437,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   // from (Tickets or Team); Esc or Cancel brings that view back.
   const form = (await renderStatus($, e)) ?? (await renderForm($, e)) ?? (await renderReconcile($, e)) ?? (await renderIntake($, e))
   if (form) return form
-  const v = await readView($, cols, e.props.scroll?.bodyRows ?? null, unread)
+  const v = await readView($, cols, e.props.scroll?.bodyRows ?? null, unread, log.length)
   const tv = await read($, teamViewA)
   if (tv) {
     return (

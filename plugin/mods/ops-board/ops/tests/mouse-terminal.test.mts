@@ -23,10 +23,12 @@ if (process.argv[2] === 'capture-child') {
     child.stderr.on('data', b => { err += b })
     child.stdout.on('data', b => {
       out += b
-      if (!sent && out.includes('Tickets')) {
+      const firstRow = out.split('\r\n')[0]!.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+      const healthColumn = firstRow.indexOf('3 Health') + 1
+      if (!sent && healthColumn > 0) {
         sent = true
-        child.stdin.write('\x1b[<0;28;1M')
-        child.stdin.write('\x1b[<0;28;1m')
+        child.stdin.write(`\x1b[<0;${healthColumn};1M`)
+        child.stdin.write(`\x1b[<0;${healthColumn};1m`)
         setTimeout(() => child.stdin.write('\x03'), 250)
       }
     })

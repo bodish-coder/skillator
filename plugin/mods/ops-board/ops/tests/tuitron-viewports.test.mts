@@ -18,7 +18,33 @@ RUN-0026  marathon run   3/5 done
 const withRuns = onRuns(s, RUNS_BODY, 0)
 
 const VIEWPORT_WIDTHS = [40, 60, 80, 100, 120]
-const TABS: State['tab'][] = ['tickets', 'runs', 'health', 'messages', 'explorer', 'run', 'help']
+const TABS: State['tab'][] = ['tickets', 'runs', 'health', 'messages', 'explorer', 'run', 'help', 'dashboard']
+
+test('Dashboard opens with 8 and keeps the four summaries and tab hitboxes visible at every width', () => {
+  for (const cols of VIEWPORT_WIDTHS) {
+    const initialFrame = screen({ ...withRuns, cols, rows: 18 }, P)
+    for (const tab of TABS) {
+      assert.ok(initialFrame.hits.some(h => h.action.kind === 'tab' && h.action.tab === tab), `${tab} is clickable at ${cols}`)
+    }
+    const selected = reduce({ ...withRuns, cols, rows: 18 }, { name: '8' })
+    assert.deepEqual(selected.effects, [])
+    const { lines } = screen(selected.state, { ...P, ascii: true })
+    const contents = lines.slice(2).join('\n')
+    assert.match(contents, /7 open \/ 1 blocked \/ 1 to decide/)
+    assert.match(contents, /Machine facts unavailable/)
+    assert.match(contents, /2 running \/ 0 planned \/ 0 completed/)
+    assert.match(contents, /0 unread/)
+    assert.doesNotMatch(contents, /[^\x20-\x7e\n]/)
+  }
+})
+
+test('Dashboard shows all four sections in a short split pane', () => {
+  const lines = frame({ ...withRuns, tab: 'dashboard', cols: 40, rows: 12 }, P).slice(2).join('\n')
+  assert.match(lines, /^Tickets {2}7 open/m)
+  assert.match(lines, /^Health {2}Machine facts unavailable/m)
+  assert.match(lines, /^Workflows {2}2 running/m)
+  assert.match(lines, /^Messages {2}0 unread/m)
+})
 
 test('A165: Tui-tron exhaustive multi-width viewport validation across 40, 60, 80, 100, 120 columns', () => {
   for (const cols of VIEWPORT_WIDTHS) {

@@ -30,7 +30,7 @@ import { enterExplorer, EX0, explorerKey, pickExplorerBranch } from './explorer'
 import type { ExState } from './explorer'
 
 // F79: run = the Run tab (runtab.ts); F75: explorer = the Explorer tab (explorer.ts); F160: help = the Help tab
-export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run' | 'help'
+export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run' | 'help' | 'dashboard'
 export type FilterField = 'app' | 'who' | 'mine'
 
 export type SkillGuide = {
@@ -241,7 +241,7 @@ export const settle = (x: State | Step): Step => ('effects' in x ? x : { state: 
 // A run's result applied at `now`, the clock when it landed (a `then` stamps facts with s.now).
 export const afterRun = (e: { then: Then }, r: RunResult, s: State, now: number): Step => settle(e.then(r)({ ...s, now }))
 
-const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages', 'explorer', 'run', 'help']
+const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages', 'explorer', 'run', 'help', 'dashboard']
 
 export const initial = (cols: number, rows: number, now: number): State => ({
   tab: 'tickets', board: null, team: [], me: null, session: null,
@@ -2446,7 +2446,7 @@ export const COMMANDS: HelpItem[] = [
     triggers: ["ops", "skillator-ops", "open ops", "launch ops board"],
     usage: "Open the ops board (TICKETS.md board, runs, health, messages, explorer, build, help) for this repo in terminal or browser. Claude Code and pi have /ops; on Codex use $skillator-ops, on Antigravity and OpenCode the plugin command skillator-ops.",
     examples: ["/ops", "/ops tickets", "/ops help", "/ops --open"],
-    hint: "[terminal|tickets|workflows|health|messages|explorer|build|help]"
+    hint: "[terminal|tickets|workflows|health|messages|explorer|build|help|dashboard]"
   },
   {
     id: "pending-sentinel",
@@ -2726,6 +2726,7 @@ export function helpKey(s: State, k: Key): Step {
   if (k.name === '5') return toTab(s, 'explorer')
   if (k.name === '6') return toTab(s, 'run')
   if (k.name === '7') return same
+  if (k.name === '8') return toTab(s, 'dashboard')
   if (k.name === 'tab') {
     const at = TABS.indexOf(s.tab)
     return toTab(s, TABS[(at + (k.shift ? TABS.length - 1 : 1)) % TABS.length]!)
@@ -2875,6 +2876,7 @@ export function reduce(s: State, k: Key): Step {
     case '5': return toTab(s, 'explorer')
     case '6': return toTab(s, 'run')          // F79's Run moved to 6: F75's Explorer took 5
     case '7': return openHelp(s)
+    case '8': return toTab(s, 'dashboard')
     case '?': return openHelp(s)
     case 'tab': {
       const at = TABS.indexOf(s.tab)

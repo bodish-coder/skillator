@@ -16,7 +16,7 @@ import {
 const SHA1 = '1234567' + 'a'.repeat(33)
 const SHA2 = '89abcde' + 'b'.repeat(33)
 const FILES = ['README.md', 'mods/a/x.ts', 'mods/a/y.ts', 'mods/b.ts'].join('\0') + '\0'
-const LOG = `${SHA1}\x1f1234567\x1f2026-10-24\x1fVidul\x1fF75: explorer\n${SHA2}\x1f89abcde\x1f2026-10-23\x1fAsha\x1fF74: rename\n`
+const LOG = `${SHA1}\x1f1234567\x1f2026-10-24\x1fVidul\x1fOps@Example.test\0F75: explorer\n${SHA2}\x1f89abcde\x1f2026-10-23\x1fAsha\x1funlisted@example.test\0F74: rename\n`
 const CH1 = ':100644 100644 aaa bbb M\tmods/a/x.ts\n:000000 100644 000 ccc A\tmods/b.ts\n:100644 000000 ddd 000 D\told.md\n\n3\t1\tmods/a/x.ts\n10\t0\tmods/b.ts\n0\t4\told.md\n'
 const CH2 = ':100644 100644 eee eee R100\tsrc/old.ts\tsrc/new.ts\n:100644 100644 fff 111 M\tlogo.png\n\n0\t0\tsrc/{old.ts => new.ts}\n-\t-\tlogo.png\n'
 
@@ -35,7 +35,7 @@ const answer = (args: readonly string[]): ProcessRunResult => {
   if (a.includes('ls-files')) return ran(FILES)
   if (a === 'rev-parse --abbrev-ref @{upstream}') return ran('origin/main\n')
   if (a.startsWith('rev-list --left-right --count')) return ran('1\t1\n')
-  if (a.includes('HEAD..@{upstream}')) return ran(`${SHA3}\x1ffedcba9\x1f2026-10-26\x1fAsha\x1fF100: incoming\n`)
+  if (a.includes('HEAD..@{upstream}')) return ran(`${SHA3}\x1ffedcba9\x1f2026-10-26\x1fAsha\x1fash@example.test\0F100: incoming\n`)
   if (a.includes(SHA1)) return ran(CH1)
   if (a.includes(SHA2)) return ran(CH2)
   if (a.includes(SHA3)) return ran(CH1)
@@ -62,7 +62,10 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
     if (a.startsWith('branch --format')) return ran('main\nfeature/x\nrun/RUN-0021-y\n')
     return w.git(args)
   }
-  const files: Record<string, string> = { '/r/TICKETS.md': '# Tickets\n\n## Open\n\n- [ ] F1 — one\n' }
+  const files: Record<string, string> = {
+    '/r/TICKETS.md': '# Tickets\n\n## Open\n\n- [ ] F1 — one\n',
+    '/r/.skillator/team.md': '- @Ops: ops@example.test\n- @ash: ash@example.test\n  name: Asha\n',
+  }
   const at = (p: string) => files[p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')]
   const clock = mock.clock(on, { now: 1_000_000 })
   mock.env(on, env)
@@ -161,14 +164,14 @@ for (const surface of SURFACES) {
     const text = async (key: string) => (await ui.find({ key }))?.text
     await ui.press({ key: 'xs:commits' })
     await clock.settle()
-    expect(await text('xc:' + SHA1)).toBe('  ▸ 1234567  2026-10-24  F75: explorer')
-    expect(await text('xc:' + SHA2)).toBe('  ▸ 89abcde  2026-10-23  F74: rename')
+    expect(await text('xc:' + SHA1)).toBe('  ▸ 1234567  2026-10-24  @Ops  F75: explorer')
+    expect(await text('xc:' + SHA2)).toBe('  ▸ 89abcde  2026-10-23  Asha  F74: rename')
     expect(gitRuns(w).filter(r => r.argv.includes(SHA1))).toHaveLength(0)      // lazy: not read until opened
     const log = gitRuns(w).find(r => r.argv.includes('log') && !r.argv.includes('-1'))!
     expect(log.argv).toContain('-n40')                                         // a bounded number of commits
     await ui.press({ key: 'xc:' + SHA1 })
     await clock.settle()
-    expect(await text('xc:' + SHA1)).toBe('  ▾ 1234567  2026-10-24  F75: explorer')
+    expect(await text('xc:' + SHA1)).toBe('  ▾ 1234567  2026-10-24  @Ops  F75: explorer')
     expect(await text(`xch:${SHA1}:0`)).toBe('      M  mods/a/x.ts  +3 -1')
     expect(await text(`xch:${SHA1}:1`)).toBe('      A  mods/b.ts  +10 -0')
     expect(await text(`xch:${SHA1}:2`)).toBe('      D  old.md  +0 -4')
@@ -262,17 +265,17 @@ test('a file name or commit subject with control bytes is drawn without them', W
   w.git = args => {
     const a = args.join(' ')
     if (a.includes('ls-files')) return ran('ev\u001b[31mil.ts\0')
-    if (a.includes(' log ')) return ran(`${SHA1}\x1f1234567\x1f2026-10-24\x1fVidul\x1fbad\u001b]0;pwned\u0007 sub\rject\n`)
+    if (a.includes(' log ')) return ran(`${SHA1}\x1f1234567\x1f2026-10-24\x1fVi\u001bdul\x1fbad\u001b]0;pwned\u0007 sub\rject\n`)
     return answer(args)
   }
   await start($, clock)
-  const ui = await mountExplorer($, clock, 'terminal')
+  const ui = await mountExplorer($, clock, 'terminal', 60)
   await ui.press({ key: 'xs:files' })
   await ui.press({ key: 'xs:commits' })
   await clock.settle()
   const all = (await ui.findAll({ type: 'Text' })).map(t => t.text).join('\n')
   expect(all).toContain('ev[31mil.ts')
-  expect(all).toContain('bad]0;pwned subject')
+  expect(all).toContain('Vidul  bad]0;pwned subject')
   expect(all).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f]/)
   await ui.unmount()
 })
@@ -327,7 +330,7 @@ test('F103 upstream and incoming: the count line, the Incoming section only when
   expect(explorerLines(x, 60).find(l => l.key === COMMITS)!.segs.map(s => s.text).join('')).toBe('▾ Commits (2)  ↑0 ↓0 vs origin/main')
   expect(explorerLines(x, 60).some(l => l.key === INCOMING)).toBe(false)
   x = withIncoming(withUpstream(x, 'origin/main', '0\t1'), `${SHA2}\x1f89abcde\x1f2026-10-25\x1fAsha\x1fF99: diagnose\n`)
-  expect(explorerLines({ ...x, open: [COMMITS, INCOMING] }, 60).find(l => l.key === 'xi:' + SHA2)!.segs.map(s => s.text).join('')).toBe('  ▸ 89abcde  2026-10-25  F99: diagnose')
+  expect(explorerLines({ ...x, open: [COMMITS, INCOMING] }, 60).find(l => l.key === 'xi:' + SHA2)!.segs.map(s => s.text).join('')).toBe('  ▸ 89abcde  2026-10-25  Asha  F99: diagnose')
   expect(toggle(x, 'xi:' + SHA2).need).toEqual({ files: false, sha: SHA2 })
   expect(explorerLines(withUpstream(x, null, null), 60).find(l => l.key === COMMITS)!.segs.map(s => s.text).join('')).toBe('▾ Commits (2)  no upstream')
   expect(isRunRef('run/RUN-0022-x')).toBe(true); expect(isRunRef('C:/r/.skillator/worktrees/RUN-1-a')).toBe(true); expect(isRunRef('main')).toBe(false)
@@ -438,7 +441,7 @@ test('F103 after a fetch the Commits head shows ↑1 ↓1 vs origin/main and Inc
   expect((await ui.find({ key: 'xs:commits' }))?.text).toBe('▸ Commits (2)  ↑1 ↓1 vs origin/main')
   expect((await ui.find({ key: 'xs:incoming' }))?.text).toBe('▸ Incoming (1)')
   await ui.press({ key: 'xs:incoming' }); await clock.settle()
-  expect((await ui.find({ key: 'xi:' + SHA3 }))?.text).toBe('  ▸ fedcba9  2026-10-26  F100: incoming')
+  expect((await ui.find({ key: 'xi:' + SHA3 }))?.text).toBe('  ▸ fedcba9  2026-10-26  @ash  F100: incoming')
   await ui.press({ key: 'xi:' + SHA3 }); await clock.settle()
   expect((await ui.find({ key: `xch:${SHA3}:0` }))?.text).toBe('      M  mods/a/x.ts  +3 -1')
   await ui.unmount()

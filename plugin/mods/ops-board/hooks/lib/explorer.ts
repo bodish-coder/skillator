@@ -1,5 +1,5 @@
 import type { Color } from 'claude-code'
-import type { Action, ActionKind, ActionRunState, AiReviewResult, Change, Commit, Explorer, StatusBadge, TreeRow, WorkTreeFile } from '../../types'
+import type { Action, ActionKind, ActionRunState, AiReviewResult, Change, Commit, Explorer, Member, StatusBadge, TreeRow, WorkTreeFile } from '../../types'
 import type { Seg } from './bandlines'
 import { clean } from './bandlines'
 import type { Model } from './ticketsmodel'
@@ -46,7 +46,7 @@ export const LS_ARGS = ['ls-files', '-z']
 export const STATUS_ARGS = ['-c', 'core.quotePath=false', 'status', '--porcelain=v1', '-z', '-uall']
 export const DIFF_CACHED_ARGS = ['diff', '--cached', '--no-color', '--no-ext-diff']
 export const OUTGOING_ARGS = ['log', '@{upstream}..HEAD', '--oneline']
-export const LOG_ARGS = ['-c', 'core.quotePath=false', 'log', `-n${LOG_N}`, '--date=short', '--format=%H%x1f%h%x1f%ad%x1f%an%x1f%s']
+export const LOG_ARGS = ['-c', 'core.quotePath=false', 'log', `-n${LOG_N}`, '--date=short', '--format=%H%x1f%h%x1f%ad%x1f%aN%x1f%aE%x00%s']
 // With both, --name-status wins and --numstat is dropped: --raw carries the same A/M/D/R
 // status and comes first, the numstat lines follow in the same order. A merge: against
 // its first parent.
@@ -832,8 +832,14 @@ export const parseFiles = (out: string) => out.split('\0').map(s => clean(s.repl
 export function parseLog(out: string): Commit[] {
   const cs: Commit[] = []
   for (const l of out.split(/\r?\n/)) {
-    const [sha, short, date, author, ...rest] = l.split('\x1f').map(clean)
-    if (sha && isSha(sha) && short !== undefined) cs.push({ sha, short, date: date ?? '', author: author ?? '', subject: rest.join('') })
+    const [sha, short, date, author, ...rest] = l.split('\x1f')
+    if (!sha || !isSha(sha) || short === undefined) continue
+    // The NUL distinguishes the mailmapped email from a subject in the older log format.
+    const details = rest.join('\x1f')
+    const separator = details.indexOf('\0')
+    const authorEmail = separator < 0 ? '' : details.slice(0, separator).trim().toLowerCase()
+    cs.push({ sha, short: clean(short), date: clean(date ?? ''), author: clean(author ?? ''),
+      ...(authorEmail ? { authorEmail } : {}), subject: clean(details.slice(separator + 1)) })
   }
   return cs
 }
@@ -997,7 +1003,7 @@ export const selectedOf = (x: Explorer): string => {
   return x.selected && items.includes(x.selected) ? x.selected : items[0]!
 }
 
-export function explorerLines(x: Explorer, cols: number): ExLine[] {
+export function explorerLines(x: Explorer, cols: number, team: readonly Member[] = []): ExLine[] {
   const sel = selectedOf(x)
   const out: ExLine[] = []
   const line = (item: string, lead: string, segs: Seg[]) => {
@@ -1011,8 +1017,13 @@ export function explorerLines(x: Explorer, cols: number): ExLine[] {
     for (const c of list) {
       const glyph = x.open.includes(pre + c.sha) ? '▾' : '▸'
       const fixed = `${glyph} ${c.short}  ${c.date}  `
+      const room = Math.max(4, cols - 3 - fixed.length)
+      const email = c.authorEmail
+      const handle = email && team.find(m => m.emails.includes(email))?.handle
+      const authorRoom = Math.min(20, Math.floor((room - 2) / 2))
+      const author = authorRoom >= 4 ? cut(handle || c.author.trim() || 'Unknown author', authorRoom) + '  ' : ''
       line(pre + c.sha, '  ', [{ text: `${glyph} `, color: 'suggestion' }, { text: c.short, color: 'warning', bold: true }, { text: `  ${c.date}  `, color: 'permission' },
-        { text: cut(c.subject, Math.max(4, cols - 3 - fixed.length)) }])
+        { text: author, color: 'permission' }, { text: cut(c.subject, room - author.length) }])
       const ch = x.changes[c.sha]
       if (!x.open.includes(pre + c.sha)) continue
       if (!ch) { out.push({ key: `xch:${c.sha}:none`, item: null, segs: [{ text: '      reading…', dim: true }] }); continue }

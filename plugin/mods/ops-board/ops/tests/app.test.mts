@@ -221,6 +221,44 @@ test('ps1 launcher refuses an old node with exit 2', { skip: !win }, () => {
 const FAKE_TTY = 'data:text/javascript,' + encodeURIComponent(
   "process.stdin.isTTY = true; process.stdin.setRawMode = on => { process.stderr.write('raw:' + on + '\\n'); return process.stdin }")
 
+for (const cols of [40, 60, 80, 100, 120]) {
+  test(`live: pressing 8 opens the Dashboard at ${cols} columns`, async () => {
+    const s = fixtureSkills()
+    const ttySize = 'data:text/javascript,' + encodeURIComponent(
+      `Object.assign(process.stdout, { isTTY: true, columns: ${cols}, rows: 24 })`)
+    const child = spawn(process.execPath, ['--import', FAKE_TTY, '--import', ttySize,
+      '--import', pathToFileURL(join(ops, 'loader.mjs')).href, join(ops, 'app.ts'),
+      '--no-color', '--ascii', '--skills', s.dir], { cwd: fixtureRepo() })
+    let out = '', err = '', dashboard = ''
+    let sent = false
+    const bare = (text: string) => text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    child.stderr.setEncoding('utf8').on('data', (text: string) => { err += text })
+    child.stdout.setEncoding('utf8').on('data', (text: string) => {
+      out += text
+      if (!sent && bare(out).includes('In progress (1)')) {
+        sent = true
+        child.stdin.write('8')
+      }
+      const latest = bare(out.split('\x1b[H').at(-1) ?? '')
+      if (sent && !dashboard && latest.split('\r\n').length === 24 &&
+        latest.includes('2 open / 0 blocked') && latest.includes('RUN-0099 1/2 stages')) {
+        dashboard = latest
+        child.stdin.write('q')
+      }
+    })
+    const timer = setTimeout(() => child.kill(), 20000)
+    const code = await new Promise<number | null>(resolve => child.on('close', resolve))
+    clearTimeout(timer)
+    assert.equal(code, 0, err + bare(out).slice(-800))
+    assert.match(dashboard, /RAM 8\.4 GB free/)
+    assert.match(dashboard, /0 unread/)
+    for (const line of dashboard.split('\r\n')) {
+      assert.ok(line.length <= cols, `${line.length} > ${cols}: ${line}`)
+      assert.doesNotMatch(line, /[^\x20-\x7e]/)
+    }
+  })
+}
+
 test('live: Messages login confirmation cancels without launching or saving at 60 columns', async () => {
   const s = fixtureSkills()
   const child = spawn(process.execPath, ['--import', FAKE_TTY, '--import', pathToFileURL(join(ops, 'loader.mjs')).href, join(ops, 'app.ts'),
@@ -280,7 +318,8 @@ test('flags: sizes, paint, tab, skills; anything else is an error', () => {
   // F76: the Workflows tab (id runs) is --tab workflows; --tab runs stays an alias
   assert.equal(parseArgs(['--tab', 'workflows']).tab, 'runs')
   assert.equal(parseArgs(['--tab', 'runs']).tab, 'runs')
-  assert.equal(parseArgs(['--tab', 'bogus']).error, 'ops: --tab is one of tickets, workflows, health, messages, explorer, build, help, got bogus')
+  assert.equal(parseArgs(['--tab', 'dashboard']).tab, 'dashboard')
+  assert.equal(parseArgs(['--tab', 'bogus']).error, 'ops: --tab is one of tickets, workflows, health, messages, explorer, build, help, dashboard, got bogus')
   assert.equal(parseArgs(['--tab', 'agents']).tab, 'runs')          // F93: the agents word opens Workflows
   assert.equal(parseArgs(['--tab', 'build']).tab, 'run')            // F93: Build is tab run; run stays an alias
   assert.equal(parseArgs(['--tab', 'explorer']).tab, 'explorer')
@@ -288,7 +327,7 @@ test('flags: sizes, paint, tab, skills; anything else is an error', () => {
   assert.equal(parseArgs(['--tab', 'help']).tab, 'help')
   assert.equal(parseArgs(['--tab', 'guide']).tab, 'help')
   assert.equal(parseArgs(['--tab', 'skills']).tab, 'help')
-  assert.match(USAGE, /--tab tickets\|workflows\|health\|messages\|explorer\|build\|help\]$/)
+  assert.match(USAGE, /--tab tickets\|workflows\|health\|messages\|explorer\|build\|help\|dashboard\]$/)
   assert.match(parseArgs(['stray']).error ?? '', /unknown flag stray/)
 })
 

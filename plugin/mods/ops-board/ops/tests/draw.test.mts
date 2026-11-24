@@ -31,9 +31,10 @@ test('a frame is rows × ≤cols, tab bar first, band last, no escapes without c
   const f = sized(s)
   assert.equal(f.length, 24)
   assert.match(f[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build   7 Help$/)
-  // F160: seven tabs fit in 80 columns; "ops · <repo>" fits at 100 columns
+  // At 80 columns the Dashboard rides the second row; at 120 all tabs and the repo fit.
   assert.match(sized({ ...s, repo: 'skillator2' })[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build   7 Help$/)
-  assert.match(sized({ ...s, repo: 'skillator2', cols: 100 })[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build   7 Help +ops · skillator2$/)
+  assert.match(f[1]!, /^ 8 Dashboard/)
+  assert.match(sized({ ...s, repo: 'skillator2', cols: 120 })[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build   7 Help   8 Dashboard +ops · skillator2$/)
   assert.match(f[23]!, /^● ops · mem \? · disk \? · 5h \? · 7d \?$/)       // one band line at 80 columns
   assert.match(sized({ ...s, me: '@sher' })[23]!, /^● ops @sher · mem \? · disk \? · 5h \? · 7d \?$/) // F162: session owner in bottom band
   assert.match(text(s), /  ▾ In progress \(1\)\n› ● B2  CSV export drops the last row/)
@@ -936,7 +937,7 @@ test('F160/A198: 7 Help tab header, SKILL.md doc content, run prompt box, and wi
 })
 
 test('F161: standalone ops board rich semantic colors across tab bar, buttons, ticket IDs, tags, count line, and modals', () => {
-  const c = frame({ ...s, repo: 'skillator2', cols: 100 }, { color: true, ascii: false })
+  const c = frame({ ...s, repo: 'skillator2', cols: 120 }, { color: true, ascii: false })
   // Tab bar: active tab inverse, inactive tabs highlight number prefix in cyan, repo badge in magenta + cyan
   assert.match(c[0]!, /^ \x1b\[1;97;44m1 Tickets\x1b\[0m/)
   assert.match(c[0]!, /\x1b\[36m2 \x1b\[0mWorkflows/)

@@ -23,7 +23,7 @@ import { say } from './logtab'
 // Ticket state is a coloured dot from the board, never a bracket code.
 
 const actionFocusA = atom({ plugin: 'ops-board', key: 'actionFocus' } as const, null)
-const runsA = atom({ plugin: 'ops-board', key: 'runs' } as const, [])
+const runsA = atom({ plugin: 'ops-board', key: 'runs' } as const, null as RunView[] | null)
 const relayA = atom({ plugin: 'ops-board', key: 'relay' } as const, null)
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
 const engageA = atom({ plugin: 'ops-board', key: 'engage' } as const, null)
@@ -96,7 +96,7 @@ export async function closeEngage($: EngineInterface) {
 // Engage: refused at once (a toast naming the driver) while another driver is live, else
 // the confirm, Esc its Cancel.
 export async function openEngage($: EngineInterface, id: string): Promise<void> {
-  const run = (await read($, runsA)).find(r => r.id === id)
+  const run = (await read($, runsA))?.find(r => r.id === id)
   if (!run) return
   const e = engageOf(run, await $.clock.now())
   if ('refused' in e) { say($, e.refused); return }
@@ -111,7 +111,7 @@ export async function engageGo($: EngineInterface): Promise<void> {
   const g = await read($, engageA)
   await closeEngage($)
   if (!g) return
-  const run = (await read($, runsA)).find(r => r.id === g.id)
+  const run = (await read($, runsA))?.find(r => r.id === g.id)
   const e = run ? engageOf(run, await $.clock.now()) : { refused: `■ ${g.id} is no longer an open run` }
   if ('refused' in e) { say($, e.refused); return }
   if (!e.queue) {
@@ -325,13 +325,14 @@ export async function readDiagnose($: EngineInterface): Promise<Diagnose | null>
   return read($, diagnoseA)
 }
 
-export type RunsView = { runs: RunView[]; board: Board | null; cols: number; engage: Engage | null; startRun?: StartRunDraft | null }
+export type RunsView = { runs: RunView[]; loaded?: boolean; board: Board | null; cols: number; engage: Engage | null; startRun?: StartRunDraft | null }
 
 // The runs the tab draws in full: those not all done (F99: the finished ones get one dim row after them).
 export const openRuns = (runs: RunView[]) => runs.filter(r => !isFinished(r))   // F99: the one definition
 
 export async function readRuns($: EngineInterface, cols: number): Promise<RunsView> {
-  return { runs: await read($, runsA), board: await read($, boardA), cols, engage: await read($, engageA), startRun: await read($, startRunA) }
+  const runs = await read($, runsA)
+  return { runs: runs ?? [], loaded: runs !== null, board: await read($, boardA), cols, engage: await read($, engageA), startRun: await read($, startRunA) }
 }
 
 // A196: native Start Run form state + guarded session prompt submission
@@ -410,7 +411,7 @@ export async function startRunGo($: EngineInterface): Promise<void> {
 
 // A197: Push Pending creates a distinct follow-up run via relay-push-pending and derives toast from FOLLOWUP result
 export async function pushPendingRunNative($: EngineInterface, id?: string): Promise<void> {
-  const runs = await read($, runsA)
+  const runs = (await read($, runsA)) ?? []
   const open = openRuns(runs)
   const r0 = (id ? runs.find(r => r.id === id) : open[0]) ?? runs[0]
   if (!r0) { say($, 'no run available to push pending stages'); return }

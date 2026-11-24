@@ -24,7 +24,7 @@ import { pendingHandoffOf } from './lib/inbox'
 import { closeRunForm, dropRunForm, enterRun, isRunFormUp } from './runtab'
 import { arrowExplorer, cancelAction, dropAction, enterExplorer, focusExplorer, isActionUp, isExplorerItem } from './explorertab'
 import { arrowHelp, enterHelp, focusHelp, isHelpItem } from './helptab'
-import { say } from './logtab'
+import { readLog, say } from './logtab'
 
 // Wiring only (design §4): /ops, the 2 s TICKETS.md poll, team and me, the pane
 // and its keys; the 60 s machine / relay / usage poll, the band, the watchdog hold on
@@ -274,7 +274,8 @@ async function pollMachine($: EngineInterface) {
 // relay: the first run of `relay-morpheus list` not all done, "RUN-0012 2/4". On the
 // Runs tab its own 30 s poll lists relay and sets this too: one relay list per cycle.
 async function pollRelay($: EngineInterface) {
-  if ((await read($, tabA)) === 'runs') return
+  const tab = await read($, tabA)
+  if (tab === 'runs' || tab === 'dashboard') return
   const r = await runCall($, 'relay-list', [])
   if (r.code !== 0) return
   const run = parseRuns(r.out, {}).find(x => x.done < x.total)
@@ -424,11 +425,11 @@ async function arm($: EngineInterface) {
   $.clock.every(SLOW_MS, () => { void slowPoll($).catch(() => {}) })
   // F50: the Runs tab re-reads relay every 30 s while it is the tab shown.
   $.clock.every(RUNS_POLL_MS, () => {
-    void (async () => { if ((await read($, tabA)) === 'runs') await pollRuns($) })().catch(() => {})
+    void (async () => { const tab = await read($, tabA); if (tab === 'runs' || tab === 'dashboard') await pollRuns($) })().catch(() => {})
   })
   // F53: the agents list is re-read every 5 s while Workflows (F93: its Agents section) is the tab shown.
   $.clock.every(AGENTS_POLL_MS, () => {
-    void (async () => { if ((await read($, tabA)) === 'runs') await pollAgents($) })().catch(() => {})
+    void (async () => { const tab = await read($, tabA); if (tab === 'runs' || tab === 'dashboard') await pollAgents($) })().catch(() => {})
   })
 }
 
@@ -441,13 +442,14 @@ async function openPane($: EngineInterface, asked: boolean) {
   return r
 }
 
-const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', explorer: 'Explorer', run: 'Build', help: 'Help', log: 'Log' }
+const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', explorer: 'Explorer', run: 'Build', help: 'Help', log: 'Log', dashboard: 'Dashboard' }
 // F76: /ops workflows opens the Workflows tab (id runs) with its Workflows section open; /ops runs is
 // an alias that opens it with its Runs section open. F93: /ops agents opens it with its Agents section
 // open; /ops build opens tab run, /ops run an alias. F160: /ops help and /ops guide open tab help.
-const WORDS = ['tickets', 'workflows', 'runs', 'health', 'messages', 'agents', 'explorer', 'build', 'run', 'help', 'guide', 'log']
+const WORDS = ['tickets', 'workflows', 'runs', 'health', 'messages', 'agents', 'explorer', 'build', 'run', 'help', 'guide', 'log', 'dashboard']
 const SECTION_OF: Record<string, 'runs' | 'workflows' | 'agents'> = { runs: 'runs', workflows: 'workflows', agents: 'agents' }
-const USAGE = 'usage: /ops [tickets|workflows|health|messages|explorer|build|log|help|resume [force]|watchdog on|watchdog off|watchdog status] - runs and agents open Workflows too, run opens Build, guide opens Help;'
+const OPS_ARGS = '[tickets|workflows|health|messages|explorer|build|log|help|dashboard|resume [force]|watchdog on|watchdog off|watchdog status]'
+const USAGE = `usage: /ops ${OPS_ARGS} - runs and agents open Workflows too, run opens Build, guide opens Help;`
   + ' resume force releases the hold whatever the reading and mutes memory red until it reads green once (watchdog on unmutes)'
 
 export const register: Register = on => {
@@ -457,8 +459,8 @@ export const register: Register = on => {
     await update($, asciiA, () => ['1', 'true', 'yes'].includes(env) || stored === true)
     await $.command.register({
       name: 'ops',
-      description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs, Workflow runs and agents), health, Teams messages, the explorer, build entries, popup log and the skills help guide',
-      argumentHint: '[tickets|workflows|health|messages|explorer|build|log|help|resume [force]|watchdog on|watchdog off|watchdog status]',
+      description: 'Open the ops board pane: dashboard, TICKETS.md board, workflows (relay runs, Workflow runs and agents), health, Teams messages, explorer, build entries, popup log and skills help',
+      argumentHint: OPS_ARGS,
     })
     await $.command.register({
       name: 'list-tickets',
@@ -541,8 +543,8 @@ export const register: Register = on => {
     if (tab && tab !== 'explorer') await dropAction($)    // F103: the git action confirm likewise
     if (tab) await update($, tabA, () => tab)
     if (sec) await update($, runsOpenA, x => (x.includes(sec) ? x : [...x, sec]))
-    if (tab === 'runs') void pollRuns($).catch(() => {})
-    if (tab === 'runs') void pollAgents($).catch(() => {})
+    if (tab === 'runs' || tab === 'dashboard') void pollRuns($).catch(() => {})
+    if (tab === 'runs' || tab === 'dashboard') void pollAgents($).catch(() => {})
     if (word === 'messages') void enterMessages($).catch(() => {})
     if (word === 'explorer') void enterExplorer($).catch(() => {})
     if (tab === 'run') void enterRun($).catch(() => {})     // F79: the Build tab, first open scans
@@ -678,7 +680,7 @@ export const register: Register = on => {
         return lastScroll.offset ? next({ ...e, offset: 0 }) : {}
       }
       if (e.origin.kind !== 'person') return next(e)
-      const v = await readView($, lastCols, e.bodyRows, await unreadOf($))
+      const v = await readView($, lastCols, e.bodyRows, await unreadOf($), (await readLog($)).length)
       const m = buildModel(v)
       const room = Math.max(1, e.bodyRows - chromeRows(v, m, v.ascii ? ASCII : UNI).total)
       if (e.pointer || Math.abs(e.by) !== 1) {

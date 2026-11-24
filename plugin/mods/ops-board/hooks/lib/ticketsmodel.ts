@@ -81,6 +81,7 @@ export type View = {
   ascii?: boolean; rows?: number | null // omitted by the standalone ops app
   offset?: number | null              // list rows; null follows the selection
   unread?: number
+  logCount?: number
 }
 
 export type Glyphs = { open: string; closed: string; rail: string; railDim: string; dot: string;
@@ -88,7 +89,12 @@ export type Glyphs = { open: string; closed: string; rail: string; railDim: stri
 export const UNI: Glyphs = { open: '▾', closed: '▸', rail: '▌ ', railDim: '▏ ', dot: '●', more: '…', down: '↓', up: '↑', move: '↑↓', sep: '·', active: '● ', cut: '…' }
 export const ASCII: Glyphs = { open: 'v', closed: '>', rail: '| ', railDim: ': ', dot: '*', more: '...', down: 'v', up: '^', move: '^v', sep: '-', active: '', cut: '...' }
 export const STATE_WORD: Record<State, string> = { ' ': 'open', '~': 'wip ', '%': 'test', v: 'vrfd', '!': 'blkd', '?': 'dec ', '>': 'defr', x: 'done', '-': 'canc' }
-export const TAB_LABELS = ['Tickets', 'Workflows', 'Health', 'Messages', 'Explorer', 'Build', 'Help']
+export const PANE_TABS = [
+  { id: 'tickets', label: 'Tickets' }, { id: 'runs', label: 'Workflows' },
+  { id: 'health', label: 'Health' }, { id: 'messages', label: 'Messages' },
+  { id: 'explorer', label: 'Explorer' }, { id: 'run', label: 'Build' },
+  { id: 'log', label: 'Log' }, { id: 'help', label: 'Help' }, { id: 'dashboard', label: 'Dashboard' },
+] as const
 export const KEY_LABELS = ['move', 'a assign', 'd decide', 'f filter', 'x done', 't team', 'c reconcile', 'i intake', 'u ask', 's status', 'h help', 'r refresh']
 
 export function packRows(widths: number[], cols: number, gap: number): number {
@@ -120,8 +126,11 @@ export function rowText(t: Ticket, cols: number, glyphs: Glyphs, ascii: boolean,
 }
 
 export function chromeRows(v: View, m: Model, g: Glyphs) {
-  const tabs = packRows(TAB_LABELS.map((l, i) => l.length + (v.ascii ? 2 : i === 0 ? g.active.length : 0)
-    + (i === 3 && v.unread ? String(v.unread).length + 1 : 0)), v.cols, 1)
+  const tabs = packRows(PANE_TABS.map(({ id, label }) => {
+    const badge = id === 'messages' ? v.unread : id === 'log' ? v.logCount : 0
+    return label.length + (v.ascii ? 2 : id === 'tickets' ? g.active.length : 0)
+      + (badge ? String(badge).length + 1 : 0)
+  }), v.cols, 1)
   const c = m.count
   const countItems = m.filterActive ? [c.text.length] : [`${c.open} open`.length, ...c.dots.map(d => (g.dot + d.n).length),
     ...(c.closed.length ? v.filter.showDone ? [g.sep.length, ...c.closed.map(d => (g.dot + d.n).length), 6]

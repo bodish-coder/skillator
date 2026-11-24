@@ -474,7 +474,7 @@ export function explorerBody(s: State, h: number): Seg[][] {
   const x = { ...x0, actionNotice: isShown(x0.actionNotice) ? null : x0.actionNotice, error: isShown(x0.error) ? null : x0.error }
   const prefix = s.explorer.action ? actionConfirmSegs(s.explorer.action) : (h >= 6 ? [...actionBar(s.cols), []] : [])
   const remH = Math.max(0, h - prefix.length)
-  const lines = explorerLines(x, s.cols).map(l => ({ ...l, segs: l.segs.map(g => ({ ...g, text: clean(g.text), ...(l.item ? { action: { kind: 'row' as const, area: 'explorer' as const, id: l.item } } : {}) })) }))
+  const lines = explorerLines(x, s.cols, s.team).map(l => ({ ...l, segs: l.segs.map(g => ({ ...g, text: clean(g.text), ...(l.item ? { action: { kind: 'row' as const, area: 'explorer' as const, id: l.item } } : {}) })) }))
   if (lines.length <= remH) return [...prefix, ...lines.map(l => l.segs)]
   if (remH <= 1) return [...prefix, ...(remH ? [lines[0]!.segs] : [])].slice(0, h)
   const top = explorerOffset(lines, selectedOf(x), 0, remH - 1) ?? 0

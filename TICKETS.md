@@ -204,6 +204,10 @@ their section.
 
 - [%] F194 — Show quota status progress and isolate Antigravity profiles. Keep usable last-known quota values visible with a refresh-pending label while a live lock exists. Show checked/total progress in interactive terminals and keep piped output as a plain table. Resolve each Antigravity account through the same profile paths as its launcher. [owner: @sher] (testing: focused status tests, Windows terminal progress, and six isolated Antigravity profile fixtures passed. Live account readings remain to verify.)
 
+- [%] F195 — Add an Ops Board dashboard. Done = native and standalone views provide a readable overview of ticket counts, health and workflow activity with links into the detail views. The dashboard adapts to narrow terminals and reuses the board's existing readings. [owner: @sher] (testing: mounted native checks at 60 and 100 columns, and standalone app checks at 40–120 columns)
+
+- [%] F196 — Show team authors on Ops Board Explorer commits. Done = Explorer labels Git authors with their matching team handle in both adapters and shows the Git author name for unmatched commits. [owner: @sher] (testing: Explorer checks passed in both adapters, including matching, fallback, and a real Git mailmap probe)
+
 ## Agent-found
 
 - [x] A62 — auto-invocation is untested on cursor, codex, antigravity and pi; `PLATFORMS.md` now says so rather than implying otherwise, which documents the hole without closing it. This is the real remainder of A57. Includes: prime-agent has no markdown-skill loader at all, so a user there must hand-write `.skillator/grayskull.md` — unverified whether anyone has (deferred: every host but prime-agent verified - A62a/b/c; the remainder is A62d, waiting on prime-agent being installed) (@cc-629d8e)
