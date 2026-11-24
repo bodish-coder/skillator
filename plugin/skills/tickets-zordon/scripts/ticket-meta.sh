@@ -18,7 +18,8 @@
 #   ticket-meta.sh done <ID> [evidence] box -> [x], tagged, ` **Done <date>: <evidence>**`
 #   ticket-meta.sh block <ID> <on what> box -> [!], the line says ` (blocked: <on what>)`
 #   ticket-meta.sh defer <ID> <until>   box -> [>], the line says ` (deferred: <until>)`
-#   ticket-meta.sh tag <ID>             recompute [app: ..] and [by: ..] on it
+#   ticket-meta.sh tag [--force-app] <ID>  fill [app: ..] and refresh [by: ..]
+#   ticket-meta.sh src <ID> <value>        set [src: ..]
 #   ticket-meta.sh team add @handle "Name" email[,email...]
 #                                       a member into .skillator/team.md
 #   ticket-meta.sh team remove @handle  that member out (warns on open tickets)
@@ -45,8 +46,8 @@
 # file only (team writes too: `board: team ..`); `board:` commits are not a ticket's work.
 #
 # Apps: folders under apps/*, packages/*, services/*, plus package.json
-# "workspaces" and pnpm-workspace.yaml globs; the folder name is the app. No such
-# folder = no apps. People: .skillator/team.md, lines `- @handle: a@x, b@y`,
+# "workspaces" and pnpm-workspace.yaml globs; the folder name is the app.
+# Optional .skillator/apps.map prefixes take precedence. People: .skillator/team.md, lines `- @handle: a@x, b@y`,
 # each optionally followed by an indented `  name: Full Name` line, and at most one
 # `lead: @handle` line under the `# Team` heading (F80; none = no lead). No team
 # file = no people (by prints nothing, assign refuses). `team add` creates it.
@@ -58,6 +59,7 @@
 # code>) every write stamps the line's trailing tag `(@<sid>:<owner or ->:<mode>)`, mode
 # from SKILLATOR_MODE (direct|agent|run|workflow, default direct); the old one-field
 # `(@cc-xxxxxx)` stays valid and is replaced. A move out of [~] keeps the tag (A143).
+# The src command also keeps the stamp, since it edits source metadata only.
 set -u
 LC_ALL=C
 export LC_ALL
@@ -74,6 +76,7 @@ LOCKF=''
 LOCK_ME=''
 # Guarded options never come from the inherited environment.
 GUARDED_STATUS='' EXPECT_ROW='' DROP_WAIT='' KEEP_SESSION='' SET_SESSION='' DROP_SESSION=''
+FILL_APP='' SET_SRC=''
 
 die() { board_unlock; echo "ticket-meta: $*" >&2; exit 1; }
 
@@ -258,17 +261,36 @@ app_rows() {
   done | sort -u
 }
 
-# Paths on stdin -> app names, first-seen order, one per path (longest folder wins).
+app_map_rows() {
+  [ -f "$TOP/.skillator/apps.map" ] || return 0
+  awk '
+    function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+    { if (NR == 1) sub(/^\357\273\277/, "")
+      sub(/\r$/, ""); i = index($0, "=")
+      if (!i || $0 ~ /^[ \t]*#/) next
+      p = trim(substr($0, 1, i - 1)); n = trim(substr($0, i + 1))
+      gsub(/\\/, "/", p); sub(/^(\.\/)+/, "", p)
+      if (p != "" && n != "" && p !~ /^(\/|[A-Za-z]:)/ && p !~ /(^|\/)\.\.(\/|$)/ &&
+          p !~ /[[:cntrl:]]/ && n !~ /[][(),[:cntrl:]]/ && !seen[p]++) print n "\t" p }' "$TOP/.skillator/apps.map"
+}
+
+# Paths on stdin -> app names, first-seen order. Mapped prefixes take precedence over folders.
 map_paths() {
-  ROWS=$(app_rows) awk '
+  ROWS=$(app_rows) MAP=$(app_map_rows) awk '
     BEGIN { n = split(ENVIRON["ROWS"], R, "\n")
             for (i = 1; i <= n; i++) { split(R[i], f, "\t"); nm[i] = f[1]; pa[i] = f[2] }
+            m = split(ENVIRON["MAP"], R, "\n")
+            for (i = 1; i <= m; i++) { split(R[i], f, "\t"); mn[i] = f[1]; mp[i] = f[2] }
             t = ENVIRON["TOP"] }
     { p = $0; gsub(/\\/, "/", p)
       if (index(p, t "/") == 1) p = substr(p, length(t) + 2)
       sub(/^(\.\/)+/, "", p)
       best = ""; bl = 0
-      for (i = 1; i <= n; i++) {
+      for (i = 1; i <= m; i++) {
+        q = mp[i]
+        if (q != "" && index(p, q) == 1 && length(q) > bl) { best = mn[i]; bl = length(q) }
+      }
+      if (best == "") for (i = 1; i <= n; i++) {
         q = pa[i]
         if (q != "" && (p == q || index(p, q "/") == 1) && length(q) > bl) { best = nm[i]; bl = length(q) }
       }
@@ -456,7 +478,7 @@ edit_line() {
     sess=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$/)) {
           s = substr($0, RSTART + 1); sub(/\).*/, "", s); print s } }')
   fi
-  tag_text
+  if [ "$SUB" = src ]; then SET_TAG=''; else tag_text; fi
   [ "$moved" = 0 ] || SET_TAG=''
   if [ -n "$KEEP_SESSION" ] && printf '%s\n' "$cur" | grep -Eq '\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$'; then SET_TAG=''; fi
   export SET_TAG
@@ -507,14 +529,15 @@ edit_line() {
       sub(/[ \t]+$/, "", line)
       return line note
     }
-    BEGIN { ord_count = split("app decide owner session tester by working work-history", ORD); re = ENVIRON["RE"] }
+    BEGIN { ord_count = split("app src decide owner session tester by working work-history", ORD); re = ENVIRON["RE"] }
     { line = $0; cr = ""
       if (sub(/\r$/, "", line)) cr = "\r"
       if (line ~ re) {
         if (ENVIRON["SET_MARK"] != "") {
           match(line, /- \[/); line = substr(line, 1, RSTART + 2) ENVIRON["SET_MARK"] substr(line, RSTART + 4)
         }
-        if (ENVIRON["SET_APP"] != "") line = settag(line, "app", ENVIRON["SET_APP"])
+        if (ENVIRON["SET_APP"] != "" && (ENVIRON["FILL_APP"] == "" || !find(line, "app"))) line = settag(line, "app", ENVIRON["SET_APP"])
+        if (ENVIRON["SET_SRC"] != "") line = settag(line, "src", ENVIRON["SET_SRC"])
         if (ENVIRON["SET_DECIDE"] != "") line = settag(line, "decide", ENVIRON["SET_DECIDE"])
         if (ENVIRON["SET_OWNER"] != "") line = settag(line, "owner", ENVIRON["SET_OWNER"])
         if (ENVIRON["SET_SESSION"] != "") line = settag(line, "session", ENVIRON["SET_SESSION"])
@@ -863,7 +886,7 @@ cmd_done() {
   info=$(commits_info "$ID")
   a=$(printf '%s\n' "$info" | apps_from | join_list)
   b=$(printf '%s\n' "$info" | by_from | join_list)
-  SET_MARK='x' SET_APP=$a SET_DECIDE='' SET_OWNER='' SET_BY=$b NOTE_VAL='' DONE_NOTE=$dn REFUSE_MARKS='-' SAME_KEY='' NEED_MARK='' edit_line
+  SET_MARK='x' SET_APP=$a FILL_APP=1 SET_DECIDE='' SET_OWNER='' SET_BY=$b NOTE_VAL='' DONE_NOTE=$dn REFUSE_MARKS='-' SAME_KEY='' NEED_MARK='' edit_line
 }
 
 # Record a verdict on a Testing or Verified ticket and replace its earlier verdict.
@@ -1074,12 +1097,26 @@ cmd_reconcile() {
 }
 
 cmd_tag() {
-  [ $# -eq 1 ] || die "usage: tag <ID>"
-  norm_id "$1"
+  fill=1
+  case $#:${1:-}:${2:-} in
+    1:*) norm_id "$1" ;;
+    2:--force-app:*) fill=''; norm_id "$2" ;;
+    2:*:--force-app) fill=''; norm_id "$1" ;;
+    *) die "usage: tag [--force-app] <ID>" ;;
+  esac
   info=$(commits_info "$ID")
   a=$(printf '%s\n' "$info" | apps_from | join_list)
   b=$(printf '%s\n' "$info" | by_from | join_list)
-  SET_MARK='' SET_APP=$a SET_DECIDE='' SET_OWNER='' SET_BY=$b SAME_KEY='' NEED_MARK='' edit_line
+  SET_MARK='' SET_APP=$a FILL_APP=$fill SET_DECIDE='' SET_OWNER='' SET_BY=$b SAME_KEY='' NEED_MARK='' edit_line
+}
+
+cmd_src() {
+  [ $# -eq 2 ] || die "usage: src <ID> <value>"
+  norm_id "$1"
+  case $2 in *[[:cntrl:]]*|*'['*|*']'*|*'('*|*')'*) die 'invalid source value' ;; esac
+  source_value=$(printf '%s' "$2" | sed 's/^ *//; s/ *$//')
+  [ -n "$source_value" ] || die 'source value is empty'
+  SET_SRC=$source_value SAME_KEY=src SAME_VAL=$source_value NEED_MARK='' edit_line
 }
 
 # Members of team file $1, one row each: "@handle<TAB>emails<TAB>name" - the
@@ -2103,14 +2140,14 @@ teams_post() {
   return 0
 }
 
-[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|assign-app|assign-tester|assign-session|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest"
+[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|assign-app|assign-tester|assign-session|decide|decided|testing|tested|verify|done|block|defer|tag|src|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest"
 c=$1; shift
 SUB=$c
 [ "$c" = selftest ] && { selftest; exit 0; }
 need_git
 export TOP SOH
 case $c in
-  apps) app_rows | cut -f1 | sort -u ;;
+  apps) { app_rows | cut -f1 | sort -u; app_map_rows | cut -f1; } | awk '!seen[$0]++' ;;
   app-of) for p in "$@"; do printf '%s
 ' "$p"; done | map_paths ;;
   by) [ $# -eq 1 ] || die "usage: by <ID>"; norm_id "$1"; commits_info "$ID" | by_from ;;
@@ -2128,6 +2165,7 @@ case $c in
   block) cmd_block "$@" && teams_post block "$@" ;;
   defer) cmd_defer "$@" && teams_post defer "$@" ;;
   tag) cmd_tag "$@" ;;
+  src) cmd_src "$@" ;;
   team) cmd_team "$@" ;;
   intake) cmd_intake "$@" ;;
   whoami) cmd_whoami "$@" ;;

@@ -161,7 +161,7 @@ board() {
       if (v != "") tag = tag (tag == "" ? "" : " ") v
       note = ""
       if (match(r, /\(testing:[^)]*\)/)) note = trim(substr(r, RSTART + 9, RLENGTH - 10))
-      gsub(/\[(app|owner|decide|by|session):[^]]*\]/, "", r); gsub(/\(@[^() ]+\)/, "", r); gsub(/\(testing:[^)]*\)/, "", r)
+      gsub(/\[(app|src|owner|decide|by|session):[^]]*\]/, "", r); gsub(/\(@[^() ]+\)/, "", r); gsub(/\(testing:[^)]*\)/, "", r)
       a = index(r, " ("); b = index(r, ". "); if (b && (!a || b < a)) a = b
       if (a) r = substr(r, 1, a - 1)
       gsub(/  +/, " ", r); r = trim(r)

@@ -55,7 +55,7 @@ export function parseBoard(text: string, path: string, mtimeMs: number, size: nu
     let session: string | null = null
     const s = SESSION_TAIL.exec(body)
     if (s) { session = s[1]!; body = body.slice(0, s.index) }
-    let cut = body.search(/ \[(?:app|decide|owner|session|working|work-history|tester|by):/)
+    let cut = body.search(/ \[(?:app|src|decide|owner|session|working|work-history|tester|by):/)
     if (cut < 0) cut = body.search(/ \([^()]*\)\s*$/)
     const baseTitle = (cut < 0 ? body : body.slice(0, cut)).trim()
     const title = al ? `${al} ${baseTitle}` : baseTitle

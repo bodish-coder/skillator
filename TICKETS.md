@@ -208,6 +208,12 @@ their section.
 
 - [%] F196 — Show team authors on Ops Board Explorer commits. Done = Explorer labels Git authors with their matching team handle in both adapters and shows the Git author name for unmatched commits. [owner: @sher] (testing: Explorer checks passed in both adapters, including matching, fallback, and a real Git mailmap probe)
 
+- [%] F197 — Preserve existing ticket app tags. `tag` and `done` preserve existing `[app:]` under the board lock and infer it when absent. `tag --force-app` explicitly refreshes it from commits. Done = matching Bash and PowerShell behavior. [owner: @sher] (testing: Bash and PowerShell fixture commits confirm preservation, inference and forced refresh)
+
+- [%] F198 — Map changed paths to ticket apps. `.skillator/apps.map` maps repo-relative prefixes to app names. Longest matching prefix wins and unmatched paths keep workspace detection. Done = both shells list and infer mapped names. [owner: @sher] (testing: Bash and PowerShell fixtures confirm longest prefix, first duplicate, workspace fallback and commit inference)
+
+- [%] F199 — Record a ticket source tag. `ticket-meta src <ID> <value>` writes `[src:]` after `[app:]` while preserving other tags. Done = both shells agree and the title checker ignores source metadata. [owner: @sher] (testing: Bash and PowerShell source edits, title checker and board parser checks passed)
+
 ## Agent-found
 
 - [x] A62 — auto-invocation is untested on cursor, codex, antigravity and pi; `PLATFORMS.md` now says so rather than implying otherwise, which documents the hole without closing it. This is the real remainder of A57. Includes: prime-agent has no markdown-skill loader at all, so a user there must hand-write `.skillator/grayskull.md` — unverified whether anyone has (deferred: every host but prime-agent verified - A62a/b/c; the remainder is A62d, waiting on prime-agent being installed) (@cc-629d8e)

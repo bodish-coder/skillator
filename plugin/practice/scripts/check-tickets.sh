@@ -285,7 +285,7 @@ LC_ALL=C awk '
     r = $0; sub(/^[ \t]*- \[.\][ \t]+/, "", r); match(r, /^[A-Z]+[0-9]+[a-z]*/)
     id = substr(r, 1, RLENGTH); r = substr(r, RLENGTH + 1)
     sub(/^[ \t]*(\342\200\224|\342\200\223|-)?[ \t]*/, "", r)
-    gsub(/\[(app|owner|session|decide|by):[^]]*\]/, "", r); gsub(/\(@[^() ]+\)/, "", r); gsub(/\(testing:[^)]*\)/, "", r)
+    gsub(/\[(app|src|owner|session|decide|by):[^]]*\]/, "", r); gsub(/\(@[^() ]+\)/, "", r); gsub(/\(testing:[^)]*\)/, "", r)
     a = index(r, " ("); b = index(r, ". "); if (b && (!a || b < a)) a = b
     if (a) r = substr(r, 1, a - 1)
     gsub(/[ \t]+/, " ", r); gsub(/^ +| +$/, "", r)

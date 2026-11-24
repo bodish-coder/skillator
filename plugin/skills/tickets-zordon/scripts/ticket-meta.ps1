@@ -5,7 +5,7 @@
 #   ticket-meta.ps1 assign <ID> @handle | assign-app <ID> <app,...> | assign-tester <ID> @handle | assign-session <ID> <code>|- | decide <ID> @handle | decided <ID>
 #   ticket-meta.ps1 testing <ID> <what test> | tested <ID> pass|fail | verify <ID> pass|fail|owner <evidence>
 #   ticket-meta.ps1 done <ID> [evidence] | block <ID> <on what> | defer <ID> <until what>
-#   ticket-meta.ps1 tag <ID> | selftest
+#   ticket-meta.ps1 tag [--force-app] <ID> | src <ID> <value> | selftest
 #   ticket-meta.ps1 team add @handle "Name" email[,email...] | team remove @handle | team list
 #   ticket-meta.ps1 team lead @handle|- | whoami | claim <ID>... | pick [ID...]   (F80)
 #   With powershell -File, use -clear for assign-session and team lead; its host rejects a bare -.
@@ -256,14 +256,32 @@ function Sort-C([string[]]$xs) {
   return $l.ToArray()
 }
 
+function Get-AppMapRows {
+  $file = Join-Path (Get-Top) '.skillator/apps.map'
+  if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { return }
+  $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  foreach ($line in [IO.File]::ReadLines($file, $Utf8)) {
+    $i = $line.IndexOf('=')
+    if ($i -lt 0 -or $line -cmatch '^[ \t]*#') { continue }
+    $p = $line.Substring(0, $i).Trim(' ', "`t").Replace('\', '/') -creplace '^(\./)+', ''
+    $n = $line.Substring($i + 1).Trim(' ', "`t")
+    if ($p -and $n -and $p -cnotmatch '^(?:/|[A-Za-z]:)|(?:^|/)\.\.(?:/|$)|[\x00-\x1f\x7f]' -and
+        $n -cnotmatch '[\[\](),\x00-\x1f\x7f]' -and $seen.Add($p)) { @{ n = $n; p = $p } }
+  }
+}
+
 function Get-Apps {
   $names = @()
   foreach ($a in (Get-AppRows)) { $names += $a.n }
-  return (Sort-C $names)
+  $ordered = New-Object System.Collections.Generic.List[string]
+  foreach ($name in (Sort-C $names)) { $ordered.Add($name) }
+  foreach ($a in (Get-AppMapRows)) { if (-not $ordered.Contains($a.n)) { $ordered.Add($a.n) } }
+  return $ordered.ToArray()
 }
 
 function Map-Paths([string[]]$paths) {
   $rows = Get-AppRows
+  $map = @(Get-AppMapRows)
   $t = Get-Top
   $out = New-Object System.Collections.ArrayList
   foreach ($p0 in $paths) {
@@ -271,10 +289,18 @@ function Map-Paths([string[]]$paths) {
     if ($p.StartsWith("$t/")) { $p = $p.Substring($t.Length + 1) }
     $p = $p -replace '^(\./)+', ''
     $best = ''; $bl = 0
-    foreach ($a in $rows) {
+    foreach ($a in $map) {
       $q = $a.p
-      if ($q -ne '' -and ($p -ceq $q -or $p.StartsWith("$q/", [System.StringComparison]::Ordinal)) -and $q.Length -gt $bl) {
+      if ($q.Length -gt $bl -and $p.StartsWith($q, [System.StringComparison]::Ordinal)) {
         $best = $a.n; $bl = $q.Length
+      }
+    }
+    if (-not $best) {
+      foreach ($a in $rows) {
+        $q = $a.p
+        if ($q -ne '' -and ($p -ceq $q -or $p.StartsWith("$q/", [System.StringComparison]::Ordinal)) -and $q.Length -gt $bl) {
+          $best = $a.n; $bl = $q.Length
+        }
       }
     }
     if ($best -ne '' -and -not $out.Contains($best)) { [void]$out.Add($best) }
@@ -326,14 +352,14 @@ function Find-Tag([string]$line, [string]$key) {
   return [regex]::Match($line, '[ \t]*\[' + $key + ':[ \t]*[^\]]*\]')
 }
 
-# A tag goes where it is, else before the next tag in app/decide/owner/session/tester/by order, else
+# A tag goes where it is, else before the next tag in metadata order, else
 # before the trailing (..) groups and a bare "Plan: S<n>" before them
 # (check-tickets must still see that pointer as bare).
 function Set-Tag([string]$line, [string]$key, [string]$val) {
   $tag = " [$key" + ": $val]"
   $m = Find-Tag $line $key
   if ($m.Success) { return $line.Substring(0, $m.Index) + $tag + $line.Substring($m.Index + $m.Length) }
-  $ord = @('app', 'decide', 'owner', 'session', 'tester', 'by', 'working', 'work-history')
+  $ord = @('app', 'src', 'decide', 'owner', 'session', 'tester', 'by', 'working', 'work-history')
   $pos = -1
   for ($i = [array]::IndexOf($ord, $key) + 1; $i -lt $ord.Length; $i++) {
     $m = Find-Tag $line $ord[$i]
@@ -502,7 +528,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
     $moved = $mk -ceq '~' -and $o.mark -and $o.mark -cne '~' -and $o.mark -cne '%'
     # F109: every write stamps this session's tag - not a move out of [~] (A143)
     $tagText = ''
-    if (-not $moved) { $tagText = Get-TagText ([string]$o.me) }
+    if (-not $moved -and -not $o.src) { $tagText = Get-TagText ([string]$o.me) }
     if ($o.working) {
       $oldWorker = [regex]::Match($line, '\[working: ([a-z0-9_]+-[a-z0-9_-]+)\]').Groups[1].Value
       if ($o.expectedworker -and $oldWorker -cne $o.expectedworker) { Fail "${id}: working session is '$oldWorker'; refresh before transferring work" }
@@ -522,7 +548,8 @@ function Edit-Line([string]$id, [hashtable]$o) {
       }
     }
     if ($o.mark) { $line = $line.Substring(0, $b) + $o.mark + $line.Substring($b + 1) }
-    foreach ($k in @('app', 'decide', 'owner', 'session', 'tester', 'by')) {
+    foreach ($k in @('app', 'src', 'decide', 'owner', 'session', 'tester', 'by')) {
+      if ($k -ceq 'app' -and $o.fillapp -and (Find-Tag $line 'app').Success) { continue }
       if ($o[$k]) { $line = Set-Tag $line $k $o[$k] }
     }
     if ($o.dropsession) { $m = Find-Tag $line 'session'; $line = $line.Remove($m.Index, $m.Length) }
@@ -901,7 +928,7 @@ function Do-Done([string[]]$a) {
   $info = Get-Info $id
   $apps = [string]::Join(', ', @(Get-AppsFrom $info))
   $by = [string]::Join(', ', @(Get-ByFrom $info))
-  return (Edit-Line $id @{ mark = 'x'; app = $apps; by = $by; done = $dn; refuse = '-'; cmd = 'done' })
+  return (Edit-Line $id @{ mark = 'x'; app = $apps; fillapp = $true; by = $by; done = $dn; refuse = '-'; cmd = 'done' })
 }
 
 # F64: can't proceed until something outside it lands: [!], ` (blocked: <on what>)`.
@@ -1111,12 +1138,24 @@ function Do-Reconcile([string[]]$a) {
 }
 
 function Do-Tag([string[]]$a) {
-  if ($a.Count -ne 1) { Fail 'usage: tag <ID>' }
-  $id = Get-NormId $a[0]
+  $fillApp = $true
+  if ($a.Count -eq 2 -and $a[0] -ceq '--force-app') { $fillApp = $false; $id = Get-NormId $a[1] }
+  elseif ($a.Count -eq 2 -and $a[1] -ceq '--force-app') { $fillApp = $false; $id = Get-NormId $a[0] }
+  elseif ($a.Count -eq 1) { $id = Get-NormId $a[0] }
+  else { Fail 'usage: tag [--force-app] <ID>' }
   $info = Get-Info $id
   $apps = [string]::Join(', ', @(Get-AppsFrom $info))
   $by = [string]::Join(', ', @(Get-ByFrom $info))
-  return (Edit-Line $id @{ app = $apps; by = $by })
+  return (Edit-Line $id @{ app = $apps; fillapp = $fillApp; by = $by })
+}
+
+function Do-Src([string[]]$a) {
+  if ($a.Count -ne 2) { Fail 'usage: src <ID> <value>' }
+  $id = Get-NormId $a[0]
+  if ($a[1] -cmatch '[\[\]()\x00-\x1f\x7f]') { Fail 'invalid source value' }
+  $value = $a[1].Trim(' ')
+  if (-not $value) { Fail 'source value is empty' }
+  return (Edit-Line $id @{ src = $value; samekey = 'src'; sameval = $value })
 }
 
 # Members of team file $f, file order: @{ h = '@handle'; e = emails as written,
@@ -1442,6 +1481,7 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'block' { return (Do-Block $a) }
     'defer' { return (Do-Defer $a) }
     'tag' { return (Do-Tag $a) }
+    'src' { return (Do-Src $a) }
     'team' { return (Do-Team $a) }
     'intake' { return (Do-Intake $a) }
     'whoami' { return (Do-Whoami $a) }
@@ -2298,7 +2338,7 @@ function Invoke-Selftest {
 }
 
 if ($args.Count -lt 1) {
-  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|assign-app|assign-tester|assign-session|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest')
+  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|assign-app|assign-tester|assign-session|decide|decided|testing|tested|verify|done|block|defer|tag|src|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest')
   exit 1
 }
 $cmd = [string]$args[0]

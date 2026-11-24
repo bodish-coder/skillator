@@ -50,7 +50,7 @@ their section.
 
 Line format, kept greppable: `- [<status>] <ID> — <one-line title>`. Optional
 trailing ` (@owner)` or ` (branch: x)` if the user wants it, and the
-`[app: ..] [decide: ..] [owner: ..] [by: ..]` tags of **Apps and people** before it; nothing
+`[app: ..] [src: ..] [decide: ..] [owner: ..] [by: ..]` tags of **Apps and people** before it; nothing
 else. Sub-parts are indented two spaces under their parent.
 
 The title comes first and is short: at most 60 characters, a name the owner
@@ -107,12 +107,18 @@ Every tag is optional and lines without them stay valid; never add an empty one.
   `decide`/`owner`/`by` tags, no assigning, nothing about people in a list.
 - **Apps** are the workspace folders: `apps/*`, `packages/*`, `services/*`, and
   the package manager's workspaces (`package.json` `"workspaces"`,
-  `pnpm-workspace.yaml`); each folder name is an app. No such folder = no apps.
+  `pnpm-workspace.yaml`). For teams with different app boundaries, put `repo/relative/prefix=App Name`
+  rules in `.skillator/apps.map`. Prefixes are case-sensitive, and `/` is the path separator.
+  The longest matching prefix wins. For duplicate prefixes, the first rule wins.
+  Paths without a matching rule use workspace detection. `apps` also lists names from the map.
 - `decide` = the person who must make a decision on it. `owner` = the person
   who implements it. `by` = authors of commits whose subject
   names the ID as a word (`F1` never matches `F12`), mapped to handles; an email
   not in the team file shows as the email. `app` = apps those commits' files
-  sit in; it may be hand-set or corrected on the line.
+  sit in. `tag` and `done` keep an existing `[app:]`. To change it, use `assign-app`
+  or recompute it from commits with `tag --force-app`.
+- `src` is one optional value for who or what raised the ticket, such as `owner`,
+  `tester`, `agent`, or a tool name. It follows `[app:]` when both are present.
 
 `scripts/ticket-meta.sh` beside this file does all of it (Windows:
 `ticket-meta.ps1`, same arguments) and edits only the one line, every other byte
@@ -132,7 +138,9 @@ sh <skills>/tickets-zordon/scripts/ticket-meta.sh tested F12 pass    # [%] -> [x
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh done F12 RED/GREEN 3/3, abc1234  # [x] + tag, ` **Done <date>: ..**`
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh block F12 S3 creds from ops     # [!] ` (blocked: ..)`
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh defer F12 after the parser rewrite  # [>] ` (deferred: ..)`
-sh <skills>/tickets-zordon/scripts/ticket-meta.sh tag F12         # write app + by
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh tag F12         # fill missing app, refresh by
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh tag --force-app F12 # refresh app from commits
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh src F12 tester     # set [src: tester]
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh whoami          # F80: my @handle; F109: + session: @<sid>  mode:
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh iam @asha       # F92: this session's owner
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh stamp F12       # F109: the (@sid:owner:mode) tag only

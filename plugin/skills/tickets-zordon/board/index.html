@@ -564,7 +564,7 @@ function parse(text) {
     /* F43/F45: `[app: ..] [decide: @x] [owner: @x] [by: @y]` tags come off the title and draw
        as chips; a line without them parses exactly as before. */
     const tags = [];
-    let title = idm[3].replace(/\s*\[(app|decide|owner|by|session):\s*([^\]]*)\]/g,
+    let title = idm[3].replace(/\s*\[(app|src|decide|owner|by|session):\s*([^\]]*)\]/g,
       (_, k, v) => { tags.push([k, v.trim()]); return ""; }).trim();
 
     /* A trailing parenthetical is a reason only when it names one. Everything

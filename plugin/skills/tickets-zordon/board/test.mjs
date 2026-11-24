@@ -76,6 +76,13 @@ function loadBoardRuntime() {
   return { ...sandbox.__board, elements, getEl };
 }
 
+test("source metadata is separate from the title", () => {
+  const { parse } = loadBoardRuntime();
+  const { tickets: [ticket] } = parse("- [ ] F199 - Report from CI [app: web] [src: test runner]");
+  assert.equal(ticket.title, "Report from CI");
+  assert.equal(ticket.tags.map(([name, value]) => `${name}=${value}`).join(","), "app=web,src=test runner");
+});
+
 test("A204: parse preserves lowercase sub-ticket suffix and normalizes only prefix", () => {
   const { parse } = loadBoardRuntime();
   const input = [
