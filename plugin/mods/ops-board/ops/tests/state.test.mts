@@ -338,7 +338,7 @@ const LIST = 'RUN-0012  Ops everywhere                               0/2 done\n 
 const CHAIN = '## Chain\n### S1 - stage 1 - F1 Dark mode\ntickets: F1\n### S2 - stage 2 - F3 Chart\ntickets: F3\nafter: 1\n'
 
 test('runs: onRuns sets the runs and the relay text; up/down move; Enter expands; e engages (F85: a confirm, then queue-run add)', () => {
-  const s = onRuns(reduce(s0, key('2')).state, LIST, { 'RUN-0012': CHAIN })
+  const s = onRuns(reduce(s0, key('8')).state, LIST, { 'RUN-0012': CHAIN })
   assert.equal(s.runs.length, 2); assert.equal(s.relay, 'RUN-0012 0/2'); assert.equal(s.runsSelected, 'RUN-0012')
   assert.equal(reduce(s, key('down')).state.runsSelected, 'RUN-0013')
   assert.equal(reduce(press(s, 'down'), key('up')).state.runsSelected, 'RUN-0012')
@@ -357,7 +357,7 @@ test('runs: onRuns sets the runs and the relay text; up/down move; Enter expands
 })
 // F99: e on a finished run is refused - nothing left to drive.
 test('runs: e on a finished run is refused with a toast, no confirm', () => {
-  const s = onRuns(reduce(s0, key('2')).state, 'RUN-0012  two  0/2 done\nRUN-0011  done before  3/3 done\n', {})
+  const s = onRuns(reduce(s0, key('8')).state, 'RUN-0012  two  0/2 done\nRUN-0011  done before  3/3 done\n', {})
   assert.deepEqual(s.runs.map(r => r.id), ['RUN-0012', 'RUN-0011'])
   const r = reduce(press(s, 'down'), key('e'))
   assert.equal(r.state.engage, null)
@@ -368,7 +368,7 @@ test('runs: e on a finished run is refused with a toast, no confirm', () => {
 // groups: up/down walk the headers and the rows of an open section, Enter on a header
 // opens or closes it (a run hidden in it shows as its header selected), s on a header runs nothing.
 test('F76: runs and workflows sections - both start open, Enter on a header closes it, the cursor walks headers', () => {
-  const s = onRuns(reduce(s0, key('2')).state, LIST, { 'RUN-0012': CHAIN })
+  const s = onRuns(reduce(s0, key('8')).state, LIST, { 'RUN-0012': CHAIN })
   assert.deepEqual(s.runsOpen, ['runs', 'workflows'])
   assert.equal(runsCursor(s), 'RUN-0012')
   assert.equal(runsCursor(press(s, 'up')), 'head:runs')
@@ -397,18 +397,18 @@ test('F76: runs and workflows sections - both start open, Enter on a header clos
 })
 
 test('tabs, filter mode, team view, refresh, quit', () => {
-  assert.equal(reduce(s0, key('2')).state.tab, 'runs')
-  assert.deepEqual(reduce(s0, key('2')).effects, [{ kind: 'poll', what: 'runs' }])
+  assert.equal(reduce(s0, key('8')).state.tab, 'runs')
+  assert.deepEqual(reduce(s0, key('8')).effects, [{ kind: 'poll', what: 'runs' }])
   assert.equal(reduce(s0, key('3')).state.tab, 'health')
-  assert.equal(reduce(press(s0, '3'), key('1')).state.tab, 'tickets')
-  assert.equal(reduce(s0, key('tab')).state.tab, 'runs')
+  assert.equal(reduce(press(s0, '3'), key('2')).state.tab, 'tickets')
+  assert.equal(reduce(s0, key('tab')).state.tab, 'health')
   assert.equal(reduce(s0, key('tab', { shift: true })).state.tab, 'dashboard')
   assert.equal(reduce(press(s0, '4'), key('tab')).state.tab, 'explorer')  // F75: Explorer after Messages
   assert.equal(reduce(press(s0, '5'), key('tab')).state.tab, 'run')
   assert.equal(reduce(press(s0, '6'), key('tab')).state.tab, 'help')
-  assert.equal(reduce(press(s0, '7'), key('tab')).state.tab, 'dashboard')
-  assert.equal(reduce(press(s0, '7'), key('8')).state.tab, 'dashboard')
-  assert.equal(reduce(press(s0, '8'), key('tab')).state.tab, 'tickets')
+  assert.equal(reduce(press(s0, '7'), key('tab')).state.tab, 'runs')
+  assert.equal(reduce(press(s0, '7'), key('1')).state.tab, 'dashboard')
+  assert.equal(reduce(press(s0, '8'), key('tab')).state.tab, 'dashboard')
   assert.equal(reduce(press(s0, '3'), key('tab')).state.tab, 'messages')
 
   const f = reduce(s0, key('f')).state
@@ -667,7 +667,7 @@ test('F61: Enter on a header opens and closes it; the selection stays on the hea
   assert.equal(row.selected, 'F3'); assert.equal(row.expanded, 'F3'); assert.deepEqual(row.open, ['?'])
   assert.deepEqual(press(o, 'return').open, [])
   // the open set is kept across tabs and board reloads (session state)
-  const back = onBoard(press(o, '2', '1'), parseBoard(BOARD, 'T', 2, 2), team, '@vidul')
+  const back = onBoard(press(o, '8', '2'), parseBoard(BOARD, 'T', 2, 2), team, '@vidul')
   assert.deepEqual(back.open, ['?'])
 })
 
@@ -780,7 +780,7 @@ test('F85: a workflow run - mode, phases, next phase; e then Enter prints /skill
     '### AAA8 - stage 136 - A155 yoda', 'tickets: A155', '### AAA9 - stage 137 - B10 muse', 'tickets: B10', ''].join('\n')
   const script = 'const PLAN = {\n  "phases": [\n    [ { "stage": 136, "ticket": "A155" } ],\n    [ { "stage": 137, "ticket": "B10" } ]\n  ]\n}\n'
   const list = 'RUN-0020  marathon  1/2 done\n'
-  const s = onRuns(reduce(s0, key('2')).state, list, { 'RUN-0020': run20('-') }, { 'RUN-0020': script })
+  const s = onRuns(reduce(s0, key('8')).state, list, { 'RUN-0020': run20('-') }, { 'RUN-0020': script })
   assert.deepEqual(s.runs[0]!.phases, [[{ n: 136, ticket: 'A155' }], [{ n: 137, ticket: 'B10' }]])
   const open = reduce(s, key('return')).state
   const txt = frameSegs({ ...open, rows: 40 }).map(l => l.map(x => x.text).join(''))
@@ -795,15 +795,15 @@ test('F85: a workflow run - mode, phases, next phase; e then Enter prints /skill
   assert.equal(go.state.engage, null)
   // another driver's stamp 5 minutes old: refused, naming it, no confirm
   const now = Date.parse('2026-10-18T12:00:00Z')
-  const live = onRuns({ ...reduce(s0, key('2')).state, now }, list, { 'RUN-0020': run20('@cc-live 2026-10-18T11:55Z') }, { 'RUN-0020': script })
+  const live = onRuns({ ...reduce(s0, key('8')).state, now }, list, { 'RUN-0020': run20('@cc-live 2026-10-18T11:55Z') }, { 'RUN-0020': script })
   const refused = reduce(live, key('e')).state
   assert.equal(refused.engage, null)
   assert.equal(refused.toast, '■ RUN-0020 not engaged: driven by @cc-live (heartbeat 5m ago, stale at 20m) - never two drivers')
   // a stamp not in relay's shape fails closed
-  const odd = onRuns({ ...reduce(s0, key('2')).state, now }, list, { 'RUN-0020': run20('@cc-odd 2026-10-18T11:55:30Z') }, { 'RUN-0020': script })
+  const odd = onRuns({ ...reduce(s0, key('8')).state, now }, list, { 'RUN-0020': run20('@cc-odd 2026-10-18T11:55:30Z') }, { 'RUN-0020': script })
   assert.equal(reduce(odd, key('e')).state.toast, '■ RUN-0020 not engaged: driven by @cc-odd (heartbeat unreadable: 2026-10-18T11:55:30Z) - never two drivers')
   // a stale one (45 minutes) engages
-  const stale = onRuns({ ...reduce(s0, key('2')).state, now }, list, { 'RUN-0020': run20('@cc-old 2026-10-18T11:15Z') }, { 'RUN-0020': script })
+  const stale = onRuns({ ...reduce(s0, key('8')).state, now }, list, { 'RUN-0020': run20('@cc-old 2026-10-18T11:15Z') }, { 'RUN-0020': script })
   assert.equal(reduce(stale, key('e')).state.engage?.text, '/skillator:gauntlet-run RUN-0020')
 })
 
@@ -924,7 +924,7 @@ test('F122: Workflows tab action bar operations (m mode, r rerun, p push pending
     'tickets: F2',
   ].join('\n')
 
-  let s = onRuns(reduce(s0, key('2')).state, LIST, { 'RUN-0012': chainWithPending })
+  let s = onRuns(reduce(s0, key('8')).state, LIST, { 'RUN-0012': chainWithPending })
   assert.equal(s.tab, 'runs')
   assert.equal(s.runMode, 'parallel')
 
@@ -1155,7 +1155,7 @@ test('F113: startRunCommand pins command text per choice (mode, runner, count, t
 })
 
 test('F113: Workflows tab interactive start run flow (open, navigation, mode cycling, tickets editing, confirm & cancel)', () => {
-  let s = reduce(s0, key('2')).state
+  let s = reduce(s0, key('8')).state
   assert.equal(s.tab, 'runs')
   assert.equal(s.startRun, null)
 
@@ -1259,7 +1259,7 @@ test('F113: Workflows tab interactive start run flow (open, navigation, mode cyc
 })
 
 test('F113: mouse point action for start-run-field', () => {
-  let s = reduce(s0, key('2')).state
+  let s = reduce(s0, key('8')).state
   s = reduce(s, key('s')).state
   assert.equal(s.startRun!.field, 'mode')
 
@@ -1417,7 +1417,7 @@ test('A196 + A197: startRunCmd canonical parity, eligibleRunTickets, parseFollow
     '### S3 - stage 3 - F3',
     'tickets: F3',
   ].join('\n')
-  const sDone = { ...onRuns(reduce(s0, key('2')).state, 'RUN-0012  the ops board  1/3 done\n', { 'RUN-0012': chainAllDone }), runsSelected: 'RUN-0012' }
+  const sDone = { ...onRuns(reduce(s0, key('8')).state, 'RUN-0012  the ops board  1/3 done\n', { 'RUN-0012': chainAllDone }), runsSelected: 'RUN-0012' }
   const noPend = reduce(sDone, key('p'))
   assert.equal(noPend.effects.length, 0)
   assert.equal(noPend.state.toast, 'No pending stages left in RUN-0012 to push')

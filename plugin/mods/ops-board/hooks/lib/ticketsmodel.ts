@@ -90,10 +90,10 @@ export const UNI: Glyphs = { open: '▾', closed: '▸', rail: '▌ ', railDim: 
 export const ASCII: Glyphs = { open: 'v', closed: '>', rail: '| ', railDim: ': ', dot: '*', more: '...', down: 'v', up: '^', move: '^v', sep: '-', active: '', cut: '...' }
 export const STATE_WORD: Record<State, string> = { ' ': 'open', '~': 'wip ', '%': 'test', v: 'vrfd', '!': 'blkd', '?': 'dec ', '>': 'defr', x: 'done', '-': 'canc' }
 export const PANE_TABS = [
-  { id: 'tickets', label: 'Tickets' }, { id: 'runs', label: 'Workflows' },
+  { id: 'dashboard', label: 'Dashboard' }, { id: 'tickets', label: 'Tickets' },
   { id: 'health', label: 'Health' }, { id: 'messages', label: 'Messages' },
   { id: 'explorer', label: 'Explorer' }, { id: 'run', label: 'Build' },
-  { id: 'log', label: 'Log' }, { id: 'help', label: 'Help' }, { id: 'dashboard', label: 'Dashboard' },
+  { id: 'log', label: 'Log' }, { id: 'help', label: 'Help' }, { id: 'runs', label: 'Workflows' },
 ] as const
 export const KEY_LABELS = ['move', 'a assign', 'd decide', 'f filter', 'x done', 't team', 'c reconcile', 'i intake', 'u ask', 's status', 'h help', 'r refresh']
 

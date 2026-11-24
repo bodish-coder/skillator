@@ -6,7 +6,7 @@ and build tabs (in the Claude Code pane, Workflows also lists the session's agen
 Needs node 22.18 or newer.
 
 Open **Dashboard** for ticket counts, machine and quota health, workflow activity,
-and unread messages. In the standalone board, press `8` or launch with
+and unread messages. In the standalone board, press `1` or launch with
 `ops --tab dashboard`. In Claude Code, use `/ops dashboard`.
 Explorer shows a team handle beside each matching commit author. It matches
 Git's mailmap-aware author email against `.skillator/team.md` and shows the

@@ -81,7 +81,7 @@ for (const [kind, skip] of launchers) {
     assert.equal(lines.length, 20, r.out)
     for (const l of lines) { assert.ok([...l].length <= 80, l); assert.doesNotMatch(l, /\x1b/) }
     // F75 + F79 + F160: seven tabs leave no room at 80 columns for "ops · <repo>" - spread() drops it (draw.test: it shows at 100)
-    assert.match(lines[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build   7 Help$/)
+    assert.match(lines[0]!, /^ 1 Dashboard   2 Tickets   3 Health   4 Messages   5 Explorer   6 Build   7 Help$/)
     // F61: every group starts collapsed - its header and count, no rows
     assert.match(r.out, /› ▸ In progress \(1\)\r?\n  ▸ Pending \(1\)\r?\n/)
     assert.doesNotMatch(r.out, /F2  Bulk delete/)
@@ -222,7 +222,7 @@ const FAKE_TTY = 'data:text/javascript,' + encodeURIComponent(
   "process.stdin.isTTY = true; process.stdin.setRawMode = on => { process.stderr.write('raw:' + on + '\\n'); return process.stdin }")
 
 for (const cols of [40, 60, 80, 100, 120]) {
-  test(`live: pressing 8 opens the Dashboard at ${cols} columns`, async () => {
+  test(`live: pressing 1 opens the Dashboard at ${cols} columns`, async () => {
     const s = fixtureSkills()
     const ttySize = 'data:text/javascript,' + encodeURIComponent(
       `Object.assign(process.stdout, { isTTY: true, columns: ${cols}, rows: 24 })`)
@@ -237,7 +237,7 @@ for (const cols of [40, 60, 80, 100, 120]) {
       out += text
       if (!sent && bare(out).includes('In progress (1)')) {
         sent = true
-        child.stdin.write('8')
+        child.stdin.write('1')
       }
       const latest = bare(out.split('\x1b[H').at(-1) ?? '')
       if (sent && !dashboard && latest.split('\r\n').length === 24 &&
@@ -294,8 +294,8 @@ test('live: alt screen, hidden cursor, raw keys; 2 reads the runs, q quits and r
   const send = (k: string) => { if (!sent.has(k)) { sent.add(k); child.stdin.write(k) } }
   child.stdout.setEncoding('utf8').on('data', (d: string) => {
     out += d
-    if (/▸ In progress \(1\)/.test(out)) send('2')
-    if (sent.has('2') && /RUN-0099  fixture run/.test(out)) send('q')
+    if (/▸ In progress \(1\)/.test(out)) send('8')
+    if (sent.has('8') && /RUN-0099  fixture run/.test(out)) send('q')
   })
   const timer = setTimeout(() => child.kill(), 60000)
   const code = await new Promise<number | null>(res => child.on('close', c => res(c)))
@@ -303,7 +303,7 @@ test('live: alt screen, hidden cursor, raw keys; 2 reads the runs, q quits and r
   assert.equal(code, 0, err + out.slice(-400))
   assert.ok(out.startsWith('\x1b[?1049h\x1b[?25l'), JSON.stringify(out.slice(0, 40)))
   assert.ok(out.endsWith('\x1b[0m\x1b[?25h\x1b[?1049l'), JSON.stringify(out.slice(-40)))
-  assert.match(out, /\x1b\[H \x1b\[1;7m1 Tickets\x1b\[0m/)        // F89: --no-color keeps the active tab marked
+  assert.match(out, / \x1b\[1;7m2 Tickets\x1b\[0m/)        // F89: --no-color keeps the active tab marked
   assert.match(err, /raw:true[\s\S]*raw:false/)
   assert.doesNotMatch(readFileSync(s.log, 'utf8'), /ticket-meta|watchdog|hold|release|queue/)
 })

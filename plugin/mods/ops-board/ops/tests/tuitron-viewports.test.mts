@@ -20,13 +20,13 @@ const withRuns = onRuns(s, RUNS_BODY, 0)
 const VIEWPORT_WIDTHS = [40, 60, 80, 100, 120]
 const TABS: State['tab'][] = ['tickets', 'runs', 'health', 'messages', 'explorer', 'run', 'help', 'dashboard']
 
-test('Dashboard opens with 8 and keeps the four summaries and tab hitboxes visible at every width', () => {
+test('Dashboard opens with 1 and keeps its summaries and tab hitboxes visible at every width', () => {
   for (const cols of VIEWPORT_WIDTHS) {
     const initialFrame = screen({ ...withRuns, cols, rows: 18 }, P)
     for (const tab of TABS) {
       assert.ok(initialFrame.hits.some(h => h.action.kind === 'tab' && h.action.tab === tab), `${tab} is clickable at ${cols}`)
     }
-    const selected = reduce({ ...withRuns, cols, rows: 18 }, { name: '8' })
+    const selected = reduce({ ...withRuns, cols, rows: 18 }, { name: '1' })
     assert.deepEqual(selected.effects, [])
     const { lines } = screen(selected.state, { ...P, ascii: true })
     const contents = lines.slice(2).join('\n')
@@ -35,6 +35,12 @@ test('Dashboard opens with 8 and keeps the four summaries and tab hitboxes visib
     assert.match(contents, /2 running \/ 0 planned \/ 0 completed/)
     assert.match(contents, /0 unread/)
     assert.doesNotMatch(contents, /[^\x20-\x7e\n]/)
+    const overview = screen({ ...selected.state, rows: 24 }, { ...P, ascii: true })
+    const overviewBody = overview.lines.slice(2).join('\n')
+    assert.match(overviewBody, /^[=.+#!?]{30}(?: |$)/m, `ticket status bar at ${cols} columns`)
+    for (const tab of ['tickets', 'health', 'runs', 'messages']) {
+      assert.ok(overview.hits.some(h => h.y > 2 && h.action.kind === 'tab' && h.action.tab === tab), `overview links to ${tab} at ${cols} columns`)
+    }
   }
 })
 

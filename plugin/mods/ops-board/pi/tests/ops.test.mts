@@ -23,7 +23,7 @@ for (const [label, data, id, kitty] of [
 // the names it gave, read from the installed @earendil-works/pi-tui 0.74.2 (2026-10-22).
 const PI_TUI_0742: Record<string, string> = {
   a: 'a', D: 'D', '\x1b[A': 'up', '\x1b[B': 'down', '\x1b[C': 'right', '\r': 'enter', '\x1b': 'escape', '\t': 'tab',
-  '\x1b[Z': 'shift+tab', '\x7f': 'backspace', '\b': 'backspace', '\x1b[3~': 'delete', '\x03': 'ctrl+c', '1': '1', '2': '2',
+  '\x1b[Z': 'shift+tab', '\x7f': 'backspace', '\b': 'backspace', '\x1b[3~': 'delete', '\x03': 'ctrl+c', '1': '1', '2': '2', '8': '8',
   ' ': 'space', '@': '@', q: 'q', '\x1b[97u': 'a', '\x1b[68;2u': 'shift+d', '\x1b[13u': 'enter',
 }
 const parseKey = (d: string) => PI_TUI_0742[d]
@@ -97,17 +97,17 @@ test('view: the frame at pi\'s width and the terminal\'s rows, each line within 
     for (const l of lines) assert.ok(width(l) <= w, `over ${w}: ${strip(l)}`)
   }
   const text = view.render(70).map(strip).join('\n')
-  assert.match(text, /1 Tickets/)
+  assert.match(text, /2 Tickets/)
   assert.match(text, /▸ Pending \(1\)/)                // F61: every group starts collapsed
   view.handleInput('\x1b[B')                          // down to the Pending header; Enter opens it
   view.handleInput('\r')
   assert.match(view.render(70).map(strip).join('\n'), /F90 +pi fixture ticket/)
-  view.handleInput('2')
+  view.handleInput('8')
   assert.equal(engine.state.tab, 'runs')
-  assert.match(view.render(70).map(strip)[0]!, /2 Workflows/)
+  assert.match(view.render(70).map(strip).join('\n'), /8 Workflows/)
   view.handleInput('3')
   assert.match(view.render(70).map(strip).join('\n'), /Usage .*from watch-cortana/)
-  view.handleInput('1')
+  view.handleInput('2')
   view.handleInput('\x1b[B')                          // from the Pending header to its row
   view.handleInput('a')                               // assign: the dialog opens on the selected ticket
   assert.equal(engine.state.dialog?.id, 'F90')
@@ -124,11 +124,13 @@ test('view: the frame at pi\'s width and the terminal\'s rows, each line within 
   assert.ok(renders > 0)
   view.handleInput('\x1b')                             // close team view
 
-  // SGR mouse click on "2 Workflows" tab: col 16, row 1
-  view.handleInput('\x1b[<0;16;1M')
+  const tabs = view.render(70).map(strip)
+  const row = tabs.findIndex(line => line.includes('8 Workflows'))
+  const col = tabs[row]!.indexOf('8 Workflows') + 1
+  view.handleInput(`\x1b[<0;${col};${row + 1}M`)
   assert.equal(engine.state.tab, 'runs')
   // SGR mouse release is ignored
-  view.handleInput('\x1b[<0;16;1m')
+  view.handleInput(`\x1b[<0;${col};${row + 1}m`)
   assert.equal(engine.state.tab, 'runs')
 
   view.dispose()
@@ -169,7 +171,7 @@ test('/ops --once notifies one plain frame of the repo it is run in, and opens n
   assert.equal(lines.length, 20)
   for (const l of lines) assert.ok([...l].length <= 60, l)
   assert.doesNotMatch(f.notes[0]!.msg, /\x1b/)
-  assert.match(lines[0]!, /1 Tickets {3}2 Workflows {3}3 Health/)
+  assert.match(lines[0]!, /1 Dashboard {3}2 Tickets {3}3 Health/)
   assert.match(f.notes[0]!.msg, /▸ Pending \(1\)/)    // F61: headers only at first
 })
 

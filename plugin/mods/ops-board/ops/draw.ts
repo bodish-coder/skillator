@@ -148,7 +148,7 @@ function windowOf(lines: Keyed[], id: string | null, h: number, area?: 'tickets'
 
 // --- the fixed lines ---
 
-const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Workflows'], ['health', '3 Health'], ['messages', '4 Messages'], ['explorer', '5 Explorer'], ['run', '6 Build'], ['help', '7 Help'], ['dashboard', '8 Dashboard']]
+const TABS: [State['tab'], string][] = [['dashboard', '1 Dashboard'], ['tickets', '2 Tickets'], ['health', '3 Health'], ['messages', '4 Messages'], ['explorer', '5 Explorer'], ['run', '6 Build'], ['help', '7 Help'], ['runs', '8 Workflows']]
 
 function tabsLines(s: State): Seg[][] {
   // F66: the unread count rides on the Messages label
@@ -158,7 +158,7 @@ function tabsLines(s: State): Seg[][] {
       const word = s.cols < 48 ? '4 Msgs' : l
       return unread ? `${word} (${unread})` : word
     }
-    return s.cols < 48 && id === 'runs' ? '2 Runs' : l
+    return l
   }
   const tabs = TABS.map(([id, l]): Seg[] => {
     const full = label(id, l)
@@ -1097,17 +1097,42 @@ export function helpBody(s: State, room: number): Seg[][] {
   return out
 }
 
+const DASHBOARD_TABS = ['tickets', 'health', 'runs', 'messages'] as const
+const TICKET_BAR: ReadonlyArray<readonly [Box, string]> = [
+  ['%', '='], [' ', '.'], ['~', '+'], ['v', '#'], ['!', '!'], ['?', '?'],
+]
+
+function ticketStatusBar(s: State): Mono[] {
+  const board = s.board
+  if (!board || board.error) return []
+  const counts = TICKET_BAR.map(([box, mark]) => ({ box, mark, count: board.tickets.filter(t => t.box === box).length }))
+    .filter(status => status.count > 0)
+  const total = counts.reduce((sum, status) => sum + status.count, 0)
+  const cells = Math.min(30, s.cols) - counts.length
+  if (cells < 0) return []
+  let seen = 0
+  return counts.map(({ box, mark, count }) => {
+    const start = Math.round(cells * seen / total)
+    seen += count
+    // Give each occupied status one cell, then distribute the rest proportionally.
+    const size = 1 + Math.round(cells * seen / total) - start
+    return { text: '█'.repeat(size), mono: mark.repeat(size), color: paint(box) }
+  })
+}
+
 function dashboardBody(s: State, room: number): Seg[][] {
   const panels = dashboardPanels({
     board: s.board,
     health: { usage: s.usage, machine: s.machine, relay: s.relay, now: s.now },
     runs: s.runsRead ? s.runs : null,
     unread: unreadCount(s.messages, s.msgRead),
-  }).map(panel => [
-    [{ text: panel.title, color: 'suggestion' as Color, bold: true }],
+  }).map((panel, i) => [
+    actionLine([{ text: panel.title, color: 'suggestion', bold: true }], { kind: 'tab', tab: DASHBOARD_TABS[i]! }),
     [{ text: panel.summary, color: panel.warning ? 'warning' as Color : undefined }],
     ...(panel.details ?? []).map(detail => [dim(detail)]),
   ])
+  const bar = room >= 10 ? ticketStatusBar(s) : []
+  if (bar.length) panels[0]!.splice(2, 0, bar)
   if (s.cols < DASHBOARD_WIDE) {
     if (room < 8) return panels.map(panel => [...panel[0]!, { text: '  ' }, ...panel[1]!])
     const contentRows = panels.reduce((sum, panel) => sum + panel.length, 0)

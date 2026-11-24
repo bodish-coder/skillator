@@ -241,7 +241,7 @@ export const settle = (x: State | Step): Step => ('effects' in x ? x : { state: 
 // A run's result applied at `now`, the clock when it landed (a `then` stamps facts with s.now).
 export const afterRun = (e: { then: Then }, r: RunResult, s: State, now: number): Step => settle(e.then(r)({ ...s, now }))
 
-const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages', 'explorer', 'run', 'help', 'dashboard']
+const TABS: Tab[] = ['dashboard', 'tickets', 'health', 'messages', 'explorer', 'run', 'help', 'runs']
 
 export const initial = (cols: number, rows: number, now: number): State => ({
   tab: 'tickets', board: null, team: [], me: null, session: null,
@@ -2719,14 +2719,14 @@ export function helpKey(s: State, k: Key): Step {
   if (k.name === '?' || k.sequence === '?') {
     return close
   }
-  if (k.name === '1') return toTab(s, 'tickets')
-  if (k.name === '2') return toTab(s, 'runs')
+  if (k.name === '1') return toTab(s, 'dashboard')
+  if (k.name === '2') return toTab(s, 'tickets')
   if (k.name === '3') return toTab(s, 'health')
   if (k.name === '4') return toTab(s, 'messages')
   if (k.name === '5') return toTab(s, 'explorer')
   if (k.name === '6') return toTab(s, 'run')
   if (k.name === '7') return same
-  if (k.name === '8') return toTab(s, 'dashboard')
+  if (k.name === '8') return toTab(s, 'runs')
   if (k.name === 'tab') {
     const at = TABS.indexOf(s.tab)
     return toTab(s, TABS[(at + (k.shift ? TABS.length - 1 : 1)) % TABS.length]!)
@@ -2869,14 +2869,14 @@ export function reduce(s: State, k: Key): Step {
   }
   switch (k.name) {
     case 'q': return quit
-    case '1': return toTab(s, 'tickets')
-    case '2': return toTab(s, 'runs')
+    case '1': return toTab(s, 'dashboard')
+    case '2': return toTab(s, 'tickets')
     case '3': return toTab(s, 'health')
     case '4': return toTab(s, 'messages')
     case '5': return toTab(s, 'explorer')
     case '6': return toTab(s, 'run')          // F79's Run moved to 6: F75's Explorer took 5
     case '7': return openHelp(s)
-    case '8': return toTab(s, 'dashboard')
+    case '8': return toTab(s, 'runs')
     case '?': return openHelp(s)
     case 'tab': {
       const at = TABS.indexOf(s.tab)
