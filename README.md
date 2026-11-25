@@ -9,6 +9,8 @@ the root, and the root `install.sh` / `install.ps1` forward to `plugin/`). Each 
 under `plugin/skills/` is one skill (a `SKILL.md` plus any support
 files).
 
+**New to Skillator?** Start with the [Skillator Team Guide (PDF)](docs/Skillator-Team-Guide.pdf) for setup, worked prompts for all 32 skills, and a ticket workflow.
+
 ## Install (plugin marketplace)
 
 In Claude Code, add this repo as a marketplace and install the plugin:
