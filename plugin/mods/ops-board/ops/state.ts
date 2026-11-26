@@ -2791,10 +2791,21 @@ export const COMMANDS: HelpItem[] = [
     kind: "command",
     category: "Maintenance & Sync",
     aliases: [],
-    summary: "Update skillator and ops board across Claude Code and all CLIs from saved repo source",
+    summary: "Update skillator and ops board for the current CLI profile only",
     triggers: ["skillator-update", "update skillator", "upgrade skillator"],
+    usage: "Update skillator and the ops board to the latest pushed version for the CLI and current profile running it - never another host or profile. Use /skillator-update-all for every host.",
+    examples: ["/skillator-update"]
+  },
+  {
+    id: "skillator-update-all",
+    name: "/skillator-update-all",
+    kind: "command",
+    category: "Maintenance & Sync",
+    aliases: [],
+    summary: "Update skillator and ops board on every installed host from saved repo source",
+    triggers: ["skillator-update-all", "update all hosts", "update skillator everywhere"],
     usage: "Update skillator and the ops board to the latest pushed version: the Claude Code plugins, then every other host via the installer.",
-    examples: ["/skillator-update", "/skillator-update C:/tools/Projects/skillator2"],
+    examples: ["/skillator-update-all", "/skillator-update-all <clone>"],
     hint: "[clone path]"
   },
   {

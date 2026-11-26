@@ -79,13 +79,15 @@ export function renderCommands(root = defaultRoot) {
       }
       const body = substitute(sourceBody, host);
       const description = entry.hostDescription ? JSON.stringify(entry.hostDescription) : parsed.description;
+      // a host copy may take an argument the Claude Code entry point does not (F204: /skillator-update)
+      const hint = entry.hostHint ? JSON.stringify(entry.hostHint) : parsed.hint;
       if (host === 'gemini') {
         if (body.includes("'''")) throw new Error(`TOML literal delimiter in ${entry.name}`);
         const desc = description.startsWith('"') ? JSON.parse(description) : description;
         add(`host-commands/gemini/${entry.name}.toml`, `description = ${JSON.stringify(desc)}\nprompt = '''\n${body}\n'''\n`);
       } else {
         const skill = host === 'antigravity';
-        const header = `---\n${skill ? `name: ${entry.name}\n` : ''}description: ${description}\n${host === 'pi' && parsed.hint ? `argument-hint: ${parsed.hint}\n` : ''}---\n`;
+        const header = `---\n${skill ? `name: ${entry.name}\n` : ''}description: ${description}\n${host === 'pi' && hint ? `argument-hint: ${hint}\n` : ''}---\n`;
         add(`host-commands/${host}/${entry.name}${skill ? '/SKILL.md' : '.md'}`, `${header}${body}\n`);
       }
     }

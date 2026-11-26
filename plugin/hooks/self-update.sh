@@ -13,7 +13,7 @@
 # State: ~/.skillator/self-update.json, one line we write ourselves:
 # {"lastCheck":<epoch s>,"startedAt":..,"skipAt":..,"lastResult":"..","lastVersion":"..","notice":".."}
 # lastCheck is written when a run finishes, startedAt when due-run starts one.
-# The update follows /skillator-update (commands/skillator-update.md): the Claude
+# The update follows /skillator-update-all (commands/skillator-update-all.md): the Claude
 # Code plugins, then the installer from the updated plugin (source c.) - only when
 # no source pointer names a git clone. Never -y. Needs node to read the plugin list.
 # Off: SKILLATOR_AUTO_UPDATE=0. Mirror: self-update.ps1, same rules and output.
@@ -169,6 +169,8 @@ clones() {
     [ -f "$p/.skillator-source" ] || continue
     IFS= read -r s < "$p/.skillator-source" || [ -n "$s" ] || continue
     s=$(printf '%s' "$s" | tr '\\' '/' | tr -d '\r'); s=${s%/}
+    # F204: a scoped /skillator-update's private checkout is not the user's clone
+    case $s in */.skillator-update-source|*/.skillator-update-source/*) continue ;; esac
     for c in "$s" "${s%/*}"; do
       [ -n "$c" ] && [ -e "$c/.git" ] && { real "$c"; break; }
     done
@@ -295,20 +297,20 @@ update() {
   for v in "$nv" $sv; do
     newer "$old" "$v" || {
       nv=$v RES="failed: update did not apply ($old -> $v)"
-      NOTE="skillator update did not apply ($old -> $v) - run /skillator-update"; return
+      NOTE="skillator update did not apply ($old -> $v) - run /skillator-update-all"; return
     }
   done
   RES="updated $old -> $nv"
-  # a pointer to a clone: /skillator-update pulls it and installs from there
-  [ -n "$C" ] && { NOTE="skillator $old -> $nv for Claude Code - run /skillator-update to update the other hosts"; return; }
+  # a pointer to a clone: the plugins are updated here; /skillator-update-all pulls the clone and installs the other hosts from it
+  [ -n "$C" ] && { NOTE="skillator $old -> $nv for Claude Code - run /skillator-update-all to update the other hosts"; return; }
   ih=''
   if [ -f "$ip/install.sh" ] && [ -f "$ip/install.ps1" ]; then
     case $(uname -s 2>/dev/null) in
       MINGW*|MSYS*|CYGWIN*) bounded powershell -NoProfile -ExecutionPolicy Bypass -File "$ip/install.ps1" -Force ;;
       *) bounded sh "$ip/install.sh" --force ;;
-    esac </dev/null >/dev/null 2>&1 || ih=' (other hosts: installer failed - run /skillator-update)'
+    esac </dev/null >/dev/null 2>&1 || ih=' (other hosts: installer failed - run /skillator-update-all)'
   else
-    ih=' (other hosts: no installer in the plugin - run /skillator-update)'
+    ih=' (other hosts: no installer in the plugin - run /skillator-update-all)'
   fi
   NOTE="skillator updated $old -> $nv - restart Claude Code to load it$ih"
 }
@@ -328,7 +330,7 @@ run() {
     'skipped: a relay run is in flight'*|'skipped: needs confirmation'|'skipped: would downgrade'*|'skipped: unexpected version'|'skipped: no node to read plugin list')
       if [ $((now - sk)) -ge 86400 ]; then
         NOTE="skillator update $RES"
-        [ "$RES" != 'skipped: needs confirmation' ] || NOTE="$NOTE ($old -> $new) - run /skillator-update"
+        [ "$RES" != 'skipped: needs confirmation' ] || NOTE="$NOTE ($old -> $new) - run /skillator-update-all"
         sk=$now
       fi ;;
   esac
@@ -455,7 +457,7 @@ claude plugin list --json'
   t 'repeated skip: the notice once per 24 h' '[ -z "$(sh "$me" due-run)" ]'
   rm -f "$rf"
   SU_CONFIRM=1 sh "$me" run > /dev/null
-  t 'different skip: notify within the same day' '[ "$(sh "$me" due-run)" = "skillator update skipped: needs confirmation (4.29.0 -> 4.30.0) - run /skillator-update" ]'
+  t 'different skip: notify within the same day' '[ "$(sh "$me" due-run)" = "skillator update skipped: needs confirmation (4.29.0 -> 4.30.0) - run /skillator-update-all" ]'
   put 1 0 0 result version "$(printf "before\rafter")"
   load
   t 'bare carriage return: valid JSON notice' '[ "$(get notice)" = beforeafter ]'
@@ -507,7 +509,7 @@ claude plugin list --json'
   reset
   o=$(SU_CONFIRM=1 sh "$me" run)
   t 'confirmation prompt: skipped, never -y' '[ "$o" = "skipped: needs confirmation" ] && ! lg | grep -qE -- "(^| )(-y|--yes)( |$)"'
-  t 'confirmation prompt: the skip notice' '[ "$(sh "$me" due-run)" = "skillator update skipped: needs confirmation (4.29.0 -> 4.30.0) - run /skillator-update" ]'
+  t 'confirmation prompt: the skip notice' '[ "$(sh "$me" due-run)" = "skillator update skipped: needs confirmation (4.29.0 -> 4.30.0) - run /skillator-update-all" ]'
 
   # 2: decide before installing; an update that did not land is never "updated"
   reset; cat_v 4.28.0
@@ -516,7 +518,7 @@ claude plugin list --json'
   reset
   o=$(SU_NEWV=4.29.0 sh "$me" run)
   t 'update did not apply (same version): recorded, no installer' '[ "$o" = "failed: update did not apply (4.29.0 -> 4.29.0)" ] && ! lg | grep -q "^installer"'
-  t 'update did not apply: the notice' '[ "$(sh "$me" due-run)" = "skillator update did not apply (4.29.0 -> 4.29.0) - run /skillator-update" ]'
+  t 'update did not apply: the notice' '[ "$(sh "$me" due-run)" = "skillator update did not apply (4.29.0 -> 4.29.0) - run /skillator-update-all" ]'
   reset
   o=$(SU_NEWV=4.28.0 sh "$me" run)
   t 'update went down: did not apply, no installer' '[ "$o" = "failed: update did not apply (4.29.0 -> 4.28.0)" ] && ! lg | grep -q "^installer"'
@@ -525,14 +527,18 @@ claude plugin list --json'
   o=$(SU_OLDV='4.29.0-evil$(x)' sh "$me" run)
   t 'unexpected version: skipped, kept out of notice and commands' '[ "$o" = "skipped: unexpected version" ] && ! st | grep -q evil && ! lg | grep -q -e evil -e "plugin update"'
 
-  # 4: a pointer to a git clone - the other hosts are /skillator-update's job
+  # 4: a pointer to a git clone - the other hosts are /skillator-update-all's job
   reset; mkdir -p "$d/clone/.git" "$d/clone/plugin"; ptr "$lw/clone/plugin"
   o=$(sh "$me" run)
   t 'pointer to a clone: no installer from the cache' '[ "$o" = "updated 4.29.0 -> 4.30.0" ] && ! lg | grep -q "^installer"'
-  t 'pointer to a clone: the notice' '[ "$(sh "$me" due-run)" = "skillator 4.29.0 -> 4.30.0 for Claude Code - run /skillator-update to update the other hosts" ]'
+  t 'pointer to a clone: the notice' '[ "$(sh "$me" due-run)" = "skillator 4.29.0 -> 4.30.0 for Claude Code - run /skillator-update-all to update the other hosts" ]'
   reset; mkdir -p "$d/plain/plugin"; ptr "$lw/plain/plugin"
   sh "$me" run > /dev/null
   t 'pointer not a git checkout: installer from installPath' 'lg | grep -q "^installer"'
+  # F204: a scoped update's private checkout (<profile>/.skillator-update-source) is never the user's clone
+  reset; mkdir -p "$d/clone/.skillator-update-source/.git" "$d/clone/.skillator-update-source/plugin"; ptr "$lw/clone/.skillator-update-source/plugin"
+  sh "$me" run > /dev/null
+  t 'pointer into .skillator-update-source: not a clone, installer from installPath' 'lg | grep -q "^installer"'
 
   # A242: the bounded process and run/state lock are independent of one another.
   reset; call_limit=1

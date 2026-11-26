@@ -95,6 +95,8 @@ function Get-Clones {
   foreach ($p in @("$h/.claude/skills", "$cx/skills", "$h/.cursor/skills", "$h/.pi/agent/skills", "$h/.gemini/config/skills", "$h/.gemini/skills", "$h/.gemini/antigravity-cli/skills", "$xd/opencode/skills")) {
     $s = try { "$(Get-Content -LiteralPath (Join-Path $p '.skillator-source') -TotalCount 1 -ErrorAction Stop)".Trim().TrimEnd('\', '/') } catch { '' }
     if (-not $s) { continue }
+    # F204: a scoped /skillator-update's private checkout is not the user's clone
+    if (($s -replace '\\', '/') -match '/\.skillator-update-source(/|$)') { continue }
     foreach ($c in @($s, (Split-Path $s -Parent))) {
       if ($c -and (Test-Path -LiteralPath (Join-Path $c '.git'))) { Get-RealPath $c; break }
     }
@@ -240,20 +242,20 @@ function Invoke-Update {
   foreach ($v in @($script:nv, $sv)) {
     if ($v -and -not (Test-Newer $script:old $v)) {
       $script:nv = $v
-      $script:NOTE = "skillator update did not apply ($($script:old) -> $v) - run /skillator-update"
+      $script:NOTE = "skillator update did not apply ($($script:old) -> $v) - run /skillator-update-all"
       return "failed: update did not apply ($($script:old) -> $v)"
     }
   }
-  # a pointer to a clone: /skillator-update pulls it and installs from there
+  # a pointer to a clone: the plugins are updated here; /skillator-update-all pulls the clone and installs the other hosts from it
   if ($script:clones.Count) {
-    $script:NOTE = "skillator $($script:old) -> $($script:nv) for Claude Code - run /skillator-update to update the other hosts"
+    $script:NOTE = "skillator $($script:old) -> $($script:nv) for Claude Code - run /skillator-update-all to update the other hosts"
     return "updated $($script:old) -> $($script:nv)"
   }
   $ih = ''
   if ($ip -and (Test-Path -LiteralPath (Join-Path $ip 'install.ps1')) -and (Test-Path -LiteralPath (Join-Path $ip 'install.sh'))) {
     $p = Invoke-Bounded (Join-Path $ip 'install.ps1') @('-Force')
-    if ($p.Code -ne 0) { $ih = ' (other hosts: installer failed - run /skillator-update)' }
-  } else { $ih = ' (other hosts: no installer in the plugin - run /skillator-update)' }
+    if ($p.Code -ne 0) { $ih = ' (other hosts: installer failed - run /skillator-update-all)' }
+  } else { $ih = ' (other hosts: no installer in the plugin - run /skillator-update-all)' }
   $script:NOTE = "skillator updated $($script:old) -> $($script:nv) - restart Claude Code to load it$ih"
   "updated $($script:old) -> $($script:nv)"
 }
@@ -272,7 +274,7 @@ function Invoke-Run {
       if ($now - $sk -ge 86400) {
         $script:NOTE = "skillator update $res"
         if ($res -eq 'skipped: needs confirmation') {
-          $script:NOTE += " ($($script:old) -> $($script:new)) - run /skillator-update"
+          $script:NOTE += " ($($script:old) -> $($script:new)) - run /skillator-update-all"
         }
         $sk = $now
       }
@@ -387,7 +389,7 @@ exit 0
     $env:SU_CONFIRM = '1'
     Su 'run' | Out-Null
     Remove-Item Env:SU_CONFIRM
-    T 'different skip: notify within the same day' ((Su 'due-run') -eq 'skillator update skipped: needs confirmation (4.29.0 -> 4.30.0) - run /skillator-update')
+    T 'different skip: notify within the same day' ((Su 'due-run') -eq 'skillator update skipped: needs confirmation (4.29.0 -> 4.30.0) - run /skillator-update-all')
     Set-State 1 0 0 result version ("before" + [char]13 + "after")
     T 'bare carriage return: valid JSON notice' ((Get-State).notice -eq 'beforeafter')
 
@@ -451,7 +453,7 @@ exit 0
     $o = Su 'run'
     T 'confirmation prompt: skipped, never -y' ($o -eq 'skipped: needs confirmation' -and -not ((Lg) -match '(^| )(-y|--yes)( |$)'))
     Remove-Item Env:SU_CONFIRM
-    T 'confirmation prompt: the skip notice' ((Su 'due-run') -eq 'skillator update skipped: needs confirmation (4.29.0 -> 4.30.0) - run /skillator-update')
+    T 'confirmation prompt: the skip notice' ((Su 'due-run') -eq 'skillator update skipped: needs confirmation (4.29.0 -> 4.30.0) - run /skillator-update-all')
 
     # 2: decide before installing; an update that did not land is never "updated"
     Reset-T; Cat-V '4.28.0'
@@ -460,7 +462,7 @@ exit 0
     Reset-T; $env:SU_NEWV = '4.29.0'
     $o = Su 'run'
     T 'update did not apply (same version): recorded, no installer' ($o -eq 'failed: update did not apply (4.29.0 -> 4.29.0)' -and -not ((Lg) -match '^installer'))
-    T 'update did not apply: the notice' ((Su 'due-run') -eq 'skillator update did not apply (4.29.0 -> 4.29.0) - run /skillator-update')
+    T 'update did not apply: the notice' ((Su 'due-run') -eq 'skillator update did not apply (4.29.0 -> 4.29.0) - run /skillator-update-all')
     Reset-T; $env:SU_NEWV = '4.28.0'
     $o = Su 'run'
     T 'update went down: did not apply, no installer' ($o -eq 'failed: update did not apply (4.29.0 -> 4.28.0)' -and -not ((Lg) -match '^installer'))
@@ -471,14 +473,18 @@ exit 0
     T 'unexpected version: skipped, kept out of notice and commands' ($o -eq 'skipped: unexpected version' -and (St) -notmatch 'evil' -and -not ((Lg) -match 'evil|plugin update'))
     Remove-Item Env:SU_OLDV
 
-    # 4: a pointer to a git clone - the other hosts are /skillator-update's job
+    # 4: a pointer to a git clone - the other hosts are /skillator-update-all's job
     Reset-T; New-Item -ItemType Directory -Force (Join-Path $d 'clone/.git'), (Join-Path $d 'clone/plugin') | Out-Null; Ptr (Join-Path $d 'clone/plugin')
     $o = Su 'run'
     T 'pointer to a clone: no installer from the cache' ($o -eq 'updated 4.29.0 -> 4.30.0' -and -not ((Lg) -match '^installer'))
-    T 'pointer to a clone: the notice' ((Su 'due-run') -eq 'skillator 4.29.0 -> 4.30.0 for Claude Code - run /skillator-update to update the other hosts')
+    T 'pointer to a clone: the notice' ((Su 'due-run') -eq 'skillator 4.29.0 -> 4.30.0 for Claude Code - run /skillator-update-all to update the other hosts')
     Reset-T; New-Item -ItemType Directory -Force (Join-Path $d 'plain/plugin') | Out-Null; Ptr (Join-Path $d 'plain/plugin')
     Su 'run' | Out-Null
     T 'pointer not a git checkout: installer from installPath' (@((Lg) -match '^installer').Count -gt 0)
+    # F204: a scoped update's private checkout (<profile>\.skillator-update-source) is never the user's clone
+    Reset-T; New-Item -ItemType Directory -Force (Join-Path $d 'clone/.skillator-update-source/.git'), (Join-Path $d 'clone/.skillator-update-source/plugin') | Out-Null; Ptr (Join-Path $d 'clone/.skillator-update-source/plugin')
+    Su 'run' | Out-Null
+    T 'pointer into .skillator-update-source: not a clone, installer from installPath' (@((Lg) -match '^installer').Count -gt 0)
 
     # A242: the bounded process and run/state lock are independent of one another.
     Reset-T

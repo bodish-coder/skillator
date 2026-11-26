@@ -6,6 +6,8 @@
 #   ./install.sh --force    refresh skills that are already installed
 #   ./install.sh --link     install as symlinks into this repo (stay live on git pull)
 #   ./install.sh --selftest install into a temp HOME and check what was written; prints ok
+#   ./install.sh --force --target-host <host> --target-profile <absolute profile root>
+#                           refresh that profile's skills, commands and board copy
 # F54: /skillator-pending, /list-ticket-zordon, /engage-picard, /archive-zordon, /sync-zordon, /skillator-update, /team-messages and /pending-sentinel are written as each host's own command file (codex
 # skills (F90), Gemini CLI commands, cursor commands, pi prompt templates, opencode commands,
 # Antigravity skill-commands) from host-commands/<host>/, rewritten every run - see write_commands.
@@ -23,18 +25,34 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 src="$root/skills"
 dry=""; force=""; link=""; selftest=""; font=""; _want_font=""
-usage='usage: install.sh [--dry-run] [--force] [--link] [--selftest] [--ops-font-size <6-72>]'
+target_host=""; target_profile=""; _want_target=""
+usage='usage: install.sh [--dry-run] [--force] [--link] [--selftest] [--ops-font-size <6-72>] [--target-host <host> --target-profile <absolute path>]'
 for a in "$@"; do
   if [ -n "$_want_font" ]; then font=$a; _want_font=""; continue; fi
+  case "$_want_target" in
+    host) [ -n "$a" ] || { printf '%s\n' "$usage" >&2; exit 2; }; target_host=$a; _want_target=""; continue ;;
+    profile) [ -n "$a" ] || { printf '%s\n' "$usage" >&2; exit 2; }; target_profile=$a; _want_target=""; continue ;;
+  esac
   case "$a" in
     --dry-run) dry=1 ;;
     --force)   force=1 ;;
     --link)    link=1 ;;
     --selftest) selftest=1 ;;
     --ops-font-size) _want_font=1 ;;
+    --target-host) _want_target=host ;;
+    --target-profile) _want_target=profile ;;
     *) printf 'unknown option: %s\n%s\n' "$a" "$usage" >&2; exit 2 ;;
   esac
 done
+case "$target_host" in
+  codex|cursor|gemini|agy|antigravity|pi|opencode|claude-code|muse|'') ;;
+  *) printf 'unknown target host: %s\n%s\n' "$target_host" "$usage" >&2; exit 2 ;;
+esac
+if [ -n "$_want_target" ] || { [ -n "$target_host" ] && [ -z "$target_profile" ]; } ||
+   { [ -z "$target_host" ] && [ -n "$target_profile" ]; } ||
+   { [ -n "$target_host" ] && [ -n "$selftest$font$_want_font" ]; }; then
+  printf '%s\n' "$usage" >&2; exit 2
+fi
 # F102: the ops tab's Windows Terminal font size, 6..72
 font_number() {
   _number=$(printf '%s' "$1" | sed 's/^0*//')
@@ -60,6 +78,9 @@ codex_home=${CODEX_HOME:-$HOME/.codex}
 # ~/.config/opencode (opencode 1.19.4 `debug paths`); skills in <config>/skills, commands
 # in <config>/commands/<n>.md
 oc_config=${XDG_CONFIG_HOME:-$HOME/.config}/opencode
+cursor_config="$HOME/.cursor"
+pi_agent="$HOME/.pi/agent"
+gemini_config="$HOME/.gemini"
 
 # cli | marker (proves the CLI is installed) | global skills dir(s), '|'-separated
 # antigravity has three: ~/.gemini/config/skills is Antigravity's own documented path,
@@ -96,6 +117,8 @@ plugin=$(find "$HOME/.claude/plugins" -maxdepth 4 -type d -name skillator 2>/dev
 
 manifest=.skillator-installed
 owned=.skillator-owned
+# F204: the version each dest records (.skillator-version), read by /skillator-update before it pulls
+plugin_version=$(sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$root/.claude-plugin/plugin.json" 2>/dev/null | head -1)
 # LC_ALL=C: an ordinal sort, so the manifest is the same bytes under any locale
 shipped=$(for _s in "$src"/*/; do basename "$_s"; done | LC_ALL=C sort)
 # Every name this repo shipped and has since dropped: the From column of the rename
@@ -272,17 +295,28 @@ pi_ignore() {
 install_into() {
   _cli=$1; _dest=$2
   _n=0
+  # F204: 1 while every shipped skill here is written, refreshed, the same as this source or a
+  # live link to it - only then does .skillator-version claim this source's version
+  _current=1
   # $shipped order (ordinal), not the glob's locale order - same as install.ps1
   for _name in $shipped; do
     _s="$src/$_name/"
     # a skill symlinked to this repo is live - never replace it with a stale copy;
     # a dangling one (F91: a pre-subfolder link into <clone>/skills) is reinstalled
-    if [ -L "$_dest/$_name" ] && [ -e "$_dest/$_name" ]; then continue; fi
-    if [ -f "$_dest/$_name/SKILL.md" ] && [ -z "$force" ]; then
-      # adopt an unmarked copy that is exactly this repo's current skill
-      if [ -z "$dry" ] && [ ! -f "$_dest/$_name/$owned" ] &&
-         same_contents "$_dest/$_name" "${_s%/}"; then
-        write_owned "$_dest/$_name" "${_s%/}"
+    if [ -L "$_dest/$_name" ] && [ -e "$_dest/$_name" ]; then
+      same_dir "$_dest/$_name" "${_s%/}" || _current=0
+      continue
+    fi
+    # F204: an older run's command wrapper in a shipped skill's place is reinstalled, --force or not
+    if [ -f "$_dest/$_name/SKILL.md" ] && [ -z "$force" ] && ! is_cmd_wrapper "$_dest/$_name/SKILL.md" "$_name"; then
+      # compared while the record still holds, and always for an unmarked copy (adoption)
+      if [ "$_current" = 1 ] || [ ! -f "$_dest/$_name/$owned" ]; then
+        if same_contents "$_dest/$_name" "${_s%/}"; then
+          # adopt an unmarked copy that is exactly this repo's current skill
+          if [ -z "$dry" ] && [ ! -f "$_dest/$_name/$owned" ]; then write_owned "$_dest/$_name" "${_s%/}"; fi
+        else
+          _current=0
+        fi
       fi
       continue
     fi
@@ -326,8 +360,15 @@ install_into() {
       done
     printf '%s\n' "$shipped" > "$_dest/$manifest"
     # F65: the source pointer - one line, the repo root this ran from (native form), so
-    # /skillator-update can find a source on a host with no plugin cache
-    native "$root" > "$_dest/.skillator-source"
+    # /skillator-update can find a source on a host with no plugin cache. F204: never a scoped
+    # update's private checkout (<profile>/.skillator-update-source) - the old pointer stays
+    case $(native "$root" | tr '\\' '/')/ in
+      */.skillator-update-source/*) ;;
+      *) native "$root" > "$_dest/.skillator-source" ;;
+    esac
+    # F204: only a dest this run fully refreshed records the version; otherwise a stale record goes
+    if [ -n "$plugin_version" ] && [ "$_current" = 1 ]; then printf '%s\n' "$plugin_version" > "$_dest/.skillator-version"
+    else rm -f "$_dest/.skillator-version"; fi
     if [ "$_cli" = pi ]; then pi_ignore "$_dest"; fi
   fi
   # the targets loop is a subshell - the summary reads the dests from this file
@@ -371,8 +412,8 @@ put_cmd() {
 # source "auto"); this one re-exports the board's extension from the dest's
 # ops-board/pi/, so the data layer has one copy. Rewritten every run, like the prompts.
 put_pi_ext() {
-  _ext="$HOME/.pi/agent/extensions/skillator-ops.ts"
-  _shifu_ext="$HOME/.pi/agent/extensions/skillator-shifu.ts"
+  _ext="$pi_agent/extensions/skillator-ops.ts"
+  _shifu_ext="$pi_agent/extensions/skillator-shifu.ts"
   if [ -n "$dry" ]; then echo "        would write $_ext"; echo "        would write $_shifu_ext"; return 0; fi
   mkdir -p "$(dirname -- "$_ext")"
   _to=$(native "$1" | sed 's/[\\"]/\\&/g')
@@ -446,12 +487,14 @@ muse_json() {
 put_muse() {
   _muse=""
   if [ "${SKILLATOR_MUSE+set}" = set ]; then
-    [ -n "$SKILLATOR_MUSE" ] && [ -x "$SKILLATOR_MUSE" ] || return 0
-    _muse="$SKILLATOR_MUSE"
+    if [ -n "$SKILLATOR_MUSE" ] && [ -x "$SKILLATOR_MUSE" ]; then _muse="$SKILLATOR_MUSE"; fi
   elif command -v muse >/dev/null 2>&1; then
     _muse=$(command -v muse)
   fi
-  [ -z "$_muse" ] && return 0
+  if [ -z "$_muse" ]; then
+    if [ "${target_host:-}" = muse ]; then echo 'Muse: not installed/skipped'; fi
+    return 0
+  fi
 
   _plug_dir="$root"
   if [ ! -f "$_plug_dir/.muse-plugin/plugin.json" ]; then
@@ -589,44 +632,98 @@ retire_dir() {
     retire_file "$_d/SKILL.md"
   fi
 }
+# refresh_cmd_dir <template> <dest> <name>: rewrite <dest>/<name>/SKILL.md from the template
+# only when it is a command dir skillator wrote - by retire_dir's rules: no link, a body that
+# names skillator (retired_body), nothing in it but SKILL.md and its marker - and never a skill
+# this installer tracks in the manifest. Anything else is kept. Same as install.ps1 Update-CmdDir.
+refresh_cmd_dir() {
+  _rd="$2/$3"
+  [ -e "$_rd/SKILL.md" ] || [ -L "$_rd/SKILL.md" ] || return 0
+  if under_link "$_rd/SKILL.md"; then echo "        kept $_rd: a link or under one"; return 0; fi
+  if [ -f "$2/$manifest" ] && tr -d '\r' < "$2/$manifest" | grep -qxF -- "$3"; then
+    echo "        kept $_rd: a skill, not a command"; return 0
+  fi
+  if [ ! -f "$_rd/SKILL.md" ] || ! grep -qE "$retired_body" "$_rd/SKILL.md"; then
+    echo "        kept $_rd: not written by skillator"; return 0
+  fi
+  if [ -n "$(ls -A "$_rd" | grep -vxF -e SKILL.md -e "$owned")" ]; then
+    echo "        kept $_rd: holds files skillator did not write"; return 0
+  fi
+  put_cmd "$1" "$2" "$_rd/SKILL.md"
+  # not a manifest skill: an older run's marker goes, as the antigravity writer drops it
+  if [ -z "$dry" ]; then rm -f "$_rd/$owned"; fi
+}
+# is_shipped <name>: a skill this source ships - its command wrapper (code-vader, skillator-sync)
+# never overwrites it. Same as install.ps1 Write-Commands.
+is_shipped() { printf '%s\n' "$shipped" | grep -qxF -- "$1"; }
+# is_cmd_wrapper <SKILL.md> <name>: the file is the command wrapper an older run wrote over the
+# shipped skill <name> - it loads that skill rather than being it (host-commands/antigravity/<name>)
+is_cmd_wrapper() {
+  tr -d '\r' < "$1" | grep -qE "^Load the \`$2\` skill \(.*/$2/SKILL\.md\)"
+}
+# same_dir <a> <b>: both exist and are one directory, links resolved (case-blind under MSYS)
+same_dir() {
+  _sa=$(CDPATH= cd -- "$1" 2>/dev/null && pwd -P) && _sb=$(CDPATH= cd -- "$2" 2>/dev/null && pwd -P) || return 1
+  [ "$(fold_case "$_sa")" = "$(fold_case "$_sb")" ]
+}
+# fold_case <path>: lower case under MSYS (a case-blind filesystem), else unchanged
+fold_case() {
+  if command -v cygpath >/dev/null 2>&1; then printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; else printf '%s' "$1"; fi
+}
 write_commands() {
   _c="$root/host-commands"
-  _cmds="skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update team-messages pending-sentinel verify-shifu analyse-shifu gauntlet-plan gauntlet-run team code-vader skillator-sync message-uhura decision-matrix"
+  _cmds="skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update skillator-update-all team-messages pending-sentinel verify-shifu analyse-shifu gauntlet-plan gauntlet-run team code-vader skillator-sync message-uhura decision-matrix"
   _ops_cmds="skillator-ops"
+  _file_cmds="$_cmds queue-jarvis"
   case "$1" in
     codex)
       # F90: skills (Codex runs them now), from Antigravity's skill-commands; the custom
       # prompts pre-F90 runs wrote are retired (A218), nothing else in prompts/. F105: $skillator-ops -
       # skill hosts only; pi and Claude Code have their own /ops
-      for _n in $_cmds $_ops_cmds; do put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"; done
+      for _n in $_cmds $_ops_cmds; do
+        is_shipped "$_n" || put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
+      done
       for _n in $retired_cmds upstream-sync ops; do retire_dir "$2/$_n"; done
       for _n in $retired_cmds skillator-update team-messages; do retire_file "$codex_home/prompts/$_n.md"; done ;;
     cursor)
-      for _n in $_cmds; do put_cmd "$_c/cursor/$_n.md" "$2" "$HOME/.cursor/commands/$_n.md"; done
-      for _n in $retired_cmds upstream-sync; do retire_file "$HOME/.cursor/commands/$_n.md"; done ;;
+      for _n in $_file_cmds; do put_cmd "$_c/cursor/$_n.md" "$2" "$cursor_config/commands/$_n.md"; done
+      for _n in $retired_cmds upstream-sync; do retire_file "$cursor_config/commands/$_n.md"; done ;;
     pi)
-      [ "$2" = "$HOME/.pi/agent/skills" ] || return 0
-      for _n in $_cmds; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done
-      for _n in $retired_cmds upstream-sync; do retire_file "$HOME/.pi/agent/prompts/$_n.md"; done
+      [ "$2" = "$pi_agent/skills" ] || return 0
+      for _n in $_file_cmds; do put_cmd "$_c/pi/$_n.md" "$2" "$pi_agent/prompts/$_n.md"; done
+      for _n in $retired_cmds upstream-sync; do retire_file "$pi_agent/prompts/$_n.md"; done
       put_pi_ext "$2" ;;
     opencode)
       # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode; F159: /skillator-ops
-      for _n in $_cmds $_ops_cmds; do put_cmd "$_c/opencode/$_n.md" "$2" "$oc_config/commands/$_n.md"; done
+      for _n in $_file_cmds $_ops_cmds; do put_cmd "$_c/opencode/$_n.md" "$2" "$oc_config/commands/$_n.md"; done
       for _n in $retired_cmds upstream-sync ops; do retire_file "$oc_config/commands/$_n.md"; done ;;
-    antigravity)
+    gemini)
+      for _n in $_file_cmds; do put_cmd "$_c/gemini/$_n.toml" "$2" "$gemini_config/commands/$_n.toml"; done
+      for _n in $retired_cmds upstream-sync; do retire_file "$gemini_config/commands/$_n.toml"; done
+      # a full install also leaves the Antigravity command skills in Gemini's skills dir, and
+      # Gemini loads them: a Gemini-only update refreshes the ones skillator wrote (never creates one)
+      if [ "$target_host" = gemini ]; then
+        for _n in $_cmds $_ops_cmds; do refresh_cmd_dir "$_c/antigravity/$_n/SKILL.md" "$2" "$_n"; done
+      fi ;;
+    antigravity|agy)
       for _n in $_cmds $_ops_cmds; do
+        is_shipped "$_n" && continue
         put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
         # an older run may have marked it owned - it is not a manifest skill
         if under_link "$2/$_n/$owned"; then echo "        kept $2/$_n/$owned: a link or under one"; elif [ -z "$dry" ]; then rm -f "$2/$_n/$owned"; fi
       done
       for _n in $retired_cmds upstream-sync ops; do retire_dir "$2/$_n"; done
-      # F57: the Antigravity IDE's extension, from Antigravity's own dest
-      if [ "$2" = "$HOME/.gemini/config/skills" ]; then put_agy_ext "$2"; fi
+      # F57: the Antigravity IDE's extension, from Antigravity's own dest - or the IDE's
+      # selected profile when /skillator-update runs in the IDE (target host antigravity). The
+      # IDE CLI installs into the IDE's default extensions, so only its default profile gets it.
+      if [ -n "$target_host" ]; then
+        if [ "$target_host" = antigravity ]; then
+          if same_dir "$2" "$HOME/.gemini/config/skills"; then put_agy_ext "$2"
+          else echo "        skip  the Antigravity IDE ops board: $(dirname -- "$2") is not the Antigravity IDE's default profile (~/.gemini/config)"; fi
+        fi
+      elif [ "$2" = "$HOME/.gemini/config/skills" ]; then put_agy_ext "$2"; fi
       # Gemini CLI shares the ~/.gemini marker and reads ~/.gemini/skills
-      if [ "$2" = "$HOME/.gemini/skills" ]; then
-        for _n in $_cmds; do put_cmd "$_c/gemini/$_n.toml" "$2" "$HOME/.gemini/commands/$_n.toml"; done
-        for _n in $retired_cmds upstream-sync; do retire_file "$HOME/.gemini/commands/$_n.toml"; done
-      fi ;;
+      if [ -z "$target_host" ] && [ "$2" = "$gemini_config/skills" ]; then write_commands gemini "$2"; fi ;;
   esac
 }
 
@@ -638,6 +735,19 @@ plugin_ops() {
   _ip=$(tr -d '\r' < "$_ipj" | grep -A12 '"skillator@' |
         sed -n 's/.*"installPath"[[:space:]]*:[[:space:]]*"\(.*\)".*/\1/p' | head -1 | sed 's#\\\\#/#g')
   if [ -n "$_ip" ] && [ -f "$_ip/mods/ops-board/ops/ops.sh" ]; then echo "$_ip/mods/ops-board/ops"; fi
+}
+
+# root_profile <path>: the path (trailing slashes stripped) is a filesystem root - empty, a bare
+# drive (C:, C:/, C:\, and /c only under MSYS, where cygpath exists: a Linux /p is a directory)
+# or a UNC share root (//host/share with no further part)
+root_profile() {
+  case "$1" in
+    ''|/|[A-Za-z]:|[A-Za-z]:[\\/]) return 0 ;;
+    //*/*/*) return 1 ;;
+    //*) return 0 ;;
+    /[A-Za-z]) if command -v cygpath >/dev/null 2>&1; then return 0; fi ;;
+  esac
+  return 1
 }
 
 # native <path>: the path as the host programs see it - on Git Bash / Cygwin the mixed
@@ -753,6 +863,28 @@ if [ -n "$selftest" ]; then
   [ "$_c" = 2 ] || { echo "FAIL: unknown flag exited $_c"; exit 1; }
   printf '%s\n' "$_o" | grep -q '^usage: install.sh' || { echo "FAIL: unknown flag usage line"; exit 1; }
   [ -z "$(find "$T" -type f ! -name fake-ide)" ] || { echo "FAIL: unknown flag wrote files"; exit 1; }
+  _scoped_profile="$T/isolated gemini profile"
+  mkdir "$_scoped_profile"
+  # F204: a full install's old command skill dir in Gemini's skills - skillator's, so refreshed
+  mkdir -p "$_scoped_profile/skills/skillator-update"
+  printf -- '---\nname: skillator-update\n---\nold {{SKILLS}}/.skillator-source\n' > "$_scoped_profile/skills/skillator-update/SKILL.md"
+  HOME=$T CODEX_HOME=$T/.codex sh "$0" --force --target-host gemini --target-profile "$_scoped_profile" >/dev/null || { echo 'FAIL: scoped update'; exit 1; }
+  for _cmd in skillator-update skillator-update-all; do
+    [ -f "$_scoped_profile/commands/$_cmd.toml" ] || { echo "FAIL: scoped update missing $_cmd"; exit 1; }
+  done
+  grep -q 'profile running this command' "$_scoped_profile/skills/skillator-update/SKILL.md" || { echo 'FAIL: scoped Gemini update left an old command skill dir stale'; exit 1; }
+  [ ! -e "$_scoped_profile/skills/skillator-update-all" ] || { echo 'FAIL: scoped Gemini update wrote a new Antigravity command'; exit 1; }
+  # F204: a profile given with a trailing / is the same profile - pi's prompts and extension follow it
+  _scoped_pi="$T/isolated pi profile"
+  mkdir "$_scoped_pi"
+  HOME=$T CODEX_HOME=$T/.codex sh "$0" --force --target-host pi --target-profile "$_scoped_pi/" >/dev/null || { echo 'FAIL: scoped pi update'; exit 1; }
+  for _f in prompts/skillator-update.md extensions/skillator-ops.ts; do
+    [ -f "$_scoped_pi/$_f" ] || { echo "FAIL: scoped pi update with a trailing separator missing $_f"; exit 1; }
+  done
+  [ "$(cat "$_scoped_pi/skills/.skillator-version")" = "$plugin_version" ] || { echo 'FAIL: scoped update did not record the installed version'; exit 1; }
+  for _untouched in .codex/skills .gemini/skills .local/bin/ops ide-calls lad; do
+    [ ! -e "$T/$_untouched" ] || { echo "FAIL: scoped update wrote $_untouched outside the selected profile"; exit 1; }
+  done
   HOME=$T CODEX_HOME=$T/.codex sh "$0" >/dev/null ||{ echo "FAIL: install exited $?"; exit 1; }
   # B6: every frontmatter in commands/ and host-commands/ must be valid YAML or pi never registers
   # the command. No YAML parser in the installer, so a narrow check: an unquoted plain value
@@ -885,30 +1017,32 @@ if [ -n "$selftest" ]; then
   # F67: opencode - the skills in its global skills dir, the seven commands in its commands/
   # dir, each substituted with that dest, no placeholder left, arguments by $ARGUMENTS
   _oc=.config/opencode
-  for _n in skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update team-messages pending-sentinel verify-shifu analyse-shifu gauntlet-plan gauntlet-run; do
+  for _n in skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update skillator-update-all team-messages pending-sentinel verify-shifu analyse-shifu gauntlet-plan gauntlet-run; do
     _f=$T/$_oc/commands/$_n.md
     [ -f "$_f" ] || { echo "FAIL: missing $_oc/commands/$_n.md"; exit 1; }
     head -1 "$_f" | grep -qx -- '---' || { echo "FAIL: opencode $_n has no frontmatter"; exit 1; }
     grep -q '^description: ' "$_f" || { echo "FAIL: opencode $_n description"; exit 1; }
     grep -qF '{{SKILLS}}' "$_f" && { echo "FAIL: placeholder left in $_oc/commands/$_n.md"; exit 1; }
-    case $_n in engage-picard) ;; *) grep -qF "$N/$_oc/skills/" "$_f" || { echo "FAIL: opencode $_n not substituted with its own dest"; exit 1; } ;; esac
+    case $_n in engage-picard|skillator-update) ;; *) grep -qF "$N/$_oc/skills/" "$_f" || { echo "FAIL: opencode $_n not substituted with its own dest"; exit 1; } ;; esac
     case $_n in skillator-pending) ;; *) grep -qF '$ARGUMENTS' "$_f" || { echo "FAIL: opencode $_n args"; exit 1; } ;; esac
   done
   grep -qF "sh $N/$_oc/skills/tickets-zordon/scripts/pending.sh" "$T/$_oc/commands/skillator-pending.md" || { echo "FAIL: opencode pending not substituted"; exit 1; }
-  grep -qF "$N/$_oc/skills/.skillator-source" "$T/$_oc/commands/skillator-update.md" || { echo "FAIL: opencode skillator-update not substituted"; exit 1; }
+  grep -qF "$N/$_oc/skills/.skillator-source" "$T/$_oc/commands/skillator-update-all.md" || { echo 'FAIL: opencode skillator-update-all not substituted'; exit 1; }
   grep -qF "$N/$_oc/skills/teams-uhura/scripts/team.mjs inbox --unread --mark-read" "$T/$_oc/commands/team-messages.md" || { echo "FAIL: opencode team-messages not substituted"; exit 1; }
   grep -qF "$N/$_oc/skills/teams-uhura/scripts/team.mjs say --file <that path>" "$T/$_oc/commands/team-messages.md" || { echo "FAIL: opencode team-messages reply not by say --file"; exit 1; }
   grep -qF -e "<<'EOF'" -e "@'" -e 'say "' "$T/$_oc/commands/team-messages.md" && { echo "FAIL: opencode team-messages puts reply text in shell source"; exit 1; }
   [ "$(cat "$T/$_oc/skills/.skillator-source" 2>/dev/null)" = "$(native "$root")" ] || { echo "FAIL: source pointer in $_oc/skills"; exit 1; }
   [ -f "$T/$_oc/skills/tickets-zordon/.skillator-owned" ] || { echo "FAIL: opencode skill has no ownership marker"; exit 1; }
   grep -qxE 'skillator-pending|list-ticket-zordon|engage-picard|archive-zordon|sync-zordon|skillator-update|team-messages|pending-sentinel|verify-shifu|analyse-shifu|gauntlet-plan|gauntlet-run|skillator-ops' "$T/$_oc/skills/.skillator-installed" && { echo "FAIL: command in opencode manifest"; exit 1; }
-  # /skillator-update names opencode among the hosts it refreshes, on every host
+  # /skillator-update-all names opencode among the hosts it refreshes, on every host.
   for f in .codex/skills/skillator-update/SKILL.md .cursor/commands/skillator-update.md .pi/agent/prompts/skillator-update.md \
            .gemini/commands/skillator-update.toml .gemini/skills/skillator-update/SKILL.md \
            .gemini/config/skills/skillator-update/SKILL.md .gemini/antigravity-cli/skills/skillator-update/SKILL.md $_oc/commands/skillator-update.md; do
-    grep -q 'opencode' "$T/$f" || { echo "FAIL: skillator-update does not name opencode in $f"; exit 1; }
+    grep -qF -- --target-profile "$T/$f" || { echo "FAIL: scoped update missing target profile in $f"; exit 1; }
+    f=$(printf '%s' "$f" | sed 's/skillator-update/skillator-update-all/')
+    grep -q 'opencode' "$T/$f" || { echo "FAIL: skillator-update-all does not name opencode in $f"; exit 1; }
     for _guard in 'rev-parse --show-toplevel' 'git -C <checkout-root> pull --ff-only' 'Re-check both installers' 'never merge, reset, stash or force' 'nongit cache'; do
-      grep -qF "$_guard" "$T/$f" || { echo "FAIL: skillator-update missing $_guard in $f"; exit 1; }
+      grep -qF "$_guard" "$T/$f" || { echo "FAIL: skillator-update-all missing $_guard in $f"; exit 1; }
     done
   done
   grep -qF "sh $N/.codex/skills/tickets-zordon/scripts/pending.sh" "$T/.codex/skills/skillator-pending/SKILL.md" || { echo "FAIL: codex skill not substituted"; exit 1; }
@@ -936,8 +1070,9 @@ if [ -n "$selftest" ]; then
            .pi/agent/prompts/skillator-update.md:.pi/agent/skills .gemini/commands/skillator-update.toml:.gemini/skills \
            .gemini/config/skills/skillator-update/SKILL.md:.gemini/config/skills .gemini/skills/skillator-update/SKILL.md:.gemini/skills \
            .gemini/antigravity-cli/skills/skillator-update/SKILL.md:.gemini/antigravity-cli/skills; do
-    grep -qF "$N/${f#*:}/.skillator-source" "$T/${f%%:*}" || { echo "FAIL: skillator-update not substituted in ${f%%:*}"; exit 1; }
-    grep -qF '{{SKILLS}}' "$T/${f%%:*}" && { echo "FAIL: placeholder left in ${f%%:*}"; exit 1; }
+    _update_file=$(printf '%s' "${f%%:*}" | sed 's/skillator-update/skillator-update-all/')
+    grep -qF "$N/${f#*:}/.skillator-source" "$T/$_update_file" || { echo "FAIL: all-host updater not substituted in $_update_file"; exit 1; }
+    grep -qF '{{SKILLS}}' "$T/$_update_file" && { echo "FAIL: placeholder left in $_update_file"; exit 1; }
   done
   grep -q '^name: skillator-update$' "$T/.gemini/antigravity-cli/skills/skillator-update/SKILL.md" || { echo "FAIL: agy skill name skillator-update"; exit 1; }
   # F66: /team-messages points at the installed teams-uhura script, substituted per dest
@@ -1014,7 +1149,7 @@ if [ -n "$selftest" ]; then
   done
   # F90: codex runs the commands as skills - <codex home>/skills/<n>/SKILL.md with name and
   # description, no placeholder, and no custom prompt written
-  for _n in skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update team-messages pending-sentinel verify-shifu analyse-shifu gauntlet-plan gauntlet-run; do
+  for _n in skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update skillator-update-all team-messages pending-sentinel verify-shifu analyse-shifu gauntlet-plan gauntlet-run; do
     _f=$T/.codex/skills/$_n/SKILL.md
     { head -1 "$_f" | grep -qx -- '---' && grep -qx "name: $_n" "$_f" && grep -q '^description: ' "$_f"; } || { echo "FAIL: codex skill $_n frontmatter"; exit 1; }
     grep -qF '{{SKILLS}}' "$_f" && { echo "FAIL: placeholder left in .codex/skills/$_n"; exit 1; }
@@ -1285,6 +1420,69 @@ fi
 
 tmpdests=$(mktemp)
 trap 'rm -f "$tmpdests"' EXIT
+
+if [ -n "$target_host" ]; then
+  if command -v cygpath >/dev/null 2>&1; then
+    case "$target_profile" in [A-Za-z]:[\\/]*|\\\\*) target_profile=$(cygpath -u "$target_profile") ;; esac
+  fi
+  while [ "${target_profile%/}" != "$target_profile" ]; do target_profile=${target_profile%/}; done
+  if root_profile "$target_profile"; then printf 'Target profile must be below the filesystem root\n%s\n' "$usage" >&2; exit 2; fi
+  case "$target_profile" in /*) ;; *) echo 'Target profile must be an absolute directory' >&2; exit 2 ;; esac
+  if [ ! -d "$target_profile" ] || under_link "$target_profile"; then
+    echo 'Target profile must be an existing directory without symlink ancestors' >&2; exit 2
+  fi
+  target_profile=$(CDPATH= cd -- "$target_profile" && pwd -P)
+  [ "$target_profile" != / ] || { echo 'Target profile must be below the filesystem root' >&2; exit 2; }
+  if [ "$target_host" = muse ]; then
+    MUSE_CONFIG_DIR=$(native "$target_profile"); export MUSE_CONFIG_DIR
+    put_muse
+    exit 0
+  fi
+
+  dest="$target_profile/skills"
+  # both sides links resolved: an installer reached through a link still sees its own source
+  _src_real=$(fold_case "$(CDPATH= cd -- "$src" && pwd -P)")
+  case "$(fold_case "$dest")" in "$_src_real"|"$_src_real"/*) echo 'The selected skills directory overlaps the installer source' >&2; exit 2 ;; esac
+  for _scoped in "$dest" "$dest/$manifest" "$dest/.skillator-source" "$dest/.skillator-version" "$dest/.ignore" "$dest/PLATFORMS.md" "$dest/PRACTICE.md" "$dest/WORKFLOW.md" "$dest/practice" "$dest/references" "$dest/ops-board"; do
+    if under_link "$_scoped"; then echo "Selected profile contains a shared link: $_scoped" >&2; exit 2; fi
+  done
+  case "$target_host" in
+    claude-code)
+      _existing_plugin=$(find "$target_profile/plugins" -maxdepth 4 -type d -name skillator 2>/dev/null | head -1 || true)
+      if [ -n "$_existing_plugin" ]; then echo 'Claude Code Skillator uses the native marketplace updater' >&2; exit 2; fi ;;
+    codex) codex_home=$target_profile ;;
+    cursor) cursor_config=$target_profile ;;
+    gemini) gemini_config=$target_profile ;;
+    pi)
+      pi_agent=$target_profile
+      for _ext in "$pi_agent/extensions/skillator-ops.ts" "$pi_agent/extensions/skillator-shifu.ts"; do
+        if under_link "$_ext"; then echo "Selected profile contains a shared link: $_ext" >&2; exit 2; fi
+      done ;;
+    opencode) oc_config=$target_profile ;;
+  esac
+  # F204: a full install also fills ~/.pi/skills (the pi row in $targets), so pi's default
+  # profile refreshes it too; any other pi profile has no such sibling and leaves it alone
+  _pi_sibling=""
+  if [ "$target_host" = pi ]; then
+    if same_dir "$target_profile" "$HOME/.pi/agent"; then
+      _pi_sibling="$HOME/.pi/skills"
+      for _scoped in "$_pi_sibling" "$_pi_sibling/$manifest" "$_pi_sibling/.skillator-source" "$_pi_sibling/.skillator-version" "$_pi_sibling/.ignore" "$_pi_sibling/ops-board"; do
+        if under_link "$_scoped"; then echo "Selected profile contains a shared link: $_scoped" >&2; exit 2; fi
+      done
+    else
+      echo "note  ~/.pi/skills left alone: $target_profile is not pi's default profile (~/.pi/agent)"
+    fi
+  fi
+  prune_dest "$dest"
+  install_into "$target_host" "$dest"
+  write_commands "$target_host" "$dest"
+  if [ -n "$_pi_sibling" ]; then
+    prune_dest "$_pi_sibling"
+    install_into pi "$_pi_sibling"
+    write_commands pi "$_pi_sibling"
+  fi
+  exit 0
+fi
 
 echo "$targets" | while IFS='|' read -r cli marker dests; do
   [ -n "$cli" ] || continue

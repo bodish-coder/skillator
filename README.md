@@ -35,13 +35,19 @@ If you installed with `install.ps1 -Link` / `install.sh --link`, a plain
 `git pull` in your clone is enough — symlinked skills are always live. Plain
 copies need `install.ps1 -Force` / `install.sh --force` to refresh.
 
-Or do it all in one go with `/skillator-update` (Claude Code, codex as the
-skill `$skillator-update`, cursor, gemini, agy, pi, opencode): it updates the
+Or do it all in one go with `/skillator-update-all` (Claude Code, codex as the
+skill `$skillator-update-all`, cursor, gemini, agy, pi, opencode): it updates the
 marketplace and the `skillator` and `ops-board` plugins, then re-runs the
 installer with `-Force` / `--force` from the newest source - a clone path you
 give it, the clone the installer last ran from (`.skillator-source` beside the
 installed skills), or the updated plugin - so every other host gets the same
 version. It never pushes; restart Claude Code afterwards.
+
+`/skillator-update` (codex: `$skillator-update`) updates only the CLI and profile
+running it: Claude Code through its own plugin list, any other host by the
+installer scoped to that profile (`install.ps1 -TargetHost <host> -TargetProfile
+<profile>` / `install.sh --target-host <host> --target-profile <profile>`). It
+notes the profile's installed version before pulling and never installs a lower one.
 
 **Self-update (F181).** The plugin's hooks (`plugin/hooks/hooks.json`:
 `session-owner.sh` and `self-update.sh due-run` on `SessionStart`,
@@ -51,7 +57,7 @@ integer; state in `~/.skillator/self-update.json`; one run at a time). When one
 is out, a detached background run updates the Claude Code plugins, then runs
 the installer from the updated plugin for the other hosts - unless an
 installer source pointer (`.skillator-source`) names a git clone, when the
-notice asks for `/skillator-update` instead - and the next prompt gets one
+notice asks for `/skillator-update-all` instead - and the next prompt gets one
 line, `skillator updated <old> -> <new> - restart Claude Code to load it`. It
 never installs an older or equal version; an update that did not land says
 `skillator update did not apply`. It skips while a relay run in the current
@@ -136,7 +142,7 @@ Manual install paths, if you'd rather not run the script:
 | Codex | `$CODEX_HOME/skills/` (what the installer writes; default `~/.codex/skills/`) — auto-loaded when the task matches. Also reads `~/.agents/skills/` if present, with no dedupe (codex 0.155.1, probed 2026-09-23) |
 | Antigravity CLI | `.agents/skills/` (workspace) or `~/.gemini/antigravity-cli/skills/` (global, what `agy` 1.4.5 reads; the installer also writes `~/.gemini/config/skills/` and `~/.gemini/skills/`) |
 | Pi | `.pi/skills/` (force with `/skill:<name>`) |
-| Muse | native plugin from `plugin/.muse-plugin/plugin.json` (every skill; no commands, no hooks; skills are on at once, nothing to approve): `muse plugins marketplace add skillator https://github.com/bodish-coder/skillator` then `muse plugins install skillator@skillator` (from 4.17.x; Muse reads the Claude catalog, whose entry is `./plugin`); update with `muse plugins marketplace update skillator`, then `muse plugins remove skillator` + `muse plugins install skillator@skillator` - a plain `muse plugins update` re-reads the old snapshot and changes nothing (`/skillator-update` does this). Or from a clone - `git clone https://github.com/bodish-coder/skillator <dir>`, then `muse plugins install <dir>/plugin`; update with `git -C <dir> pull` then `muse plugins update skillator`. The ops-board skip warning is expected - its hook is a Claude Code mod |
+| Muse | native plugin from `plugin/.muse-plugin/plugin.json` (every skill; no commands, no hooks; skills are on at once, nothing to approve): `muse plugins marketplace add skillator https://github.com/bodish-coder/skillator` then `muse plugins install skillator@skillator` (from 4.17.x; Muse reads the Claude catalog, whose entry is `./plugin`); update with `muse plugins marketplace update skillator`, then `muse plugins remove skillator` + `muse plugins install skillator@skillator` - a plain `muse plugins update` re-reads the old snapshot and changes nothing (`/skillator-update-all` does this). Or from a clone - `git clone https://github.com/bodish-coder/skillator <dir>`, then `muse plugins install <dir>/plugin`; update with `git -C <dir> pull` then `muse plugins update skillator`. The ops-board skip warning is expected - its hook is a Claude Code mod |
 | opencode | `.opencode/skills/` (project) or `~/.config/opencode/skills/` (global, what the installer writes; `$XDG_CONFIG_HOME/opencode/skills/` when that is set) — also reads `~/.claude/skills/` and `~/.agents/skills/`. Commands: `~/.config/opencode/commands/<n>.md` → `/<n>` |
 | Prime Agent | anywhere — skills there are Python packages, so read the `SKILL.md` or reference it from `AGENTS.md` |
 

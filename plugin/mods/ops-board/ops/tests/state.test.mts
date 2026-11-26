@@ -1581,6 +1581,24 @@ test('F171 state: Help names commands every host has - /ops, /skillator-pending,
   }
 })
 
+test('F204 state: Help says /skillator-update refreshes the current profile and lists /skillator-update-all for every host', () => {
+  const by = (id: string) => COMMANDS.find(c => c.id === id)
+  const one = by('skillator-update'), all = by('skillator-update-all')
+  assert.ok(one && all, 'both updaters are in the Help catalog')
+  assert.equal(all!.name, '/skillator-update-all')
+  for (const field of [one!.summary, one!.usage]) {
+    assert.match(field, /current (CLI )?profile/)
+    assert.doesNotMatch(field, /all CLIs|every other host/)
+  }
+  assert.match(all!.summary + all!.usage, /every (other )?host/)
+  assert.ok(all!.triggers.includes('update all hosts'))
+  // review 4, item 5: a clone source is /skillator-update-all's; /skillator-update shows no clone path
+  // review 5, item 2: no clone-path hint on /skillator-update; the clone example is on -all's item
+  assert.deepEqual(one!.examples, ['/skillator-update'])
+  assert.equal(one!.hint, undefined)
+  assert.ok(all!.examples.includes('/skillator-update-all <clone>'), '/skillator-update-all shows the clone example')
+})
+
 test('F175 state: Tickets-page u action prints board-wide decideQuestionsPrompt() and Help lists /decision-matrix', () => {
   const prompt = decideQuestionsPrompt()
   assert.doesNotMatch(prompt, /^\//)

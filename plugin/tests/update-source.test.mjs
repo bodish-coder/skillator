@@ -13,9 +13,14 @@ const available = (exe, args) => spawnSync(exe, args, { windowsHide: true, timeo
 const shells = ['powershell', 'pwsh'].filter(exe => available(exe, ['-NoProfile', '-Command', 'exit 0']));
 const ps = shells[0];
 const hasSh = available('sh', ['-c', 'exit 0']);
-const commands = ['commands/skillator-update.md', 'host-commands/antigravity/skillator-update/SKILL.md',
-  ...['cursor', 'pi', 'opencode'].map(h => `host-commands/${h}/skillator-update.md`),
-  'host-commands/gemini/skillator-update.toml'];
+// F204: /skillator-update-all is the all-host updater; /skillator-update refreshes one profile
+const updaterFiles = name => [`commands/${name}.md`, `host-commands/antigravity/${name}/SKILL.md`,
+  ...['cursor', 'pi', 'opencode'].map(h => `host-commands/${h}/${name}.md`),
+  `host-commands/gemini/${name}.toml`];
+const commands = updaterFiles('skillator-update-all');
+const profileCommands = updaterFiles('skillator-update');
+// F204 review 3, item 1: the Claude Code entry point stops after the plugin update - only the host copies install
+const hostProfileCommands = profileCommands.filter(p => !p.startsWith('commands/'));
 const root = mkdtempSync(join(tmpdir(), 'a168-'));
 const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: join(root, 'gitconfig'),
   GIT_TERMINAL_PROMPT: '0', GIT_ALLOW_PROTOCOL: 'file', GIT_AUTHOR_NAME: 'Fixture',
@@ -135,6 +140,83 @@ test('A231: every updater treats the pointer as a hint that never stops or downg
     assert.match(r, /no skillator version in step 1.*use the pointer.*say so/, `${path}: no step-1 version uses the pointer`);
   }
 });
+test('F204: every profile updater targets only the invoking profile through the scoped installer', () => {
+  for (const path of profileCommands) {
+    const text = readFileSync(join(plugin, path), 'utf8').replace(/\s+/g, ' ');
+    assert.match(text, /Never update a different host or profile/, `${path}: profile-only scope`);
+    if (!path.startsWith('commands/')) {
+      assert.match(text, /Target host: `[a-z]+`|Codex -> `codex`.*Antigravity CLI -> `agy`.*Antigravity IDE -> `antigravity`.*Gemini CLI -> `gemini`/, `${path}: names its target host`);
+      // F204 review 2, item 1: the installer fills {{SKILLS}} per written copy, so each copy names its
+      // own profile ({{SKILLS}}/..) and its own records - never "the active session"'s guess
+      assert.ok(text.includes('`{{SKILLS}}/..`'), `${path}: the profile is this copy's {{SKILLS}}/..`);
+      for (const rec of ['{{SKILLS}}/.skillator-version', '{{SKILLS}}/.skillator-source']) assert.ok(text.includes(rec), `${path}: names ${rec}`);
+      assert.doesNotMatch(text, /from the active session/, `${path}: resolves the profile from the session`);
+    }
+    // F204 review 2, item 2: the Antigravity copy is also what Gemini CLI loads from ~/.gemini/skills
+    if (path.includes('/antigravity/')) assert.match(text, /Gemini CLI -> `gemini`/, `${path}: Gemini CLI loads this copy too`);
+    if (!path.startsWith('commands/')) {
+      assert.ok(text.includes('-TargetHost "<host>" -TargetProfile "<profile>"'), `${path}: install.ps1 call with -TargetProfile`);
+      assert.ok(text.includes('--target-host "<host>" --target-profile "<profile>"'), `${path}: install.sh call with --target-profile`);
+    }
+    assert.doesNotMatch(text, /every host this machine has/, `${path}: not the all-host updater`);
+    // F204 review item 7: the Muse plugin has no commands, so no Muse branch can run here
+    assert.doesNotMatch(text, /Muse|MUSE_CONFIG_DIR/, `${path}: unreachable Muse branch`);
+  }
+});
+test('F204: every profile updater notes the installed version before pulling and refuses a downgrade after it', () => {
+  for (const path of hostProfileCommands) {
+    const text = readFileSync(join(plugin, path), 'utf8').replace(/\s+/g, ' ');
+    const noted = text.search(/(skills|SKILLS\}\})\/\.skillator-version/), pull = text.indexOf('pull --ff-only');
+    assert.ok(noted >= 0, `${path}: reads the profile's own version record`);
+    assert.ok(pull > noted, `${path}: the installed version is noted before the pull`);
+    assert.match(text.slice(0, pull), /[Bb]efore pulling/, `${path}: says the old version is read before pulling`);
+    const after = text.slice(pull);
+    assert.match(after, /[Aa]fter the pull, read the `version` in `<src>\/\.claude-plugin\/plugin\.json`/, `${path}: compares with the pulled source`);
+    assert.match(after, /[Ll]ower than the installed version.*refuse.*stop before installing.*never a downgrade/, `${path}: refuses a downgrade`);
+    assert.ok(after.indexOf('never a downgrade') < after.indexOf('install.ps1'), `${path}: the guard runs before the installer`);
+  }
+});
+test('F204 review 2, item 4: only the dedicated update checkout must be clean and at its upstream; a user clone needs a fast-forward pull', () => {
+  for (const path of hostProfileCommands) {
+    const text = readFileSync(join(plugin, path), 'utf8').replace(/\s+/g, ' ');
+    for (const guard of ['git -C <src> rev-parse --show-toplevel', 'git -C <checkout-root> pull --ff-only', 'never merge, reset, stash or force', 'Re-check both installers', 'nongit cache', 'missing Git or any other lookup error'])
+      assert.ok(text.includes(guard), `${path}: same guard as /skillator-update-all: ${guard}`);
+    // the strict check is scoped to the dedicated checkout, by name, and only there
+    assert.match(text, /[Oo]nly for the dedicated checkout `<profile>\/\.skillator-update-source`.*HEAD equals its upstream.*no local changes/, `${path}: strict check names the dedicated checkout`);
+    assert.doesNotMatch(text, /Verify HEAD equals its upstream and that the installer directory has no local changes before installing/, `${path}: strict check applied to every source`);
+  }
+});
+test('F204 review 3, item 1: Claude Code /skillator-update stops after the plugin update; every host copy still installs', () => {
+  const claude = readFileSync(join(plugin, 'commands/skillator-update.md'), 'utf8');
+  assert.match(claude, /claude plugin update <id> --scope <scope>/, 'the Claude Code plugin update');
+  assert.match(claude, /[Ss]top here/, 'an explicit stop after the plugin update');
+  // F204 review 5, item 2: Claude Code takes no checkout path, so it names no argument
+  assert.doesNotMatch(claude, /\$ARGUMENTS|checkout path/, 'commands/skillator-update.md: names an argument Claude Code never uses');
+  for (const step of ['install.ps1', 'install.sh', '.skillator-update-source', 'git clone', 'pull --ff-only', 'rev-parse', '-TargetHost', '--target-host', '.skillator-version', 'https://github.com/'])
+    assert.ok(!claude.includes(step), `commands/skillator-update.md: Claude Code would run the installer step ${step}`);
+  for (const path of hostProfileCommands) {
+    const text = readFileSync(join(plugin, path), 'utf8');
+    for (const step of ['install.ps1', 'install.sh', '.skillator-update-source', 'pull --ff-only', '-TargetHost "<host>"', '--target-host "<host>"', '.skillator-version'])
+      assert.ok(text.includes(step), `${path}: lost the installer step ${step}`);
+    assert.doesNotMatch(text, /This completes the Claude Code update|[Ss]top here: Claude Code/, `${path}: carries the Claude Code stop`);
+  }
+});
+// F204 review 5, item 1: a pointer into a scoped update's private checkout is never adopted
+test('F204 review 5, item 1: step 2b of /skillator-update-all and step 3b of /skillator-update skip a pointer into .skillator-update-source', () => {
+  const skip = /skip a pointer whose path contains `\/\.skillator-update-source` or `\\\.skillator-update-source`/;
+  for (const path of commands) {
+    const text = readFileSync(join(plugin, path), 'utf8').replace(/\s+/g, ' ');
+    const b = text.indexOf(' b. '), c = text.indexOf(' c. ', b);
+    assert.ok(b >= 0 && c > b, `${path}: has steps 2b and 2c`);
+    assert.match(text.slice(b, c), skip, `${path}: step 2b names the skip`);
+  }
+  for (const path of hostProfileCommands) {
+    const text = readFileSync(join(plugin, path), 'utf8').replace(/\s+/g, ' ');
+    const b = text.indexOf(' b. the directory named in the source pointer'), c = text.indexOf(' c. ', b);
+    assert.ok(b >= 0 && c > b, `${path}: has steps 3b and 3c`);
+    assert.match(text.slice(b, c), skip, `${path}: step 3b names the skip`);
+  }
+});
 // A232: a hung or runaway sh selftest fails fast with a reason instead of blocking for hours
 const selftest = extra => spawnSync('sh', [join(plugin, 'install.sh').replaceAll('\\', '/'), '--selftest'],
   { env: { ...env, ...extra }, encoding: 'utf8', timeout: 120000, windowsHide: true });
@@ -197,7 +279,7 @@ foreach ($name in 'Test-UnderLink', 'Write-Cmd') {
 Write-Cmd $Template $Skills $Target
 `);
   const skills = join(root, 'isolated skills').replaceAll('\\', '/');
-  for (const [i, path] of commands.slice(1).entries()) {
+  for (const [i, path] of [...commands.slice(1), ...profileCommands.slice(1)].entries()) {
     const template = join(plugin, path);
     const expected = readFileSync(template, 'utf8').replaceAll('\r', '').replaceAll('{{SKILLS}}', skills);
     for (const port of ['sh', ps]) {

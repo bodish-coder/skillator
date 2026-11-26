@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync, existsSync, symlinkSync, rmdirSync, unlinkSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync, mkdirSync, existsSync, symlinkSync, rmdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -26,6 +26,22 @@ function metadata(root, edit) {
   edit(data);
   writeFileSync(path, JSON.stringify(data), 'utf8');
 }
+
+test('update commands distinguish the current profile from all hosts on every adapter', () => {
+  for (const [host, suffix] of Object.entries({ antigravity: '/SKILL.md', cursor: '.md', gemini: '.toml', pi: '.md', opencode: '.md' })) {
+    const readCommand = name => readFileSync(join(plugin, 'host-commands', host, name + suffix), 'utf8');
+    const scoped = readCommand('skillator-update');
+    const all = readCommand('skillator-update-all');
+    assert.match(scoped, /--target-host/);
+    assert.match(scoped, /--target-profile/);
+    assert.doesNotMatch(scoped, /every host this machine has/);
+    // F204 review 2: each written copy names its own profile; Gemini CLI also loads the Antigravity copy
+    assert.match(scoped, /`\{\{SKILLS\}\}\/\.\.`/);
+    if (host === 'antigravity') assert.match(scoped, /Gemini CLI -> `gemini`/);
+    assert.match(all, /every host this machine has/);
+    assert.match(all, /\{\{SKILLS\}\}\/\.skillator-source/);
+  }
+});
 
 test('Queue Jarvis wrappers resolve the shared skill and require approval', () => {
   for (const [host, suffix] of Object.entries({ cursor: '.md', gemini: '.toml', pi: '.md', opencode: '.md' })) {
@@ -111,7 +127,7 @@ test('every published output has a source; host invocation contracts survive', a
     }
   }
   for (const [path, body] of outputs) {
-    if (/skillator-update/.test(path)) {
+    if (/skillator-update-all/.test(path)) { // F204: the all-host updater; /skillator-update is profile-only
       for (const guard of ['git -C <src> rev-parse --show-toplevel', 'git -C <checkout-root> pull --ff-only', 'never merge, reset, stash or force', 'missing Git or any other lookup error']) assert.ok(body.includes(guard), `${path}: ${guard}`);
       assert.ok(body.includes('{{SKILLS}}/.skillator-source'), path);
     }
@@ -226,7 +242,7 @@ test('a directory in an output path fails preflight before any writes', t => {
   assert.equal(readFileSync(stale, 'utf8'), 'keep stale');
 });
 
-test('Windows PowerShell installer writes all 18 Codex skill wrappers with exact substituted bytes', { skip: process.platform !== 'win32' ? 'Windows PowerShell writer check requires Windows' : false }, t => {
+test('Windows PowerShell installer writes all Codex skill wrappers with exact substituted bytes', { skip: process.platform !== 'win32' ? 'Windows PowerShell writer check requires Windows' : false }, t => {
   const root = fixture(t);
   ok(run(root, '--write'));
   const driver = join(root, 'writer.ps1');
@@ -241,6 +257,9 @@ foreach ($name in 'Rename-Retired', 'Remove-RetiredDir', 'Test-UnderLink', 'Writ
   if (-not $fn) { throw "Missing function $name" }
   . ([scriptblock]::Create($fn.Extent.Text.Replace('$PSScriptRoot', '$TemplateRoot')))
 }
+# as install.ps1: the skills this source ships, ordinal - their wrappers are never written over them
+[string[]]$shipped = @(Get-ChildItem (Join-Path $InstallerDirectory 'skills') -Directory | ForEach-Object { $_.Name })
+[Array]::Sort($shipped, [StringComparer]::Ordinal)
 $DryRun = $false
 $codexHome = Split-Path -Parent $Target
 Write-Commands codex $Target
@@ -249,8 +268,13 @@ Write-Commands codex $Target
   ok(result);
   assert.equal(result.stderr, '');
   const paths = contract.outputs.filter(p => p.startsWith('host-commands/antigravity/'));
-  assert.equal(paths.length, 18);
-  for (const path of paths) {
+  assert.equal(paths.length, 19);
+  // a shipped skill of the same name (code-vader, skillator-sync) keeps its own SKILL.md: no wrapper written
+  const shippedNames = new Set(readdirSync(join(plugin, 'skills'), { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name));
+  const skipped = paths.filter(p => shippedNames.has(p.split('/')[2]));
+  assert.deepEqual(skipped.map(p => p.split('/')[2]).sort(), ['code-vader', 'skillator-sync']);
+  for (const path of skipped) assert.ok(!existsSync(join(target, path.replace('host-commands/antigravity/', ''))), `${path}: wrapper written over a shipped skill`);
+  for (const path of paths.filter(p => !skipped.includes(p))) {
     const actual = readFileSync(join(target, path.replace('host-commands/antigravity/', '')));
     const expected = readFileSync(join(root, path), 'utf8').replaceAll('{{SKILLS}}', target);
     assert.deepEqual(actual, Buffer.from(expected, 'utf8'), path);
@@ -480,4 +504,17 @@ test('B30: every argv[1]-guarded script still runs its main through a linked plu
     assert.equal(r.status, status, `${file} exit through the link: ${r.stderr}`);
     assert.match(r.stdout + r.stderr, line, `${file} through the link`);
   }
+});
+
+// F204 review 4, item 5: the Claude Code /skillator-update ignores a path, so its entry point has
+// no argument hint; the pi copy still takes an optional checkout path and keeps its hint
+test('F204: Claude Code /skillator-update has no argument hint; the pi copy keeps "[clone path]"', async () => {
+  const { renderCommands } = await import('./generate-commands.mjs');
+  const claude = readFileSync(join(plugin, 'commands/skillator-update.md'), 'utf8').replaceAll('\r\n', '\n');
+  const front = /^---\n([\s\S]*?)\n---\n/.exec(claude)[1];
+  assert.doesNotMatch(front, /^argument-hint:/m);
+  const pi = renderCommands(plugin).get('host-commands/pi/skillator-update.md');
+  assert.match(pi, /^---\ndescription: .+\nargument-hint: "\[clone path\]"\n---\n/);
+  assert.match(pi, /a\. the optional checkout path/);
+  assert.equal(readFileSync(join(plugin, 'host-commands/pi/skillator-update.md'), 'utf8'), pi);
 });

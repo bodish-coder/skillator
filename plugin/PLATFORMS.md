@@ -240,7 +240,7 @@ Where a historical summary differs, the capability ledger takes precedence.
 | **Usage % readable** | `statusLine` `rate_limits.*.used_percentage` | no | yes — `$CODEX_HOME/sessions/**/rollout-*.jsonl` (default `~/.codex`), last `token_count`; the `Stop` stdin's `transcript_path` names the session's own | no | no | no |
 | **Turn-end hook that can inject** | `Stop` → `{"decision":"block"}` | `stop` in `~/.cursor/hooks.json` (`command`/`prompt`) | `Stop` in `hooks.json` → `{"decision":"block","reason":…}` on stdout (0.155.1, verified under `codex exec`; needs hook trust). Exit 2 + stderr does not inject. `watch-cortana` `usage-watch.* gate` wired and verified here, 0.156.1 (A83). See the codex note | `AfterAgent` / `PreCompress` in `~/.gemini/settings.json` | no | no |
 | **Durable memory** | `CLAUDE.md` + files on disk | files on disk | `AGENTS.md` + files | `AGENTS.md` + files | `AGENTS.md` (`~/.pi/agent/`, parents, cwd) + files | Continual Harness + `AGENTS.md` + files |
-| **Slash command file** (`/skillator-pending`, `/list-ticket-zordon`, `/engage-picard`, `/archive-zordon`, `/sync-zordon`, `/skillator-update`, `/team-messages`, `/pending-sentinel`, `/verify-shifu`, `/gauntlet-plan`, `/gauntlet-run`; F54, F58, F59, F63, F65, F66, F71, F72, F73, texts in `host-commands/<host>/`, tags in "Commands - what is verified") | the ops-board mod's own commands / `commands/*.md`; the installer writes none | `~/.cursor/commands/<n>.md`, `.cursor/commands/<n>.md` | a skill (F90): `$CODEX_HOME/skills/<n>/SKILL.md`, from `host-commands/antigravity/` → `$<n>` (or pick it in `/skills`) | none of its own: a skill is the command, `<ws>/.agents/skills/<n>/SKILL.md` → `/<n>` (workflows deprecated); Gemini CLI: `~/.gemini/commands/<n>.toml` | `~/.pi/agent/prompts/<n>.md`, `.pi/prompts/<n>.md` → `/<n>` | **none — the skill route** (no command mechanism) |
+| **Slash command file** (`/skillator-pending`, `/list-ticket-zordon`, `/engage-picard`, `/archive-zordon`, `/sync-zordon`, `/skillator-update`, `/skillator-update-all`, `/team-messages`, `/pending-sentinel`, `/verify-shifu`, `/gauntlet-plan`, `/gauntlet-run`; F54, F58, F59, F63, F65, F66, F71, F72, F73, texts in `host-commands/<host>/`, tags in "Commands - what is verified") | the ops-board mod's own commands / `commands/*.md`; the installer writes none | `~/.cursor/commands/<n>.md`, `.cursor/commands/<n>.md` | a skill (F90): `$CODEX_HOME/skills/<n>/SKILL.md`, from `host-commands/antigravity/` → `$<n>` (or pick it in `/skills`) | none of its own: a skill is the command, `<ws>/.agents/skills/<n>/SKILL.md` → `/<n>` (workflows deprecated); Gemini CLI: `~/.gemini/commands/<n>.toml` | `~/.pi/agent/prompts/<n>.md`, `.pi/prompts/<n>.md` → `/<n>` | **none — the skill route** (no command mechanism) |
 | **Remote drive** (from a phone, `remote-cerebro`; matrix and evidence tags in [`skills/remote-cerebro/references/hosts.md`](skills/remote-cerebro/references/hosts.md)) | not this skill — Claude Code's own Remote Control | native: cloud agent via `agent worker start` (runs here, not the local TUI); bridge via `agent acp` arms only after an ACP proof | native: `codex remote-control` + ChatGPT app (Windows pairing unproven); bridge: `codex app-server` | gemini: **no native remote** — bridge via `--acp` (after an ACP proof); attach hook v2, approvals not answerable from the phone. agy: native `--remote-control` | bridge: `--mode rpc` (own) or `--mode attach` on a pi cerebro launched; no native remote | not possible (not installed, not probed) |
 
 **Frontmatter:** only `name` + `description` are portable. Everything else
@@ -376,7 +376,7 @@ install skills and the shared docs only.
 
 ## Commands - what is verified
 
-`/skillator-pending`, `/list-ticket-zordon` (F54), `/engage-picard` (F58), `/archive-zordon` (F59), `/sync-zordon` (F63), `/skillator-update` (F65), `/team-messages` (F66), `/pending-sentinel` (F71), `/verify-shifu` (F72), `/gauntlet-plan` and `/gauntlet-run` (F73) are written by the installers at user level
+`/skillator-pending`, `/list-ticket-zordon` (F54), `/engage-picard` (F58), `/archive-zordon` (F59), `/sync-zordon` (F63), `/skillator-update` (F204), `/skillator-update-all` (F65), `/team-messages` (F66), `/pending-sentinel` (F71), `/verify-shifu` (F72), `/gauntlet-plan` and `/gauntlet-run` (F73) are written by the installers at user level
 only, rewritten every run; per-host shapes are in the session design's D7 table.
 Evidence tags: **verified** = read from the host's docs/binary or exercised here;
 **inferred** = from docs only, until the owner's picker check
@@ -428,7 +428,14 @@ the Workflow tool). Each tag below turns **verified** only with a recorded run
 | opencode | marathon: in-session, phases in order (no delegate verified) | inferred |
 | gemini | marathon: in-session, phases in order (no delegate verified) | inferred |
 
-`/skillator-update` (F65) finds its source in this order: a clone path given as its
+`/skillator-update` (F204) refreshes only the CLI profile that invoked it. Use `/skillator-update-all` to update every installed host. An install run writes
+`<dest>/.skillator-version` (one line, LF, no BOM: the plugin version installed there) only
+when every shipped skill in that dest is current after the run, and removes it otherwise;
+`/skillator-update` reads it before it pulls so it can refuse a downgrade. A run from its
+private checkout, `<profile>/.skillator-update-source`, keeps the dest's existing
+`.skillator-source`, so that checkout is never taken for the user's clone.
+
+`/skillator-update-all` (F65; the all-host updater since F204) finds its source in this order: a clone path given as its
 argument; the **source pointer** every install run writes into each skills dest,
 `<dest>/.skillator-source` (one line, LF, no BOM: the plugin folder the installer ran
 from - `<clone>/plugin` since F91; an older pointer names the clone root, whose
@@ -439,7 +446,7 @@ updated with `git pull --ff-only` only.
 
 | Host | Path | Tag |
 |---|---|---|
-| claude-code | the ops-board mod's `/pending`, `/list-tickets`; the plugin's `commands/skillator-pending.md`, `commands/list-ticket-zordon.md`, `commands/engage-picard.md`, `commands/archive-zordon.md`, `commands/sync-zordon.md`, `commands/skillator-update.md`, `commands/team-messages.md`, `commands/pending-sentinel.md`, `commands/verify-shifu.md`, `commands/gauntlet-plan.md`, `commands/gauntlet-run.md` (installer writes none) | verified |
+| claude-code | the ops-board mod's `/pending`, `/list-tickets`; the plugin's `commands/skillator-pending.md`, `commands/list-ticket-zordon.md`, `commands/engage-picard.md`, `commands/archive-zordon.md`, `commands/sync-zordon.md`, `commands/skillator-update.md`, `commands/skillator-update-all.md`, `commands/team-messages.md`, `commands/pending-sentinel.md`, `commands/verify-shifu.md`, `commands/gauntlet-plan.md`, `commands/gauntlet-run.md` (installer writes none) | verified |
 | gemini CLI | `~/.gemini/commands/<n>.toml`, `!{...}` shell injection, `{{args}}` | verified (dir, `!{`, `{{args}}`) |
 | antigravity | skills, `/<n>` in `agy`; all three dests `~/.gemini/config/skills/`, `~/.gemini/skills/` and `~/.gemini/antigravity-cli/skills/` (agy 1.4.5's global dir, B8) | verified (a skill is a slash command) |
 | pi | `~/.pi/agent/prompts/<n>.md`, `$ARGUMENTS` | verified |
@@ -571,7 +578,7 @@ marketplace update + remove + install. Or install from a clone:
 (F91: the plugin is the `plugin/` folder; it copies that folder into Muse's cache; skills are
 enabled by default, so `muse plugins approve` has no runtime capability to act on); update:
 `git -C <dir> pull`, then `muse plugins update skillator` (refreshes from that local source;
-`/skillator-update` step 4 does both, and moves an install of `<dir>` made before F91 to
+`/skillator-update-all` step 4 does both, and moves an install of `<dir>` made before F91 to
 `<dir>/plugin` with `muse plugins remove skillator` + `muse plugins install` - a plain
 `update` fails there with `missing-manifest`, and `install` alone with "already installed from a
 different source"). Muse also warns that it skips ops-board - expected: its

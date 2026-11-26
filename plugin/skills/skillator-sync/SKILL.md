@@ -6,7 +6,7 @@ description: >-
   tracked UPSTREAM.md manifests (code-yoda, design-arwen, clone-odo), inspect
   upstream commit diffs and rule changes, and absorb new upstream commit hashes
   into local skills. NOT for updating the installed skillator plugin across
-  hosts (skillator-update) or syncing TICKETS.md status rows (sync-tickets).
+  hosts (skillator-update-all) or syncing TICKETS.md status rows (sync-tickets).
 ---
 
 # skillator-sync — detect and absorb upstream skill updates

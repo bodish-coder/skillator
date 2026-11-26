@@ -116,6 +116,17 @@
     },
     {
       "name": "skillator-update",
+      "hostHint": "[clone path]",
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ]
+    },
+    {
+      "name": "skillator-update-all",
       "hosts": [
         "cursor",
         "pi",
@@ -216,8 +227,21 @@
       "gemini": "1. **Sweep (check)** - Run `!{sh \"{{SKILLS}}/skillator-sync/scripts/skillator-sync.sh\" {{args}}}` Show every `unchanged`, `changed`, and `error` row plus the `summary:` line. All `unchanged` -> stop.",
       "all": "1. **Sweep (`check`)** — Run `sh skills/skillator-sync/scripts/skillator-sync.sh` (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File skills/skillator-sync/scripts/skillator-sync.ps1`) with `$ARGUMENTS` (default `check`). Show every `unchanged`, `changed`, and `error` row plus the `summary:` line. All `unchanged` → stop."
     },
-    "skillator-update.source-pointer": {
-      "all": "   b. the source pointer the installer left here: the one line in\n      `{{SKILLS}}/.skillator-source` - the dir it last installed from, used only if it still\n      holds both installers;"
+    "skillator-update.arguments": {
+      "all": " Arguments: `$ARGUMENTS` (optional Skillator checkout path)."
+    },
+    "skillator-update.profile": {
+      "cursor": "Target host: `cursor` (Cursor).",
+      "pi": "Target host: `pi` (Pi coding agent).",
+      "opencode": "Target host: `opencode` (OpenCode).",
+      "gemini": "Target host: `gemini` (Gemini CLI).",
+      "antigravity": "This command is shared by Codex, Antigravity CLI, Antigravity IDE and Gemini CLI. Each loads its own copy from its own skills directory, so the profile in step 1 is the invoking CLI's. Target host by the CLI running it: Codex -> `codex`; Antigravity CLI -> `agy`; Antigravity IDE -> `antigravity`; Gemini CLI -> `gemini`. This copy's location should agree: `.gemini/antigravity-cli/skills` is agy's, `.gemini/config/skills` the Antigravity IDE's, `.gemini/skills` Gemini CLI's, and the `skills` directory of a Codex home Codex's. If they disagree, or the invoking CLI cannot be told, ask before running any installer."
+    },
+    "skillator-update.records": {
+      "all": "1. This copy was written into the skills directory `{{SKILLS}}`, so its profile is that directory's parent, `{{SKILLS}}/..`. Use that parent, as a plain absolute path without `..`, as `<profile>` - never another CLI's or profile's directory. Choose `<host>` as the host-specific instructions above say. If the CLI running this command does not own that profile, or the host is ambiguous, ask. Never infer the active host from another CLI's environment variables. Report the chosen host and profile before updating.\n2. Before pulling anything, note the installed version from the profile itself: the one line in `{{SKILLS}}/.skillator-version` (the installer writes it beside the source pointer). If that file is missing (an install older than this record), read the `version` in `.claude-plugin/plugin.json` of the directory named in the source pointer `{{SKILLS}}/.skillator-source`, now, before any pull. Otherwise the installed version is `unknown`.\n3. Resolve the source - the first of these that exists, and say which: a. the optional checkout path; b. the directory named in the source pointer from step 2, if it still holds both installers; skip a pointer whose path contains `/.skillator-update-source` or `\\.skillator-update-source` (this command's own private checkout, used only as c.); c. the dedicated checkout `<profile>/.skillator-update-source`, cloning the Skillator marketplace repository, `https://github.com/bodish-coder/skillator.git`, there when it is missing. Resolve the installer directory: the selected source itself if it holds both `install.sh` and `install.ps1`, otherwise its `plugin/` child if that holds both; neither -> report and stop. Retain it as `<src>`. Run `git -C <src> rev-parse --show-toplevel` to detect checkout membership, including a plugin subdirectory or linked worktree whose `.git` is a file. Success -> use its output as `<checkout-root>` and run `git -C <checkout-root> pull --ff-only`. Pull fails (diverged, dirty, no upstream): never merge, reset, stash or force. From a. or c. -> report it and stop before installation. From b. the pointer is a hint, not an order -> say the pull failed and go on to c. A confirmed nongit cache from a. proceeds without pulling; from b. it is skipped for c.; missing Git or any other lookup error -> report and stop, not a cache fallback. Only for the dedicated checkout `<profile>/.skillator-update-source`, after the pull: verify HEAD equals its upstream and that it has no local changes; either check fails -> report and stop. A clone the user owns (a. or b.) needs only the successful fast-forward pull. Re-check both installers in the retained `<src>` after pulling; either missing -> report and stop. Do not infer that an old plugin cache is current.\n4. After the pull, read the `version` in `<src>/.claude-plugin/plugin.json`. Compare it with the installed version from step 2 as dotted numbers. Lower than the installed version -> refuse: report both versions and stop before installing - never a downgrade. Installed version `unknown` -> say so and continue.\n5. Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File \"<src>/install.ps1\" -Force -TargetHost \"<host>\" -TargetProfile \"<profile>\"`. Other platforms: `sh \"<src>/install.sh\" --force --target-host \"<host>\" --target-profile \"<profile>\"`. Pass both arguments, even for a default profile. On failure stop and report it.\n6. Report the verified host, profile, and old and new versions (use \"unknown\" for an unavailable old version). Restart the current CLI to load the new files."
+    },
+    "skillator-update-all.source-pointer": {
+      "all": "   b. the source pointer the installer left here: the one line in\n      `{{SKILLS}}/.skillator-source` - the dir it last installed from, used only if it still\n      holds both installers; skip a pointer whose path contains\n      `/.skillator-update-source` or `\\.skillator-update-source` (a scoped /skillator-update's\n      private checkout, not the user's clone);"
     },
     "team.invocation": {
       "all": "Load the `tickets-zordon` skill (skillator:tickets-zordon) and run the team or ticket assignment action for this repo.\nFor each `ticket-meta` invocation below use `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh`\n(on Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File {{SKILLS}}/tickets-zordon/scripts/ticket-meta.ps1`), followed by the shown arguments."
