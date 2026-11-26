@@ -1,5 +1,22 @@
 # Handoff — skillator board sweep, 2026-09-04
 
+<!-- skillator-execute
+status: complete
+last-run: 2026-11-21
+runs: 1
+remaining: 0
+note: Historical sweep and testing verified in 67f76e4, c89ef76, and b56f01a. The install step is superseded by the newer installed plugin.
+-->
+
+## Execution log — 2026-11-21
+
+| September next action | Verified outcome |
+|---|---|
+| Review batch 2 and commit both batches | The board sweep landed in `67f76e4` (v3.7.0). The original batch 2 review result could not be verified from the available record. |
+| Refresh the installed plugin | The installed v4.30.5 plugin supersedes the v3.7.0 refresh. |
+| Resume Sherlock GREEN | `c89ef76` records the completed GREEN run and voids the contaminated RED baseline. |
+| Rerun the Grayskull baseline from a clean directory | `b56f01a` records the clean-directory RED rerun under A51. |
+
 Written because the usage gate fired at 99%. Nothing is committed. Everything
 below was verified against the repo, not against what the session claimed.
 
