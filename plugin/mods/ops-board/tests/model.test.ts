@@ -209,3 +209,10 @@ test('F180: personal sections start collapsed until opened', () => {
   const m = buildModel(view({ me: '@vidul', session: 'cc-1ir0' }))
   expect(m.userGroups.map(g => g.open)).toEqual([false, false, false])
 })
+
+// F201 review: the P1-first sort moves a family as one, so a sub-ticket stays right under its parent
+test('F201 priority sort keeps a sub-ticket under its parent; the family ranks by its best member', () => {
+  const board = parseBoard(['- [ ] F10 — epic', '  - [ ] F11 — part [priority: P1]', '- [ ] F12 — other [priority: P2]', '- [ ] F13 — plain'].join('\n'), '/r/T', 1, 1)
+  const m = buildModel(view({ board, open: [' '] }))
+  expect(m.groups.find(g => g.box === ' ')!.tickets.map(t => t.id)).toEqual(['F10', 'F11', 'F12', 'F13'])
+})

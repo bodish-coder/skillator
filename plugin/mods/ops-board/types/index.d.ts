@@ -197,6 +197,7 @@ declare module 'claude-code' {
       filter: Filter; filterOpen: boolean
       ascii: boolean
       ticketOffset: number | null    // pinned Tickets list; null follows selection
+      ticketsByPriority: boolean   // F201: the Tickets tab groups by P1..P5 instead of by state
       openGroups: string[]   // status boxes and unfold:<personal section>; empty = collapsed
       runsOpen: ('runs' | 'workflows' | 'agents')[]   // F76: the Workflows tab's open sections this session
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]

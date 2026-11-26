@@ -3,7 +3,7 @@ import type { BoxProps, ButtonProps, Color, ElementConstructor, EngineInterface,
   SelectProps, TextProps } from 'claude-code'
 import type { Filter } from '../types'
 import { PRIORITIES, STATE_COLOR } from './lib/board'
-import { buildModel, chipsOf, headKey, isDecidable, toggleGroup, toggleUserSection, UNI, ASCII, cutTo, headText, userHeadText, rowText, chromeRows, windowOf, paneTabs } from './lib/ticketsmodel'
+import { buildModel, chipsOf, groupKey, headKey, isDecidable, toggleGroup, toggleUserSection, UNI, ASCII, cutTo, headText, userHeadText, rowText, chromeRows, windowOf, paneTabs } from './lib/ticketsmodel'
 import type { Model, PANE_TABS, UserSection, View } from './lib/ticketsmodel'
 export { buildModel, lineKey, offsetFor } from './lib/ticketsmodel'
 export type { View, Model } from './lib/ticketsmodel'
@@ -54,6 +54,16 @@ const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 // F61: the boxes of the open groups, this session; empty = every group collapsed. Only
 // the set is held, never rows: the board's own value stays within $.state's cap (B4).
 const openA = atom({ plugin: 'ops-board', key: 'openGroups' } as const, [])
+const byPriorityA = atom({ plugin: 'ops-board', key: 'ticketsByPriority' } as const, false)   // F201
+
+// F202: coming back to Tickets from another tab: every group closed, the selection at the top
+export async function collapseTickets($: EngineInterface, keepSections = false) {
+  // keepSections (the g toggle): the personal sections' unfold: choices stay; grouping does not touch them
+  await update($, openA, x => (keepSections ? x.filter(k => k.startsWith('unfold:')) : []))
+  await update($, selectedA, () => null)
+  await update($, ticketOffsetA, () => null)
+  await update($, expandedA, () => null)
+}
 const sessionA = atom({ plugin: 'ops-board', key: 'session' } as const, null)   // F109: register.tsx sets it
 // F76: the Workflows tab's open sections (Runs, Workflows, F93 Agents), this session; all start open.
 const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows', 'agents'])
@@ -88,7 +98,15 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
   const hasTeam = v.team.length > 0
   const setFilter = (fn: (f: Filter) => Filter) => { void update($, ticketOffsetA, () => null); void update($, filterA, fn) }
 
-  // filter row
+  // F201: g flips the list between state groups and P1..P5 groups; it rides on the filter
+  // row (one row always), not the keys line, so the chrome budget does not move
+  const byPriority = (
+    <Button key="key:by-priority" plain dimColor hotkey="g" onPress={() => {
+      void update($, byPriorityA, x => !x)
+      void collapseTickets($, true)
+    }}>{v.byPriority ? 'by state' : 'by priority'}</Button>
+  )
+  // filter row (closed: the g button's label, its 'g: ' hotkey prefix and the gap come off the text width)
   if (v.filterOpen && Select) {
     const apps = [...new Set((v.board?.tickets ?? []).flatMap(t => t.apps))].sort()
     out.push(
@@ -105,8 +123,8 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
     )
   } else {
     out.push(
-      <Box key="filters"><Text wrap="truncate-end">
-        {cutTo(`app ${f.app ?? 'all'} ${glyphs.open}  ` + (hasTeam ? `who ${f.mine ? 'me' : f.who ?? 'all'} ${glyphs.open}  ${f.mine ? '[x]' : '[ ]'} mine  ` : '') + `${f.showDone ? '[x]' : '[ ]'} done`, v.cols, glyphs.cut)}
+      <Box key="filters" flexDirection="row" gap={2}>{byPriority}<Text wrap="truncate-end">
+        {cutTo(`app ${f.app ?? 'all'} ${glyphs.open}  ` + (hasTeam ? `who ${f.mine ? 'me' : f.who ?? 'all'} ${glyphs.open}  ${f.mine ? '[x]' : '[ ]'} mine  ` : '') + `${f.showDone ? '[x]' : '[ ]'} done`, Math.max(0, v.cols - (v.byPriority ? 8 : 11) - 3 - 2), glyphs.cut)}
       </Text></Box>,
     )
   }
@@ -120,8 +138,8 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
 
   const pushTicketEntry = (t: Model['rows'][number], itemKey: string, nested: boolean) => {
     const isSel = itemKey === m.selected
-    const priorityWidth = t.priority && v.ascii ? 3 : 0
-    const row = rowText(t, v.cols - priorityWidth, glyphs, !!v.ascii, nested, isSel ? 3 : 0)
+    const priorityWidth = t.priority ? 3 : 0   // F201: 'P1 ' in place of the 2-cell rail
+    const row = rowText(t, v.cols - (t.priority && !v.ascii ? priorityWidth - 2 : priorityWidth), glyphs, !!v.ascii, nested, isSel ? 3 : 0)
     const body = v.ascii && isSel ? '> ' + row.text.slice(2) : row.text
     entries.push(
       <Button key={'row:' + itemKey} hotkey={isSel ? 'o' : undefined} plain onPress={() => {
@@ -129,9 +147,9 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
         void update($, selectedA, () => itemKey)
         void update($, expandedA, x => (x === itemKey || x === t.id ? null : itemKey))
       }}>
-        {t.priority ? <Text color={v.ascii ? undefined : PRIORITIES[t.priority].color}>{v.ascii ? t.priority + ' ' : glyphs.dot + ' '}</Text>
+        {t.priority ? <Text color={v.ascii ? undefined : PRIORITIES[t.priority].color}>{t.priority + ' '}</Text>
           : !v.ascii && <Text color={paint(t.box)}>{glyphs.rail}</Text>}
-        {isSel ? <Text inverse>{body.padEnd(v.cols - (v.ascii ? priorityWidth : 2) - 3)}</Text>
+        {isSel ? <Text inverse>{body.padEnd(v.cols - (t.priority ? priorityWidth : v.ascii ? 0 : 2) - 3)}</Text>
           : <Text dimColor={STATE_COLOR[t.box] === 'dim'}>{row.owner && body.endsWith(row.owner)
             ? [body.slice(0, -row.owner.length), <Text dimColor>{row.owner}</Text>] : body}</Text>}
       </Button>,
@@ -186,17 +204,18 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
   const shownIds = new Set(m.rows.map(t => t.id))
   for (const g of m.groups) {
     // F61: a header is a Button - Enter under the focus or a click opens or closes it.
-    const hk = headKey(g.box)
+    const hk = headKey(groupKey(g))
+    const color = g.color ?? paint(g.box)
     const head = cutTo(headText(g, glyphs, !!v.ascii), v.cols - (v.ascii ? 0 : 2) - (hk === m.selected ? 3 : 0), glyphs.cut)
     entries.push(
       <Button key={hk} hotkey={hk === m.selected ? 'o' : undefined} plain onPress={() => {
         void update($, ticketOffsetA, () => null)
         // the header stands for a ticket hidden in it (moved there by an edit): opening lands on it
         void update($, selectedA, x => (hk === m.selected && x && !x.startsWith('head:') && g.tickets.some(t => t.id === x) ? x : hk))
-        void update($, openA, x => toggleGroup(x, g.box))
+        void update($, openA, x => toggleGroup(x, groupKey(g)))
       }}>
-        {!v.ascii && <Text color={g.open ? paint(g.box) : undefined} dimColor={!g.open} inverse={hk === m.selected}>{g.open ? glyphs.rail : glyphs.railDim}</Text>}
-        <Text color={v.ascii ? undefined : paint(g.box)} bold inverse={hk === m.selected}>{head}</Text>
+        {!v.ascii && <Text color={g.open ? color : undefined} dimColor={!g.open} inverse={hk === m.selected}>{g.open ? glyphs.rail : glyphs.railDim}</Text>}
+        <Text color={v.ascii ? undefined : color} bold inverse={hk === m.selected}>{head}</Text>
       </Button>,
     )
     if (!g.open) continue
@@ -257,7 +276,7 @@ export async function readView($: EngineInterface, cols: number, rows: number | 
     board: await read($, boardA), team: await read($, teamA), me: await read($, meA),
     filter: await read($, filterA), filterOpen: await read($, filterOpenA),
     selected: await read($, selectedA), expanded: await read($, expandedA), open: await read($, openA),
-    session: await read($, sessionA),
+    session: await read($, sessionA), byPriority: await read($, byPriorityA),
     cols, ascii: await read($, asciiA), rows, unread, logCount, offset: await read($, ticketOffsetA),
   }
 }
@@ -308,6 +327,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
         <Button key={'tab:' + x.id} variant={x.id === tab ? 'primary' : undefined} dimColor={x.id !== tab}
           onPress={() => {
             if (x.id !== 'tickets') void clearForm($).catch(() => {})
+            if (x.id === 'tickets' && tab !== 'tickets') void collapseTickets($).catch(() => {})   // F202
             void update($, tabA, () => x.id)
             if (x.id === 'runs' || (x.id === 'dashboard' && tab !== 'dashboard')) {
               void pollRuns($).catch(() => {})

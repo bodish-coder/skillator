@@ -306,7 +306,8 @@ export async function renderAutoPriority($: EngineInterface, e: RenderInput<'Pan
         const elementKey = 'priority:auto-filter:' + key
         const value = draft.selection[key] ?? '-'
         if (draft.busy) return <Text key={elementKey} wrap="wrap">{label + ' ' + value}</Text>
-        return Select
+        // B33: the pane refuses a Select over 64 options (and draws nothing); a longer list pages
+        return Select && optionsFor(key, values).length <= 64
           ? <Select key={elementKey} label={label} value={value} options={optionsFor(key, values).map(option => ({ value: option, label: option }))}
               onSelect={option => setFilter(key, option)} />
           : <Button key={elementKey} plain onPress={() => setPicker({ key, page: 0 })}>{label + ' ' + value}</Button>

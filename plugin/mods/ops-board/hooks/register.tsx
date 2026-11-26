@@ -11,7 +11,7 @@ import { continuePrompt } from './lib/runlines'
 import type { RunView } from '../types'
 import { HIDDEN, restoreClaudeMd, RESTORE_NOTE } from './lib/restore'
 import { countsOf, renderBand, statusText } from './band'
-import { buildModel, lineKey, PANE_ID, PANE_TITLE, readView, renderPane } from './pane'
+import { buildModel, collapseTickets, lineKey, PANE_ID, PANE_TITLE, readView, renderPane } from './pane'
 import type { Tab } from './pane'
 import { ASCII, UNI, chromeRows, windowOf } from './lib/ticketsmodel'
 import { cancelPerson, clearForm, isFormUp, runAutoPriority } from './assign'
@@ -523,6 +523,7 @@ export const register: Register = on => {
       await dropRunForm($)
       await dropEngage($)
       await dropAction($)
+      if ((await read($, tabA)) !== 'tickets') await collapseTickets($)   // F202: back to Tickets collapses
       await update($, tabA, () => 'tickets')
       decidedLine = null
       void poll($, true).catch(() => {})
@@ -541,6 +542,7 @@ export const register: Register = on => {
     if (tab && tab !== 'run') await dropRunForm($)
     if (tab && tab !== 'runs') await dropEngage($)        // F85: the engage confirm likewise
     if (tab && tab !== 'explorer') await dropAction($)    // F103: the git action confirm likewise
+    if (tab === 'tickets' && (await read($, tabA)) !== 'tickets') await collapseTickets($)   // F202
     if (tab) await update($, tabA, () => tab)
     if (sec) await update($, runsOpenA, x => (x.includes(sec) ? x : [...x, sec]))
     if (tab === 'runs' || tab === 'dashboard') void pollRuns($).catch(() => {})

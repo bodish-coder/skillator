@@ -484,7 +484,9 @@ for (const surface of SURFACES) {
     expect(await state($, 'tab')).toBe('runs')
     expect(await ui.find({ key: 'h:usage' })).toBeUndefined()
     await ui.press({ key: 'tab:tickets' })
-    expect(await ui.find({ key: 'row:F3' })).toBeDefined()
+    // F202: back on Tickets from another tab every group is collapsed again
+    expect(await ui.find({ key: 'row:F3' })).toBeUndefined()
+    expect(await ui.find({ key: 'head:~' })).toBeDefined()
     await ui.unmount()
   })
 }
@@ -967,3 +969,29 @@ for (const surface of SURFACES) {
     await ui.unmount()
   })
 }
+
+// F201: g groups the Tickets tab by P1..P5 then Unranked; rows sort P1 first in a state group and show their P chip.
+// F202: coming back to Tickets from another tab collapses every group.
+test('F201 by priority groups P1..P5 then Unranked; state groups sort P1 first; F202 tabs back collapse', WITH, async ($, on) => {
+  const board = BOARD.replace('- [ ] B1 — button focus ring missing [app: ui]', '- [ ] B1 — button focus ring missing [app: ui] [priority: P1]')
+    .replace('[app: web, ui] [by: @vidul, @asha]', '[app: web, ui] [priority: P3] [by: @vidul, @asha]')
+  const [, clock] = world(on, { '/r/TICKETS.md': board, '/r/.skillator/team.md': TEAM })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  await ui.press({ key: 'head: ' })
+  const rows = (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('row:')).map(b => b.key)
+  expect(rows).toEqual(['row:B1', 'row:F1'])
+  expect((await ui.find({ key: 'row:B1' }))?.text).toContain('P1 ')
+  await ui.press({ key: 'key:by-priority' })
+  const keys = (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('head:') && /head:(P\d|unranked)/.test(b.key)).map(b => b.key)
+  expect(keys).toEqual(['head:P1', 'head:P3', 'head:unranked'])
+  expect((await ui.find({ key: 'head:P1' }))?.text).toContain('P1 CRITICAL')
+  expect((await ui.find({ key: 'key:by-priority' }))?.text).toBe('by state')
+  await ui.press({ key: 'head:P1' })
+  expect(await ui.find({ key: 'row:B1' })).toBeDefined()
+  await ui.press({ key: 'tab:dashboard' })
+  await ui.press({ key: 'tab:tickets' })
+  expect(await state($, 'openGroups')).toEqual([])
+  expect(await ui.find({ key: 'row:B1' })).toBeUndefined()
+  await ui.unmount()
+})

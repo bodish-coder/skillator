@@ -1,6 +1,7 @@
 import type { Board, Box as State, Filter, Member, Proposal, Ticket } from '../../types'
 import type { Call } from './calls'
-import { GROUPS, isOpen, STATE_NAME, visible } from './board'
+import type { Color } from 'claude-code'
+import { GROUPS, isOpen, PRIORITIES, STATE_NAME, visible } from './board'
 import { sameHandle } from './team'
 
 // F128: dedicated collapsible sections personalized to the active user;
@@ -60,7 +61,9 @@ export function userHeadText(g: UserGroup, glyphs: Glyphs, _ascii = false): stri
 
 const OPEN_STATES: State[] = ['~', '%', 'v', '!', '?', ' ', '>']
 
-export type Group = { box: State; title: string; tickets: Ticket[]; open: boolean }
+// F201: a priority group carries its own key (P1..P5, unranked) and colour; a state group neither
+export type Group = { box: State; title: string; tickets: Ticket[]; open: boolean; key?: string; color?: Color }
+export const groupKey = (g: Group): string => g.key ?? g.box
 export type Model = {
   userGroups: UserGroup[]             // F128 / A199: Assigned and Decide when me is set; F178: This session with a session code
   groups: Group[]                     // tickets: every one the filter shows, open or not (the count)
@@ -79,6 +82,7 @@ export type View = {
   personalUser?: string | null
   session?: string | null             // F178: the board's own session code (cc-1ir0), none null
   ascii?: boolean; rows?: number | null // omitted by the standalone ops app
+  byPriority?: boolean                // F201: group by P1..P5 then Unranked (the pane's g)
   offset?: number | null              // list rows; null follows the selection
   unread?: number
   logCount?: number
@@ -186,13 +190,28 @@ export function buildModel(v: View): Model {
   const shown = v.board ? visible(v.board, v.filter, v.me) : []
   const open = v.open ?? []
   const userGroups = personalGroups(shown, v.personalUser ?? v.me, { open, session: v.session })
-  const groups = GROUPS
+  // F201: P1 first inside every group, unranked last; ties keep board order (sort is stable).
+  // A family moves as one (a sub-ticket stays right under its parent), ranked by its best member.
+  const rank = (t: Ticket) => (t.priority ? Number(t.priority[1]) : 6)
+  const byId = new Map(shown.map(t => [t.id, t]))
+  const rootOf = (t: Ticket) => { let r = t; const seen = new Set<string>(); while (r.parent && byId.has(r.parent) && !seen.has(r.id)) { seen.add(r.id); r = byId.get(r.parent)! } return r.id }
+  const families = new Map<string, Ticket[]>()
+  for (const t of shown) { const k = rootOf(t); families.set(k, [...(families.get(k) ?? []), t]) }
+  const best = (f: Ticket[]) => Math.min(...f.map(rank))
+  const ranked = [...families.values()].sort((a, b) => best(a) - best(b)).flat()
+  const stateGroups: Group[] = GROUPS
     .filter(g => v.filter.showDone || (g.box !== 'x' && g.box !== '-'))
-    .map(g => ({ ...g, tickets: shown.filter(t => t.box === g.box), open: open.includes(g.box) }))
-    .filter(g => g.tickets.length > 0)
+    .map(g => ({ ...g, tickets: ranked.filter(t => t.box === g.box), open: open.includes(g.box) }))
+  const priorityGroups: Group[] = [
+    ...(Object.keys(PRIORITIES) as (keyof typeof PRIORITIES)[]).map(p => ({ box: ' ' as State, key: p, color: PRIORITIES[p].color,
+      title: `${p} ${PRIORITIES[p].label.split(' · ')[0]!.toUpperCase()}`, tickets: ranked.filter(t => isOpen(t) && t.priority === p), open: open.includes(p) })),
+    { box: ' ' as State, key: 'unranked', title: 'UNRANKED', tickets: ranked.filter(t => isOpen(t) && !t.priority), open: open.includes('unranked') },
+    ...stateGroups.filter(g => !OPEN_STATES.slice(0, 6).includes(g.box)),   // deferred, done, cancelled keep their state groups
+  ]
+  const groups = (v.byPriority ? priorityGroups : stateGroups).filter(g => g.tickets.length > 0)
   const rows = groups.flatMap(g => (g.open ? g.tickets : []))
   const userItems = userGroups.flatMap(ug => [headKey(ug.id), ...(ug.open ? ug.tickets.map(t => `${ug.id}:${t.id}`) : [])])
-  const statusItems = groups.flatMap(g => [headKey(g.box), ...(g.open ? g.tickets.map(t => t.id) : [])])
+  const statusItems = groups.flatMap(g => [headKey(groupKey(g)), ...(g.open ? g.tickets.map(t => t.id) : [])])
   const items = [...userItems, ...statusItems]
   // A ticket whose group is collapsed shows as its header selected; it is still the one
   // stored, so opening the group lands back on it.
@@ -207,7 +226,7 @@ export function buildModel(v: View): Model {
     : userHome
       ? headKey(userHome.id)
       : home
-        ? headKey(home.box)
+        ? headKey(groupKey(home))
         : null) ?? fallback
   const ticket = selected && !isHead(selected) ? rawTicketId(selected) : null
 
@@ -225,7 +244,7 @@ export function buildModel(v: View): Model {
     }
   }
   for (const g of groups) {
-    lines.push({ key: headKey(g.box), rows: 1 })
+    lines.push({ key: headKey(groupKey(g)), rows: 1 })
     if (!g.open) continue
     for (const t of g.tickets) {
       lines.push({ key: 'row:' + t.id, rows: 1 })

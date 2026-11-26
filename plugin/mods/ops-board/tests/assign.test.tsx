@@ -228,6 +228,26 @@ test('mobile Auto-assign can pick and unset a filter', WITH, async ($, on) => {
   await pane.unmount()
 })
 
+// B33: a filter with more than 64 choices (every open ticket ID on a big board) pages
+// instead of a Select, which the pane refuses past 64 options and then draws nothing.
+test('B33 Auto-assign on a board of 70 open tickets draws; Ticket ID pages', WITH, async ($, on) => {
+  const many = BOARD.replace('## Closed', Array.from({ length: 70 }, (_, i) => `- [ ] B${100 + i} — bug ${i} [app: ui]`).join('\n') + '\n\n## Closed')
+  const [, clock] = world(on, { '/r/TICKETS.md': many, '/r/.skillator/team.md': TEAM })
+  await start($, clock)
+  const pane = await $.ui.mount({ plugin: 'ops-board', surface: 'terminal', component: 'Pane', requestId: 'ops-board', props: props('ops board') })
+  await pane.press({ key: 'tab:priorities' })
+  await pane.press({ key: 'priority:auto-open' })
+  expect((await pane.find({ key: 'priority:auto-filter:app' }))?.type).toBe('Select')
+  expect((await pane.find({ key: 'priority:auto-filter:id' }))?.type).toBe('Button')
+  await pane.press({ key: 'priority:auto-filter:id' })
+  await pane.press({ key: 'priority:auto-next' })
+  await pane.press({ key: 'priority:auto-option:B115' })
+  expect((await pane.find({ key: 'priority:auto-filter:id' }))?.text).toBe('Ticket ID B115')
+  await pane.press({ key: 'priority:auto-cancel' })
+  expect(await pane.find({ key: 'tab:tickets' })).toBeDefined()
+  await pane.unmount()
+})
+
 for (const surface of SURFACES) {
   test(`${surface}: a on a done ticket opens the form in the pane; who and kind change the preview; Assign runs ticket-meta`, WITH, async ($, on) => {
     const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
