@@ -170,12 +170,14 @@ monochrome", "1970s terminal manual". Unnamed ambition collapses into beige.
 **Let the user pick the look from mocks.** Before committing the lane on a `build` or
 `redesign`, or when `improve` is asked for a mock, offer the **style menu** in
 [references/styles.md](references/styles.md): Spatial UI, Bento grid, Maximalism, Liquid
-glass, Glassmorphism, Brutalism, Minimalism and Skeuomorphism. Show all eight, mock each
+glass, Glassmorphism, Brutalism, Minimalism and Skeuomorphism, plus the futuristic family
+(Tactical HUD, Radial reactor HUD, Neon alert, Holo-table console, Cockpit line-art,
+Bio-holographic, Hard-sci-fi ops panel, Neural network). Show all sixteen, mock each
 style the user picks, and build only the one they choose. Skip the menu when the
 direction is already pinned. Skip it too when nobody is there to answer, but still pick
-one of the eight yourself and name it on the `Chose for you:` line (`style <name>`).
+one of the sixteen yourself and name it on the `Chose for you:` line (`style <name>`).
 That line is the menu the user did not get to see, so write it as the offer: "Style:
-Minimalism, my pick from the eight. Name another (Spatial UI, Bento grid, …) and I'll
+Minimalism, my pick from the sixteen. Name another (Spatial UI, Bento grid, …) and I'll
 mock it."
 
 **Color strategy** (choose *before* colors), on the commitment axis:

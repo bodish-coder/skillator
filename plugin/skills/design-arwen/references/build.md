@@ -42,9 +42,9 @@ actually ships. Inventing a package or a prop is a shipped bug, not a typo.
 The single highest-leverage habit in this skill. Do the first pass in your head or a
 scratch note; only show the user something you're confident about.
 
-**Style menu first.** Unless the direction is pinned or there is no user, offer the eight
+**Style menu first.** Unless the direction is pinned or there is no user, offer the sixteen
 styles in [styles.md](styles.md), mock the ones picked, and write the plan below for the
-style the user chooses. No user: pick one of the eight yourself and list it on
+style the user chooses. No user: pick one of the sixteen yourself and list it on
 `Chose for you:`.
 
 ### Pass 1 — write the plan
