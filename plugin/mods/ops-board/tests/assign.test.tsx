@@ -137,6 +137,97 @@ const formClosed = (w: World) => {
 }
 const title = async (pane: Mounted<Surface, 'Pane'>) => (await pane.find({ key: 'form:title' }))?.text
 
+test('ticket priority is previewed before saving in the displayed checkout', WITH, async ($, on) => {
+  const token = 'a'.repeat(64)
+  const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM, '/bin/node': 'node' }, { PATH: '/bin' })
+  w.answer = argv => {
+    if (argv.includes('preview')) return ran(`1 ticket(s) would change.\nF3   Unranked -> P5   cart drawer keeps items on reload\nPreview token: ${token}\n`)
+    if (!argv.includes('apply')) return null
+    w.files['/r/TICKETS.md'] = BOARD.replace('[owner: @vidul]', '[owner: @vidul] [priority: P5]')
+    return ran('1 ticket(s) updated to P5.')
+  }
+  await start($, clock)
+  const pane = await mountPane($, 'terminal')
+  await select($, 'F3')
+  await pane.press({ key: 'key:priority' })
+  expect(w.runs.some(({ argv }) => argv.includes('apply'))).toBe(false)
+
+  await pane.press({ key: 'priority:P5' })
+  expect(w.runs.at(-1)?.argv.slice(-4)).toEqual(['--current-worktree', 'preview', 'P5', 'id=F3'])
+  expect(w.runs.some(({ argv }) => argv.includes('apply'))).toBe(false)
+  await pane.press({ key: 'priority:save' })
+  expect(w.runs.at(-1)?.argv.slice(-5)).toEqual(['--current-worktree', 'apply', token, 'P5', 'id=F3'])
+  expect(w.toasts.at(-1)).toContain('F3 priority set to P5')
+  expect(w.writes).toEqual([])
+  await pane.unmount()
+})
+
+test('the Auto-assign popup reviews a filtered preview before saving', WITH, async ($, on) => {
+  const token = 'b'.repeat(64)
+  const filters = ['app=web', 'release=next release']
+  const boardWithRelease = BOARD.replace('[app: web] [owner: @vidul]', '[app: web] [owner: @vidul] [release: next release]')
+  const [w, clock] = world(on, { '/r/TICKETS.md': boardWithRelease, '/r/.skillator/team.md': TEAM, '/bin/node': 'node' }, { PATH: '/bin' })
+  let stale = true
+  w.answer = argv => {
+    if (argv.includes('auto-preview')) return ran([
+      'Queue Jarvis | Auto-assign preview', '1 ticket(s) would change.', 'P1: 0 · P2: 0 · P3: 1 · P4: 0 · P5: 0',
+      'F3       Unranked -> P3   cart drawer keeps items on reload', 'Preview token: ' + token,
+    ].join('\n'))
+    if (!argv.includes('auto-apply')) return null
+    if (stale) {
+      stale = false
+      return ran('', 1, 'The board or rule changed. Run a new preview before applying.')
+    }
+    w.files['/r/TICKETS.md'] = boardWithRelease.replace('[owner: @vidul]', '[owner: @vidul] [priority: P3]')
+    return ran('1 ticket(s) assigned a priority.')
+  }
+  await start($, clock)
+  const pane = await $.ui.mount({ plugin: 'ops-board', surface: 'terminal', component: 'Pane', requestId: 'ops-board', props: props('ops board') })
+  await pane.press({ key: 'tab:priorities' })
+  await pane.press({ key: 'priority:auto-open' })
+  expect(await pane.find({ key: 'priority:auto-save' })).toBeUndefined()
+  const fields = await pane.findAll({ type: 'Select' })
+  expect(fields.map(field => field.key?.slice('priority:auto-filter:'.length)).sort())
+    .toEqual(['app', 'depends-on', 'id', 'owner', 'release', 'severity', 'src', 'status', 'type'])
+  expect(fields.map(field => field.props.value)).toEqual(Array(9).fill('-'))
+  await pane.select({ key: 'priority:auto-filter:app', value: 'web' })
+  await pane.select({ key: 'priority:auto-filter:release', value: 'next release' })
+  await pane.select({ key: 'priority:auto-filter:id', value: 'F3' })
+  await pane.select({ key: 'priority:auto-filter:id', value: '-' })
+  await pane.press({ key: 'priority:auto-preview' })
+  expect(w.runs.at(-1)?.argv.slice(-4)).toEqual(['--current-worktree', 'auto-preview', ...filters])
+  expect((await pane.find({ key: 'priority:auto-summary' }))?.text).toContain('1 ticket(s) would change.')
+  expect((await pane.find({ key: 'priority:auto-changes' }))?.text).toContain('Unranked -> P3')
+  expect(w.runs.some(({ argv }) => argv.includes('auto-apply'))).toBe(false)
+  await pane.press({ key: 'priority:auto-save' })
+  expect(w.runs.at(-1)?.argv.slice(-5)).toEqual(['--current-worktree', 'auto-apply', token, ...filters])
+  expect((await pane.find({ key: 'priority:auto-error' }))?.text).toContain('Run a new preview')
+  expect(await pane.find({ key: 'priority:auto-save' })).toBeUndefined()
+  await pane.press({ key: 'priority:auto-preview' })
+  expect(w.runs.at(-1)?.argv.slice(-4)).toEqual(['--current-worktree', 'auto-preview', ...filters])
+  await pane.press({ key: 'priority:auto-save' })
+  expect(w.toasts.at(-1)).toContain('1 ticket(s) assigned a priority.')
+  expect(JSON.stringify(await state($, 'board'))).toContain('"priority":"P3"')
+  expect(w.writes).toEqual([])
+  await pane.unmount()
+})
+
+test('mobile Auto-assign can pick and unset a filter', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+  await start($, clock)
+  const pane = await $.ui.mount({ plugin: 'ops-board', surface: 'mobile', component: 'Pane', requestId: 'ops-board', props: props('ops board') })
+  await pane.press({ key: 'tab:priorities' })
+  await pane.press({ key: 'priority:auto-open' })
+  expect((await pane.find({ key: 'priority:auto-filter:app' }))?.text).toBe('App -')
+  await pane.press({ key: 'priority:auto-filter:app' })
+  await pane.press({ key: 'priority:auto-option:web' })
+  expect((await pane.find({ key: 'priority:auto-filter:app' }))?.text).toBe('App web')
+  await pane.press({ key: 'priority:auto-filter:app' })
+  await pane.press({ key: 'priority:auto-option:-' })
+  expect((await pane.find({ key: 'priority:auto-filter:app' }))?.text).toBe('App -')
+  await pane.unmount()
+})
+
 for (const surface of SURFACES) {
   test(`${surface}: a on a done ticket opens the form in the pane; who and kind change the preview; Assign runs ticket-meta`, WITH, async ($, on) => {
     const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })

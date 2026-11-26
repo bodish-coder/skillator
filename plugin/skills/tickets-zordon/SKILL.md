@@ -119,6 +119,9 @@ Every tag is optional and lines without them stay valid; never add an empty one.
   or recompute it from commits with `tag --force-app`.
 - `src` is one optional value for who or what raised the ticket, such as `owner`,
   `tester`, `agent`, or a tool name. It follows `[app:]` when both are present.
+- `priority` is P1 through P5, highest first. Use `queue-jarvis` to preview bulk
+  changes. Its filters also read optional `severity`, `release`, and `depends-on`
+  tags. Put comma-separated ticket IDs in `[depends-on:]`.
 
 `scripts/ticket-meta.sh` beside this file does all of it (Windows:
 `ticket-meta.ps1`, same arguments) and edits only the one line, every other byte
@@ -400,8 +403,8 @@ write the ticket.**
 - Cycle end / session end: re-read the file and correct any status that drifted,
   then report the open set — every open box: `[ ]`, `[~]`, `[%]`, `[v]`, `[!]` and
   `[?]` — to the user.
-- Once the turn's edits are read back, republish the artifact board — see
-  **The artifact board**. Board changed, artifact stale, is a bug.
+- When the user explicitly requests HTML or an artifact, read back the turn's
+  edits before generating it. See **The artifact board**.
 
 ## Draining the board
 
@@ -781,10 +784,8 @@ that line — in `TICKETS-archive.md` if the board does not have it.
 
 ## The artifact board
 
-Every board change gets published as an artifact — a private page on claude.ai
-holding the whole board, so the user can open it from any device instead of
-scrolling back for the last list. The chat list is still the primary answer; the
-artifact is the durable copy.
+Generate the HTML board only when the user explicitly requests it. Publish the
+board only when they request publication.
 
 `skills/tickets-zordon/board/artifact.mjs` bakes `TICKETS.md` into an
 Artifact-shaped HTML file (no `<!doctype>`/`<html>`/`<body>` — the wrapper adds
@@ -821,19 +822,9 @@ node <skills>/tickets-zordon/board/artifact.mjs --selftest # parser + count-line
 Off `claude-code`, or with no `Artifact` tool: generate the file, say where it
 is, and skip the publish. Never claim a publish that did not happen.
 
-### When to republish
-
-**After every board edit** — a new ticket, a status flip, a title correction, a
-workflow's batch of verdicts. The board and the artifact are never allowed to
-disagree.
-
-One publish per turn, not per line: make all the `TICKETS.md` edits for this
-turn, read them back, *then* regenerate and publish once. A workflow closing
-eight tickets is eight edits and one publish. Also republish on `list tickets`
-even when nothing changed, since that is when the user wants the link.
-
-If the publish fails, say so and carry on — a failed publish never blocks the
-ticket work, and the next edit will retry it.
+When HTML is requested, generate it once from the current board after the
+turn's edits. If requested publication fails, report the failure and continue
+the ticket work.
 
 ## Showing the board
 
@@ -851,10 +842,6 @@ what the filter kept:
 - `list tickets app:web` — tickets whose `[app: ..]` names `web`.
 - `list tickets @asha` — tickets where `@asha` is the `owner` or in `by`.
 - `list tickets status app:web` — filters combine with the status view.
-
-Both views also republish the artifact board and give its link once per session
-(**The artifact board**). The chat list is the answer; the link is the copy the
-user can open elsewhere.
 
 **What's pending beyond the board** - "what's pending everywhere", "what's still
 running", "anything unpushed": run `scripts/pending.sh` (Windows:

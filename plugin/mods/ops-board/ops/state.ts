@@ -3,7 +3,7 @@
 // one table, and its `then` folds the result back in. No process, terminal or fs here -
 // app.ts executes the effects, the tests drive reduce without any process, and F56 takes
 // it as is.
-import type { AssignDraft, Board, Box, Engage, Filter, Machine, Member, Msg, PersonDraft, Reconcile, RunView, TeamsCfgView, ArmView, Ticket, Usage, Watch } from '../types'
+import type { AssignDraft, Board, Box, Engage, Filter, Machine, Member, Msg, PersonDraft, Priority, Reconcile, RunView, TeamsCfgView, ArmView, Ticket, Usage, Watch } from '../types'
 import type { Call } from '../hooks/lib/calls'
 import { cleanIntakeText, draftEdit, firstDraft, intakeDetails, intakeImportArgs, newIntakePaths } from '../hooks/lib/intake'
 import type { Draft, IntakePaths } from '../hooks/lib/intake'
@@ -13,7 +13,7 @@ import { NO_SCRIPTS, decideQuestionsPrompt, holoTicketCmd, loginMessage, loginSt
 export { decideQuestionsPrompt, holoTicketCmd }
 import { appliedHead, appliedLine, applyOf, buildModel, canApply, HEAD, headKey, isHead, isUserHead, parseReconcile, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
-import { STATE_NAME, ticketById } from '../hooks/lib/board'
+import { PRIORITIES, STATE_NAME, priorityFilterOptions, prioritySelectors, ticketById } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, MUTE_FILE, MUTED_HOW, mutedWords, muteText, parseMachine, unmuteDue, usageFromLevel } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
@@ -30,7 +30,7 @@ import { enterExplorer, EX0, explorerKey, pickExplorerBranch } from './explorer'
 import type { ExState } from './explorer'
 
 // F79: run = the Run tab (runtab.ts); F75: explorer = the Explorer tab (explorer.ts); F160: help = the Help tab
-export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run' | 'help' | 'dashboard'
+export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run' | 'help' | 'dashboard' | 'priorities'
 export type FilterField = 'app' | 'who' | 'mine'
 
 export type SkillGuide = {
@@ -78,6 +78,8 @@ export type StartRunDraft = {
 
 export type PointerAction =
   | { kind: 'key'; key: Key }
+  | { kind: 'priority-filter'; index: number }
+  | { kind: 'priority-option'; value: string }
   | { kind: 'tab'; tab: Tab }
   | { kind: 'row'; area: 'tickets' | 'runs' | 'messages' | 'explorer' | 'run' | 'team'; id: string }
   | { kind: 'person'; index: number }
@@ -97,12 +99,14 @@ export type PointerAction =
   | { kind: 'start-run-field'; field: StartRunField }
   | { kind: 'explorer-branch'; branch: string }       // B25: a branch in the Explorer confirm's picker
 
-export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.decide || s.reconcile || s.intake || s.teamConfirm || s.engage || s.startRun || s.filterField || s.runForm || s.help?.runPrompt != null || s.help?.filtering)
+export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.priorityEdit || s.autoPriority || s.decide || s.reconcile || s.intake || s.teamConfirm || s.engage || s.startRun || s.filterField || s.runForm || s.help?.runPrompt != null || s.help?.filtering)
 
 // Targets come only from the rendered frame, never from labels or terminal payloads.
 export function point(s: State, a: PointerAction): Step {
   const same = { state: s, effects: [] }
   if (a.kind === 'key') return reduce(s, a.key)
+  if (a.kind === 'priority-filter') return openAutoPriorityFilter(s, a.index)
+  if (a.kind === 'priority-option') return selectAutoPriorityFilter(s, a.value)
   if (a.kind === 'help') return s.help ? { state: { ...s, help: null, tab: s.tab === 'help' ? 'tickets' : s.tab }, effects: [] } : openHelp(s)
   if (a.kind === 'help-close') return { state: { ...s, help: null, tab: s.tab === 'help' ? 'tickets' : s.tab }, effects: [] }
   if (a.kind === 'help-run') {
@@ -214,6 +218,8 @@ export type State = {
   profiles: string | null; profilesBusy: boolean  // F176: the last `ops --status --refresh` table (p on Health); one in flight
   setup: Setup | null; setupField: SetupField
   help: HelpState | null                       // F127: Help & Skills guide viewer
+  priorityEdit?: { id: string; current?: Priority; busy?: boolean; message?: string; preview?: { level: Priority; token: string } }
+  autoPriority?: { filters: Record<string, string>; field: number; option?: number; editing?: boolean; busy?: boolean; message?: string; preview?: { token: string; selectors: string[]; counts: string; rows: string[]; offset: number } }
   explorer: ExState                        // F75: the Explorer tab (ops/explorer.ts)
 } & RunState                               // F79: the Run tab's file, row, form, job
 export type Setup = SetupValues & {
@@ -241,7 +247,7 @@ export const settle = (x: State | Step): Step => ('effects' in x ? x : { state: 
 // A run's result applied at `now`, the clock when it landed (a `then` stamps facts with s.now).
 export const afterRun = (e: { then: Then }, r: RunResult, s: State, now: number): Step => settle(e.then(r)({ ...s, now }))
 
-const TABS: Tab[] = ['dashboard', 'tickets', 'health', 'messages', 'explorer', 'run', 'help', 'runs']
+const TABS: Tab[] = ['dashboard', 'tickets', 'health', 'messages', 'explorer', 'run', 'help', 'runs', 'priorities']
 
 export const initial = (cols: number, rows: number, now: number): State => ({
   tab: 'tickets', board: null, team: [], me: null, session: null,
@@ -1299,6 +1305,116 @@ function runsKey(s: State, k: Key): Step {
 
 // --- tickets ---
 
+function openAutoPriorityFilter(s: State, index: number): Step {
+  const draft = s.autoPriority
+  const field = priorityFilterOptions(s.board)[index]
+  if (!draft?.editing || draft.busy || !field) return { state: s, effects: [] }
+  const option = Math.max(0, ['-', ...field.values].indexOf(draft.filters[field.key] ?? '-'))
+  return { state: { ...s, autoPriority: { ...draft, field: index, option } }, effects: [] }
+}
+
+function selectAutoPriorityFilter(s: State, value: string): Step {
+  const draft = s.autoPriority
+  if (!draft?.editing || draft.busy || draft.option === undefined) return { state: s, effects: [] }
+  const field = priorityFilterOptions(s.board)[draft.field]
+  if (!field || (value !== '-' && !field.values.includes(value))) return { state: s, effects: [] }
+  const filters = { ...draft.filters, [field.key]: value }
+  return { state: { ...s, autoPriority: { ...draft, filters, option: undefined } }, effects: [] }
+}
+
+function previewAutoPriority(s: State): Step {
+  const { filters, field } = s.autoPriority!
+  const form = { filters, field }
+  const selectors = prioritySelectors(filters)
+  const done: Then = r => x => {
+    if (r.code !== 0) return { ...x, autoPriority: { ...form, message: why(r, 'Queue Jarvis') } }
+    const lines = r.out.split(/\r?\n/)
+    const message = lines.find(line => /^\d+ ticket\(s\) would change\.$/.test(line))
+    if (message === '0 ticket(s) would change.') return { ...x, autoPriority: { ...form, message: 'No unranked tickets match this scope.' } }
+    const token = /^Preview token: ([a-f0-9]{64})\s*$/m.exec(r.out)?.[1]
+    const counts = lines.find(line => /^P1: \d+/.test(line))
+    const rows = lines.filter(line => /^[A-Z]{1,3}\d+[a-z]? +Unranked -> P[1-5] +/.test(line))
+    if (!token || !counts || !message || rows.length !== Number.parseInt(message, 10)) {
+      return { ...x, autoPriority: { ...form, message: 'Queue Jarvis did not return a complete preview. Try again.' } }
+    }
+    return { ...x, autoPriority: { ...form, message, preview: { token, selectors, counts, rows, offset: 0 } } }
+  }
+  return { state: { ...s, autoPriority: { ...form, busy: true, message: 'Calculating suggested priorities…' } },
+    effects: [run('queue-priority', ['--current-worktree', 'auto-preview', ...selectors], done)] }
+}
+
+function autoPriorityKey(s: State, k: Key): Step {
+  const draft = s.autoPriority!
+  const same = { state: s, effects: [] }
+  if (draft.busy) return same
+  if (k.name === 'escape' || (k.ctrl && k.name === 'c')) {
+    return { state: { ...s, autoPriority: draft.option === undefined ? undefined : { ...draft, option: undefined } }, effects: [] }
+  }
+  const submit = k.name === 'return' || k.name === 'enter'
+  const direction = k.name === 'up' || k.name === 'k' ? -1 : k.name === 'down' || k.name === 'j' ? 1 : 0
+  if (draft.editing) {
+    const fields = priorityFilterOptions(s.board)
+    if (draft.option !== undefined) {
+      const values = ['-', ...(fields[draft.field]?.values ?? [])]
+      const current = Math.min(draft.option, values.length - 1)
+      if (submit || k.name === 'space') return selectAutoPriorityFilter(s, values[current]!)
+      if (!direction) return same
+      const option = Math.max(0, Math.min(values.length - 1, current + direction))
+      return { state: { ...s, autoPriority: { ...draft, option } }, effects: [] }
+    }
+    if (k.name === 'p') return previewAutoPriority(s)
+    if (submit || k.name === 'space') return openAutoPriorityFilter(s, draft.field)
+    const move = k.name === 'tab' ? (k.shift ? -1 : 1) : direction
+    if (!move) return same
+    const field = (draft.field + move + fields.length) % fields.length
+    return { state: { ...s, autoPriority: { ...draft, field } }, effects: [] }
+  }
+  const form = { filters: draft.filters, field: draft.field }
+  if (k.name === 'e') return { state: { ...s, autoPriority: { ...form, editing: true } }, effects: [] }
+  if (k.name === 'a') return previewAutoPriority(s)
+  const preview = draft.preview
+  if (!preview) return same
+  if (submit) {
+    const done: Then = r => x => r.code === 0
+      ? { state: toast({ ...x, autoPriority: undefined }, r.out.trim().split(/\r?\n/).at(-1) || 'Priorities assigned.'), effects: [{ kind: 'poll', what: 'board' }] }
+      : { ...x, autoPriority: { ...form, message: why(r, 'Queue Jarvis') } }
+    return { state: { ...s, autoPriority: { ...form, busy: true, message: 'Saving priorities…' } },
+      effects: [run('queue-priority', ['--current-worktree', 'auto-apply', preview.token, ...preview.selectors], done)] }
+  }
+  if (!direction) return same
+  const offset = Math.max(0, Math.min(preview.rows.length - 1, preview.offset + direction))
+  return { state: { ...s, autoPriority: { ...draft, preview: { ...preview, offset } } }, effects: [] }
+}
+
+function priorityKey(s: State, k: Key): Step {
+  const edit = s.priorityEdit!
+  if (edit.busy) return { state: s, effects: [] }
+  if (k.name === 'escape' || (k.ctrl && k.name === 'c')) return { state: { ...s, priorityEdit: undefined }, effects: [] }
+  const selector = 'id=' + edit.id
+  const preview = edit.preview
+  if (preview && (k.name === 'return' || k.name === 'enter')) {
+    const done: Then = r => x => {
+      if (r.code !== 0) return { ...x, priorityEdit: { id: edit.id, current: edit.current, message: why(r, 'Queue Jarvis') } }
+      return { state: toast({ ...x, priorityEdit: undefined }, `${edit.id} priority set to ${preview.level}`), effects: [{ kind: 'poll', what: 'board' }] }
+    }
+    return { state: { ...s, priorityEdit: { ...edit, busy: true } },
+      effects: [run('queue-priority', ['--current-worktree', 'apply', preview.token, preview.level, selector], done)] }
+  }
+  const level = ('P' + k.name) as Priority
+  if (!Object.hasOwn(PRIORITIES, level)) return { state: s, effects: [] }
+  const done: Then = r => x => {
+    const token = /^Preview token: ([a-f0-9]{64})\s*$/m.exec(r.out)?.[1]
+    const change = r.out.split(/\r?\n/).find(line => line.startsWith(edit.id + ' ') && line.includes(' -> '))
+    return { ...x, priorityEdit: {
+      id: edit.id, current: edit.current,
+      message: r.code !== 0 ? why(r, 'Queue Jarvis') : change ?? 'No priority change for this ticket.',
+      preview: r.code === 0 && token && change ? { level, token } : undefined,
+    } }
+  }
+  return { state: { ...s, priorityEdit: { id: edit.id, current: edit.current, busy: true } },
+    effects: [run('queue-priority', ['--current-worktree', 'preview', level, selector], done)] }
+}
+
 function ticketsKey(s: State, k: Key): Step {
   const same = { state: s, effects: [] }
   if (s.showTeam) return teamKey(s, k)
@@ -1334,6 +1450,10 @@ function ticketsKey(s: State, k: Key): Step {
       return same
     }
     case 'a': return { state: openDialog(s, 'owner'), effects: [] }
+    case 'p': {
+      const ticket = m.ticket ? ticketOf(s, m.ticket) : null
+      return { state: ticket ? { ...s, priorityEdit: { id: ticket.id, current: ticket.priority } } : toast(s, 'Select a ticket to set its priority.'), effects: [] }
+    }
     case 'd': return { state: openDecide(s), effects: [] }
     case 'D': return decided(s)
     case 'f': return { state: { ...s, filterField: 'app' }, effects: [] }
@@ -2377,6 +2497,18 @@ export const COMMANDS: HelpItem[] = [
     hint: "[rough prompt - empty uses previous message]"
   },
   {
+    id: "queue-jarvis",
+    name: "/queue-jarvis",
+    kind: "command",
+    category: "Tickets & Board",
+    aliases: [],
+    summary: "Rank open work and preview bulk priority changes",
+    triggers: ["queue-jarvis", "prioritize tickets", "rank tickets"],
+    usage: "List work by priority or preview P1–P5 changes using app, source, owner, type, status, severity, release or dependency filters. Applying a preview requires approval. On Codex use $queue-jarvis.",
+    examples: ["/queue-jarvis list", "/queue-jarvis preview P1 app=installer src=tester type=bug"],
+    hint: "[list filters | preview P1–P5 filters]"
+  },
+  {
     id: "list-ticket-zordon",
     name: "/list-ticket-zordon",
     kind: "command",
@@ -2829,6 +2961,8 @@ export function helpKey(s: State, k: Key): Step {
 }
 
 export function reduce(s: State, k: Key): Step {
+  if (s.autoPriority) return autoPriorityKey(s, k)
+  if (s.priorityEdit) return priorityKey(s, k)
   const quit: Step = { state: { ...s, quit: true }, effects: [{ kind: 'quit' }] }
   // A146: a form holding typed text is not thrown away by one ctrl+c - it cancels the
   // form (as Esc), the board stays; the next ctrl+c quits. An empty form has nothing to lose.
@@ -2860,6 +2994,7 @@ export function reduce(s: State, k: Key): Step {
   if (s.tab === 'explorer' && k.name === 'r') return explorerKey(s, k)     // F75: r reads git again too
   if (s.tab === 'run' && (s.runForm || k.name === 'r')) return runKey(s, k)   // F79: r rescans here
   if (s.tab === 'runs' && k.name === 'r') return runsKey(s, k)                // F122: r reruns on Workflows tab
+  if (s.tab === 'priorities' && k.name === 'a') return { state: { ...s, autoPriority: { filters: {}, field: 0, editing: true } }, effects: [] }
   if (s.tab === 'health') {
     if (k.name === 'r') return refreshHealth(s)
     if (k.name === 'u' || k.name === 'R') return resume(s)
@@ -2877,6 +3012,7 @@ export function reduce(s: State, k: Key): Step {
     case '6': return toTab(s, 'run')          // F79's Run moved to 6: F75's Explorer took 5
     case '7': return openHelp(s)
     case '8': return toTab(s, 'runs')
+    case '9': return toTab(s, 'priorities')
     case '?': return openHelp(s)
     case 'tab': {
       const at = TABS.indexOf(s.tab)

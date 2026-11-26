@@ -14,7 +14,7 @@ import { countsOf, renderBand, statusText } from './band'
 import { buildModel, lineKey, PANE_ID, PANE_TITLE, readView, renderPane } from './pane'
 import type { Tab } from './pane'
 import { ASCII, UNI, chromeRows, windowOf } from './lib/ticketsmodel'
-import { cancelPerson, clearForm, isFormUp } from './assign'
+import { cancelPerson, clearForm, isFormUp, runAutoPriority } from './assign'
 import { applyStatus } from './status'
 import { applyReconcile } from './reconcile'
 import { closeEngage, dropEngage, isEngageUp, pollRuns, RUNS_POLL_MS } from './runstab'
@@ -442,13 +442,13 @@ async function openPane($: EngineInterface, asked: boolean) {
   return r
 }
 
-const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', explorer: 'Explorer', run: 'Build', help: 'Help', log: 'Log', dashboard: 'Dashboard' }
+const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', explorer: 'Explorer', run: 'Build', help: 'Help', log: 'Log', dashboard: 'Dashboard', priorities: 'Priorities' }
 // F76: /ops workflows opens the Workflows tab (id runs) with its Workflows section open; /ops runs is
 // an alias that opens it with its Runs section open. F93: /ops agents opens it with its Agents section
 // open; /ops build opens tab run, /ops run an alias. F160: /ops help and /ops guide open tab help.
-const WORDS = ['tickets', 'workflows', 'runs', 'health', 'messages', 'agents', 'explorer', 'build', 'run', 'help', 'guide', 'log', 'dashboard']
+const WORDS = ['tickets', 'workflows', 'runs', 'health', 'messages', 'agents', 'explorer', 'build', 'run', 'help', 'guide', 'log', 'dashboard', 'priorities']
 const SECTION_OF: Record<string, 'runs' | 'workflows' | 'agents'> = { runs: 'runs', workflows: 'workflows', agents: 'agents' }
-const OPS_ARGS = '[tickets|workflows|health|messages|explorer|build|log|help|dashboard|resume [force]|watchdog on|watchdog off|watchdog status]'
+const OPS_ARGS = '[tickets|workflows|health|messages|explorer|build|log|help|dashboard|priorities|resume [force]|watchdog on|watchdog off|watchdog status]'
 const USAGE = `usage: /ops ${OPS_ARGS} - runs and agents open Workflows too, run opens Build, guide opens Help;`
   + ' resume force releases the hold whatever the reading and mutes memory red until it reads green once (watchdog on unmutes)'
 
@@ -537,7 +537,7 @@ export const register: Register = on => {
     const sec = SECTION_OF[word]
     // A form draws only on Tickets: leaving it drops the form, or a later Esc / close
     // on that tab would be taken as the hidden form's Cancel.
-    if (tab && tab !== 'tickets') await clearForm($)
+    if (tab && (tab !== 'tickets' || (await read($, tabA)) === 'priorities')) await clearForm($)
     if (tab && tab !== 'run') await dropRunForm($)
     if (tab && tab !== 'runs') await dropEngage($)        // F85: the engage confirm likewise
     if (tab && tab !== 'explorer') await dropAction($)    // F103: the git action confirm likewise
@@ -788,6 +788,11 @@ export const register: Register = on => {
     const changed = await applyStatus($)
     const after = await read($, statusA)
     if (changed || (before && !before.busy && after?.generation === before.generation && /board changed|check the board/i.test(after.result ?? ''))) await poll($, true)
+    return { element: e.element }
+  })
+
+  on('ui.press', { plugin: 'ops-board', element: 'priority:auto-save' }, async ($, e) => {
+    if (await runAutoPriority($, true)) await poll($, true)
     return { element: e.element }
   })
 

@@ -529,7 +529,7 @@ edit_line() {
       sub(/[ \t]+$/, "", line)
       return line note
     }
-    BEGIN { ord_count = split("app src decide owner session tester by working work-history", ORD); re = ENVIRON["RE"] }
+    BEGIN { ord_count = split("app src priority severity release depends-on decide owner session tester by working work-history", ORD); re = ENVIRON["RE"] }
     { line = $0; cr = ""
       if (sub(/\r$/, "", line)) cr = "\r"
       if (line ~ re) {

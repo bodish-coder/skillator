@@ -94,7 +94,10 @@ export const PANE_TABS = [
   { id: 'health', label: 'Health' }, { id: 'messages', label: 'Messages' },
   { id: 'explorer', label: 'Explorer' }, { id: 'run', label: 'Build' },
   { id: 'log', label: 'Log' }, { id: 'help', label: 'Help' }, { id: 'runs', label: 'Workflows' },
+  { id: 'priorities', label: 'Priorities' },
 ] as const
+export const paneTabs = (cols: number) => PANE_TABS.map(tab =>
+  cols <= 40 && tab.id === 'priorities' ? { ...tab, label: 'Prio' } : tab)
 export const KEY_LABELS = ['move', 'a assign', 'd decide', 'f filter', 'x done', 't team', 'c reconcile', 'i intake', 'u ask', 's status', 'h help', 'r refresh']
 
 export function packRows(widths: number[], cols: number, gap: number): number {
@@ -126,7 +129,7 @@ export function rowText(t: Ticket, cols: number, glyphs: Glyphs, ascii: boolean,
 }
 
 export function chromeRows(v: View, m: Model, g: Glyphs) {
-  const tabs = packRows(PANE_TABS.map(({ id, label }) => {
+  const tabs = packRows(paneTabs(v.cols).map(({ id, label }) => {
     const badge = id === 'messages' ? v.unread : id === 'log' ? v.logCount : 0
     return label.length + (v.ascii ? 2 : id === 'tickets' ? g.active.length : 0)
       + (badge ? String(badge).length + 1 : 0)
@@ -136,7 +139,8 @@ export function chromeRows(v: View, m: Model, g: Glyphs) {
     ...(c.closed.length ? v.filter.showDone ? [g.sep.length, ...c.closed.map(d => (g.dot + d.n).length), 6]
       : [`${g.sep} ${c.closed.reduce((s, d) => s + d.n, 0)} done hidden`.length] : [])]
   const count = packRows(countItems, v.cols, 1)
-  const keys = packRows([g.move.length + 5, ...KEY_LABELS.slice(1).map(l => l.length + 1), ...(v.me ? [v.me.length] : [])], v.cols, v.cols <= 40 ? 0 : 1)
+  const labels = [...KEY_LABELS.slice(1, 2), ...(m.ticket ? ['p priority'] : []), ...KEY_LABELS.slice(2)]
+  const keys = packRows([g.move.length + 5, ...labels.map(l => l.length + 1), ...(v.me ? [v.me.length] : [])], v.cols, v.cols <= 40 ? 0 : 1)
   return { tabs, count, keys, total: tabs + 3 + count + keys }
 }
 

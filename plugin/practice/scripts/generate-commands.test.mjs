@@ -27,6 +27,14 @@ function metadata(root, edit) {
   writeFileSync(path, JSON.stringify(data), 'utf8');
 }
 
+test('Queue Jarvis wrappers resolve the shared skill and require approval', () => {
+  for (const [host, suffix] of Object.entries({ cursor: '.md', gemini: '.toml', pi: '.md', opencode: '.md' })) {
+    const body = readFileSync(join(plugin, 'host-commands', host, 'queue-jarvis' + suffix), 'utf8');
+    assert.match(body, /\{\{SKILLS\}\}\/queue-jarvis\/SKILL\.md/);
+    assert.match(body, /explicit approval/i);
+  }
+});
+
 test('stale check names the path without writing; regeneration is deterministic', t => {
   const root = fixture(t);
   ok(run(root, '--write'));

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, decideLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun, point, activeUser, openHelp, filteredSkills, SKILLS, COMMANDS, HELP_ITEMS, startRunCommand, openStartRun, startRunLines } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
-import { parseBoard, withWorkingStates } from '../../hooks/lib/board'
+import { parseBoard, priorityFilterOptions, withWorkingStates } from '../../hooks/lib/board'
 import { decideQuestionsPrompt, holoTicketCmd } from '../../hooks/lib/calls'
 import { buildModel, isUserSectionOpen, sessionTickets } from '../../hooks/lib/ticketsmodel'
 import { continuePrompt } from '../../hooks/lib/runlines'
@@ -396,6 +396,81 @@ test('F76: runs and workflows sections - both start open, Enter on a header clos
   assert.equal(onRuns(press(s, 'up'), LIST, {}).runsSelected, 'head:runs')
 })
 
+test('F200: assigning a priority previews one ticket before applying', () => {
+  const opened = reduce({ ...s0, selected: 'F1', open: [' '] }, key('p'))
+  assert.equal(opened.state.priorityEdit?.id, 'F1')
+  assert.equal(opened.effects.length, 0)
+  const choice = reduce(opened.state, key('5'))
+  const preview = choice.effects[0]
+  assert.ok(preview?.kind === 'run')
+  assert.deepEqual(preview.args, ['--current-worktree', 'preview', 'P5', 'id=F1'])
+  assert.equal(reduce(choice.state, key('return')).effects.length, 0)
+  const token = 'a'.repeat(64)
+  const ready = settle(preview.then(ok(`F1       Unranked -> P5   Dark mode\nPreview token: ${token}\n`))(choice.state)).state
+  assert.equal(reduce(ready, key('escape')).state.priorityEdit, undefined)
+  const confirmation = reduce(ready, key('return'))
+  const apply = confirmation.effects[0]
+  assert.ok(apply?.kind === 'run')
+  assert.deepEqual(apply.args, ['--current-worktree', 'apply', token, 'P5', 'id=F1'])
+  const rejected = settle(apply.then({ ...ok(''), code: 1, err: 'Board changed' })(confirmation.state))
+  assert.equal(rejected.state.priorityEdit?.message, 'Board changed')
+  assert.equal(reduce(rejected.state, key('return')).effects.length, 0)
+  const saved = settle(apply.then(ok('Applied'))(confirmation.state))
+  assert.deepEqual(saved.effects, [{ kind: 'poll', what: 'board' }])
+  assert.equal(saved.state.priorityEdit, undefined)
+})
+
+test('F200: filtered Auto-assign confirms the same scope and requires a fresh preview after rejection', () => {
+  const board = parseBoard(
+    '- [ ] B1 — First [app: ops-board] [owner: @sher] [release: Next release]\n' +
+    '- [ ] F1 — Second [app: ops-board] [owner: @sher] [release: Next release]',
+    'T', 1, 1,
+  )
+  const opened = press({ ...s0, board }, '9', 'a')
+  const all = reduce(opened, key('p')).effects[0]
+  assert.ok(all?.kind === 'run')
+  assert.deepEqual(all.args, ['--current-worktree', 'auto-preview'])
+  let current = press(opened, 'return', 'down', 'return')
+  assert.equal(current.autoPriority?.filters.app, 'ops-board')
+  const fields = priorityFilterOptions(board)
+  const choose = (field: string, value: string) => {
+    current = point(current, { kind: 'priority-filter', index: fields.findIndex(option => option.key === field) }).state
+    current = point(current, { kind: 'priority-option', value }).state
+  }
+  choose('owner', '@sher')
+  choose('release', '-')
+  choose('release', 'next release')
+  const started = reduce(current, key('p'))
+  const preview = started.effects[0]
+  const selectors = ['app=ops-board', 'owner=@sher', 'release=next release']
+  assert.ok(preview?.kind === 'run')
+  assert.deepEqual(preview.args, ['--current-worktree', 'auto-preview', ...selectors])
+  assert.equal(reduce(started.state, key('return')).effects.length, 0)
+  const token = '7'.repeat(64)
+  const out = `2 ticket(s) would change.\nP1: 0 · P2: 1 · P3: 1 · P4: 0 · P5: 0\nB1       Unranked -> P2   First\nF1       Unranked -> P3   Second\nPreview token: ${token}\n`
+  const ready = settle(preview.then(ok(out))(started.state)).state
+  assert.equal(reduce(ready, key('down')).state.autoPriority?.preview?.offset, 1)
+  assert.equal(reduce(ready, key('escape')).state.autoPriority, undefined)
+  const reopened = press(ready, 'e', 'return')
+  assert.ok(reopened.autoPriority?.editing)
+  assert.deepEqual(reopened.autoPriority.filters, current.autoPriority?.filters)
+  assert.equal(press(reopened, 'escape').autoPriority?.option, undefined)
+  const confirming = reduce(ready, key('return'))
+  const apply = confirming.effects[0]
+  assert.ok(apply?.kind === 'run')
+  assert.deepEqual(apply.args, ['--current-worktree', 'auto-apply', token, ...selectors])
+  const rejected = settle(apply.then({ ...ok(''), code: 1, err: 'Board changed' })(confirming.state)).state
+  assert.equal(rejected.autoPriority?.message, 'Board changed')
+  assert.equal(reduce(rejected, key('return')).effects.length, 0)
+  const retry = reduce(rejected, key('a')).effects[0]
+  assert.ok(retry?.kind === 'run')
+  assert.deepEqual(retry.args, preview.args)
+  const saved = settle(apply.then(ok('2 ticket(s) assigned a priority.'))(confirming.state))
+  assert.equal(saved.state.autoPriority, undefined)
+  assert.equal(saved.state.toast, '2 ticket(s) assigned a priority.')
+  assert.deepEqual(saved.effects, [{ kind: 'poll', what: 'board' }])
+})
+
 test('tabs, filter mode, team view, refresh, quit', () => {
   assert.equal(reduce(s0, key('8')).state.tab, 'runs')
   assert.deepEqual(reduce(s0, key('8')).effects, [{ kind: 'poll', what: 'runs' }])
@@ -408,7 +483,9 @@ test('tabs, filter mode, team view, refresh, quit', () => {
   assert.equal(reduce(press(s0, '6'), key('tab')).state.tab, 'help')
   assert.equal(reduce(press(s0, '7'), key('tab')).state.tab, 'runs')
   assert.equal(reduce(press(s0, '7'), key('1')).state.tab, 'dashboard')
-  assert.equal(reduce(press(s0, '8'), key('tab')).state.tab, 'dashboard')
+  assert.equal(reduce(s0, key('9')).state.tab, 'priorities')
+  assert.equal(reduce(press(s0, '8'), key('tab')).state.tab, 'priorities')
+  assert.equal(reduce(press(s0, '9'), key('tab')).state.tab, 'dashboard')
   assert.equal(reduce(press(s0, '3'), key('tab')).state.tab, 'messages')
 
   const f = reduce(s0, key('f')).state

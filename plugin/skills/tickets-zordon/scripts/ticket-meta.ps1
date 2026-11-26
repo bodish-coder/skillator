@@ -359,7 +359,7 @@ function Set-Tag([string]$line, [string]$key, [string]$val) {
   $tag = " [$key" + ": $val]"
   $m = Find-Tag $line $key
   if ($m.Success) { return $line.Substring(0, $m.Index) + $tag + $line.Substring($m.Index + $m.Length) }
-  $ord = @('app', 'src', 'decide', 'owner', 'session', 'tester', 'by', 'working', 'work-history')
+  $ord = @('app', 'src', 'priority', 'severity', 'release', 'depends-on', 'decide', 'owner', 'session', 'tester', 'by', 'working', 'work-history')
   $pos = -1
   for ($i = [array]::IndexOf($ord, $key) + 1; $i -lt $ord.Length; $i++) {
     $m = Find-Tag $line $ord[$i]

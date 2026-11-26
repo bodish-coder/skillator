@@ -2,12 +2,12 @@ import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, Color, ElementConstructor, EngineInterface, RenderElement, RenderInput,
   SelectProps, TextProps } from 'claude-code'
 import type { Filter } from '../types'
-import { STATE_COLOR } from './lib/board'
-import { buildModel, chipsOf, headKey, isDecidable, toggleGroup, toggleUserSection, UNI, ASCII, cutTo, headText, userHeadText, rowText, chromeRows, windowOf, PANE_TABS } from './lib/ticketsmodel'
-import type { Model, UserSection, View } from './lib/ticketsmodel'
+import { PRIORITIES, STATE_COLOR } from './lib/board'
+import { buildModel, chipsOf, headKey, isDecidable, toggleGroup, toggleUserSection, UNI, ASCII, cutTo, headText, userHeadText, rowText, chromeRows, windowOf, paneTabs } from './lib/ticketsmodel'
+import type { Model, PANE_TABS, UserSection, View } from './lib/ticketsmodel'
 export { buildModel, lineKey, offsetFor } from './lib/ticketsmodel'
 export type { View, Model } from './lib/ticketsmodel'
-import { clearForm, openAssign, renderForm, runDecided } from './assign'
+import { clearForm, openAssign, openAutoPriority, openPriority, renderAutoPriority, renderForm, runDecided } from './assign'
 import { decideQuestionsPrompt } from './lib/calls'
 import { openDecide, openStatus, renderStatus } from './status'
 import { openReconcile, renderReconcile } from './reconcile'
@@ -120,7 +120,8 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
 
   const pushTicketEntry = (t: Model['rows'][number], itemKey: string, nested: boolean) => {
     const isSel = itemKey === m.selected
-    const row = rowText(t, v.cols, glyphs, !!v.ascii, nested, isSel ? 3 : 0)
+    const priorityWidth = t.priority && v.ascii ? 3 : 0
+    const row = rowText(t, v.cols - priorityWidth, glyphs, !!v.ascii, nested, isSel ? 3 : 0)
     const body = v.ascii && isSel ? '> ' + row.text.slice(2) : row.text
     entries.push(
       <Button key={'row:' + itemKey} hotkey={isSel ? 'o' : undefined} plain onPress={() => {
@@ -128,8 +129,9 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
         void update($, selectedA, () => itemKey)
         void update($, expandedA, x => (x === itemKey || x === t.id ? null : itemKey))
       }}>
-        {!v.ascii && <Text color={paint(t.box)}>{glyphs.rail}</Text>}
-        {isSel ? <Text inverse>{body.padEnd(v.cols - (v.ascii ? 0 : 2) - 3)}</Text>
+        {t.priority ? <Text color={v.ascii ? undefined : PRIORITIES[t.priority].color}>{v.ascii ? t.priority + ' ' : glyphs.dot + ' '}</Text>
+          : !v.ascii && <Text color={paint(t.box)}>{glyphs.rail}</Text>}
+        {isSel ? <Text inverse>{body.padEnd(v.cols - (v.ascii ? priorityWidth : 2) - 3)}</Text>
           : <Text dimColor={STATE_COLOR[t.box] === 'dim'}>{row.owner && body.endsWith(row.owner)
             ? [body.slice(0, -row.owner.length), <Text dimColor>{row.owner}</Text>] : body}</Text>}
       </Button>,
@@ -226,6 +228,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
     <Box key="keys" flexDirection="row" flexWrap="wrap" gap={v.cols <= 40 ? 0 : 1}>
       <Text dimColor>{glyphs.move + ' move'}</Text>
       <Button key="key:assign" plain dimColor hotkey="a" onPress={() => { void openAssign($, 'owner', m.ticket, els.canType) }}>assign</Button>
+      {m.ticket && <Button key="key:priority" plain dimColor hotkey="p" onPress={() => { void openPriority($, m.ticket) }}>priority</Button>}
       <Button key="key:decide" plain dimColor hotkey="d" onPress={() => { void openDecide($, m.ticket, els.canType) }}>decide</Button>
       <Button key="key:filter" plain dimColor hotkey="f" onPress={() => { void update($, filterOpenA, x => !x) }}>filter</Button>
       <Button key="key:done" plain dimColor hotkey="x" onPress={() => setFilter(x => ({ ...x, showDone: !x.showDone }))}>done</Button>
@@ -301,7 +304,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   const log = await readLog($)
   const bar = (   // B14: whole tabs wrap to a second row in a narrow pane, never cut mid-word
     <Box key="tabs" flexDirection="row" flexWrap="wrap" gap={1}>
-      {PANE_TABS.map(x => (
+      {paneTabs(cols).map(x => (
         <Button key={'tab:' + x.id} variant={x.id === tab ? 'primary' : undefined} dimColor={x.id !== tab}
           onPress={() => {
             if (x.id !== 'tickets') void clearForm($).catch(() => {})
@@ -342,6 +345,20 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
           <Box flexDirection="row" gap={4}>{panels.slice(0, 2)}</Box>
           <Box flexDirection="row" gap={4}>{panels.slice(2)}</Box>
         </Box> : <Box flexDirection="column" gap={1}>{panels}</Box>}
+      </Box>
+    )
+  }
+  if (tab === 'priorities') {
+    const form = await renderAutoPriority($, e)
+    if (form) return form
+    return (
+      <Box flexDirection="column">
+        {bar}
+        <Text> </Text>
+        {Object.entries(PRIORITIES).map(([id, { color, label }]) =>
+          <Text key={id}><Text color={ascii ? undefined : color}>{ascii ? '' : glyphs.dot + ' '}{id}</Text>{'  ' + label}</Text>)}
+        <Text dimColor>Unprioritized tickets follow P5 in Queue Jarvis.</Text>
+        <Button key="priority:auto-open" plain hotkey="a" onPress={() => { void openAutoPriority($) }}>Auto-assign</Button>
       </Box>
     )
   }

@@ -1,7 +1,9 @@
 export type Box = ' ' | '~' | '%' | 'v' | '!' | '?' | '>' | 'x' | '-'
+export type Priority = 'P1' | 'P2' | 'P3' | 'P4' | 'P5'
 export type Ticket = {
   id: string; box: Box; title: string; line: string      // line = exact text after "- [b] "
   parent: string | null; indent: number; section: string // heading it sits under
+  priority?: Priority
   apps: string[]; decide: string | null; owner: string | null; tester: string | null; by: string[]
   session: string | null                                 // "(@cc-4ae496)" or F109 "(@cc-k7q2:asha:run)" tag, without parens
   workingSession?: string | null
@@ -50,6 +52,15 @@ export type StatusDraft = { generation: number; id: string; target: 'pending' | 
 // F178: kind 'session' picks one of `sessions` (the live ones, `@owner code`) into `session`, handle kept
 export type AssignDraft = { id: string; kind: 'owner' | 'decide' | 'tester' | 'session'; handle: string | null; result: string | null
   sessions?: LiveSession[]; session?: string | null }
+export type PriorityDraft = {
+  request: number; id: string; level: Priority | null; busy: boolean
+  preview: { token: string; change: string } | null; result: string | null
+}
+export type AutoPriorityDraft = {
+  request: number; selection: Record<string, string>; picker: { key: string; page: number } | null
+  busy: boolean; error: string | null
+  preview: { token: string | null; selectors: string[]; count: string; levels: string; changes: string[] } | null
+}
 export type LiveSession = { code: string; owner: string | null }
 // F47 team management (T6): the Team view in the Tickets tab, and the Add person form
 // (drawn as a form in the ops-board pane; `back` = where a finished add returns).
@@ -182,14 +193,15 @@ declare module 'claude-code' {
       actionFocus: string | null // F115: element key only, never input content
       board: Board | null; team: Member[]; me: string | null
       session: string | null   // F109: this session's sid (team.ts sessionTag), the band's
-      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run' | 'help' | 'log'; selected: string | null; expanded: string | null
+      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run' | 'help' | 'log' | 'dashboard' | 'priorities'; selected: string | null; expanded: string | null
       filter: Filter; filterOpen: boolean
       ascii: boolean
       ticketOffset: number | null    // pinned Tickets list; null follows selection
       openGroups: string[]   // status boxes and unfold:<personal section>; empty = collapsed
       runsOpen: ('runs' | 'workflows' | 'agents')[]   // F76: the Workflows tab's open sections this session
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]
-      runs: RunView[]; assign: AssignDraft | null; narrow: boolean
+      runs: RunView[]; assign: AssignDraft | null; priorityDraft: PriorityDraft | null; narrow: boolean
+      autoPriority: AutoPriorityDraft | null
       engage: Engage | null             // F85: the engage confirm up in the Workflows tab
       startRun: StartRunDraft | null    // F113/A196: the Start Run form up in the Workflows tab
       openTickets: Ticket[]             // F113/A196: open tickets cached for Start Run form

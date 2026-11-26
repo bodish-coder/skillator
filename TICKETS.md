@@ -214,6 +214,8 @@ their section.
 
 - [%] F199 — Record a ticket source tag. `ticket-meta src <ID> <value>` writes `[src:]` after `[app:]` while preserving other tags. Done = both shells agree and the title checker ignores source metadata. [owner: @sher] (testing: Bash and PowerShell source edits, title checker and board parser checks passed)
 
+- [%] F200 — Prioritize tickets with Queue Jarvis. Preview and apply bulk priority changes by app, source, owner, type, status, severity, release or dependencies. Show the resulting work queue and require approval before changing the board. [owner: @sher] (testing: priority ranking, 12-ticket bulk apply, stale previews, lock protection, board parsing and command registration passed)
+
 ## Agent-found
 
 - [x] A62 — auto-invocation is untested on cursor, codex, antigravity and pi; `PLATFORMS.md` now says so rather than implying otherwise, which documents the hole without closing it. This is the real remainder of A57. Includes: prime-agent has no markdown-skill loader at all, so a user there must hand-write `.skillator/grayskull.md` — unverified whether anyone has (deferred: every host but prime-agent verified - A62a/b/c; the remainder is A62d, waiting on prime-agent being installed) (@cc-629d8e)

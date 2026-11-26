@@ -21,6 +21,10 @@
       ]
     },
     {
+      "name": "queue-jarvis",
+      "hosts": ["cursor", "pi", "opencode", "gemini"]
+    },
+    {
       "name": "decision-matrix",
       "hosts": [
         "cursor",

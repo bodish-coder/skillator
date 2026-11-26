@@ -31,10 +31,10 @@ test('a frame is rows × ≤cols, tab bar first, band last, no escapes without c
   const f = sized(s)
   assert.equal(f.length, 24)
   assert.match(f[0]!, /^ 1 Dashboard   2 Tickets   3 Health   4 Messages   5 Explorer   6 Build   7 Help$/)
-  // At 80 columns Workflows rides the second row; at 120 all tabs and the repo fit.
+  // At 80 columns Workflows and Priorities ride the second row.
   assert.match(sized({ ...s, repo: 'skillator2' })[0]!, /^ 1 Dashboard   2 Tickets   3 Health   4 Messages   5 Explorer   6 Build   7 Help$/)
-  assert.match(f[1]!, /^ 8 Workflows/)
-  assert.match(sized({ ...s, repo: 'skillator2', cols: 120 })[0]!, /^ 1 Dashboard   2 Tickets   3 Health   4 Messages   5 Explorer   6 Build   7 Help   8 Workflows +ops · skillator2$/)
+  assert.match(f[1]!, /^ 8 Workflows   9 Priorities/)
+  assert.match(sized({ ...s, repo: 'skillator2', cols: 130 })[0]!, /^ 1 Dashboard   2 Tickets   3 Health   4 Messages   5 Explorer   6 Build   7 Help   8 Workflows   9 Priorities +ops · skillator2$/)
   assert.match(f[23]!, /^● ops · mem \? · disk \? · 5h \? · 7d \?$/)       // one band line at 80 columns
   assert.match(sized({ ...s, me: '@sher' })[23]!, /^● ops @sher · mem \? · disk \? · 5h \? · 7d \?$/) // F162: session owner in bottom band
   assert.match(text(s), /  ▾ In progress \(1\)\n› ● B2  CSV export drops the last row/)
@@ -43,6 +43,48 @@ test('colour on: dot carries the state colour, selected row highlighted', () => 
   const f = frame(s, { color: true, ascii: false })
   assert.match(f.find(l => l.includes('B2  CSV'))!, /› \x1b\[33m●\x1b\[0m\x1b\[1;97;44m/)
   for (const l of f) assert.ok(cells(l.replace(/\x1b\[[0-9;]*m/g, '')) <= 80, l)
+})
+test('F200: ticket priority dots use the Priorities tab colors', () => {
+  const board = parseBoard('- [~] B2 — Example ticket [priority: p1]', 'T', 1, 1)
+  const tickets = { ...s, board }
+  assert.equal(board.tickets[0]?.priority, 'P1')
+  const row = frameSegs(tickets).find(line => line.some(seg => seg.text.includes('Example ticket')))
+  assert.equal(row?.find(seg => seg.text === '●')?.color, 'error')
+  const legend = frameSegs({ ...tickets, tab: 'priorities' })
+  assert.deepEqual(legend.flat().filter(seg => /^● P[1-5]$/.test(seg.text)).map(seg => [seg.text, seg.color]), [
+    ['● P1', 'error'], ['● P2', 'warning'], ['● P3', 'suggestion'], ['● P4', 'permission'], ['● P5', 'inactive'],
+  ])
+})
+test('F200: the Auto-assign popup keeps its scope and review controls visible', () => {
+  const priority: State = { ...s, tab: 'priorities', cols: 80, rows: 24 }
+  assert.match(frame(priority, P).join('\n'), /\[a Auto-assign\]/)
+  const popup = reduce(priority, { name: 'a' }).state
+  const scopeForm = frame(popup, P).join('\n')
+  assert.match(scopeForm, /Auto-assign priorities/)
+  for (const label of ['App', 'Source', 'Owner', 'Ticket ID', 'Ticket type', 'Status', 'Severity', 'Release', 'Depends on']) {
+    assert.match(scopeForm, new RegExp(label + ' +-[ ]▾'))
+  }
+  assert.match(scopeForm, /\[p preview\]/)
+  assert.doesNotMatch(scopeForm, /\[enter save\]/)
+  assert.equal(screen(popup, P).hits.filter(hit => hit.action.kind === 'priority-filter').length, 9)
+  const dropdown = reduce(popup, { name: 'return' }).state
+  const chooser = frame(dropdown, P).join('\n')
+  assert.match(chooser, /Choose App/)
+  assert.match(chooser, /› -/)
+  assert.match(chooser, /\[enter select\]/)
+  assert.ok(screen(dropdown, P).hits.some(hit => hit.action.kind === 'priority-option' && hit.action.value === '-'))
+  const lastField = reduce({ ...popup, cols: 40, rows: 12 }, { name: 'up' }).state
+  assert.match(frame(lastField, P).join('\n'), /› Depends on +-/)
+  const rows = Array.from({ length: 20 }, (_, index) => `B${index + 1} Unranked -> P2 Ticket ${index + 1}`)
+  const ready: State = { ...priority, autoPriority: {
+    filters: { app: 'ops-board' }, field: 0, message: '20 ticket(s) would change.',
+    preview: { token: '8'.repeat(64), selectors: ['app=ops-board'], counts: 'P1: 0 · P2: 20 · P3: 0 · P4: 0 · P5: 0', rows, offset: 19 },
+  } }
+  const review = frame(ready, P).join('\n')
+  assert.match(review, /Scope: app=ops-board/)
+  assert.match(review, /P1: 0 · P2: 20/)
+  assert.match(review, /B20 Unranked -> P2 Ticket 20/)
+  assert.match(review, /\[enter save\]/)
 })
 test('ascii swaps the glyphs; fit cuts with an ellipsis; a long title never wraps', () => {
   assert.equal(glyph('● ▲ ■ █ ░ … ▾', true), '* ^ # = - ... v')
@@ -146,8 +188,8 @@ test('F81 the reconcile box draws its proposals and its keys', () => {
   assert.ok(frame(x, P).includes('[↑↓ move] · [space pick] · [enter apply picked] · [a accept all] · [esc none]'))
 })
 test('the keys line as the mock; D decided only on a decidable row', () => {
-  const keys = (x: State) => frame({ ...x, cols: 150 }, P).find(l => l.includes('a assign'))!
-  assert.equal(keys(s), '[↑↓ move] · [enter line] · [a assign] · [d decide] · [t team] · [c reconcile] · [i intake] · [u ask] · [r reload] · [q quit]')
+  const keys = (x: State) => frame({ ...x, cols: 170 }, P).find(l => l.includes('a assign'))!
+  assert.equal(keys(s), '[↑↓ move] · [enter line] · [a assign] · [d decide] · [t team] · [c reconcile] · [i intake] · [u ask] · [r reload] · [p priority] · [q quit]')
   const f3: State = { ...s, selected: 'F3' }
   assert.match(keys(f3), /\[D decided\]/)
   assert.match(keys(f3), /\[q quit\]$/)
@@ -590,7 +632,7 @@ test('F123: button badges [Key Label] across all tabs and click hitboxes match b
   // 1. Tickets tab
   const scTickets = screen({ ...s, cols: 140 }, P)
   const tText = scTickets.lines.join('\n')
-  assert.match(tText, /\[↑↓ move\] · \[enter line\] · \[a assign\] · \[d decide\] · \[t team\] · \[c reconcile\] · \[i intake\] · \[u ask\] · \[r reload\] · \[q quit\]/)
+  assert.match(tText, /\[↑↓ move\] · \[enter line\] · \[a assign\] · \[d decide\] · \[t team\] · \[c reconcile\] · \[i intake\] · \[u ask\] · \[r reload\] · \[p priority\] · \[q quit\]/)
   assert.match(tText, /\[f filter\] · \[x show done\]/)
 
   // Hitbox check: find hit for 'q'
@@ -937,7 +979,7 @@ test('F160/A198: 7 Help tab header, SKILL.md doc content, run prompt box, and wi
 })
 
 test('F161: standalone ops board rich semantic colors across tab bar, buttons, ticket IDs, tags, count line, and modals', () => {
-  const c = frame({ ...s, repo: 'skillator2', cols: 120 }, { color: true, ascii: false })
+  const c = frame({ ...s, repo: 'skillator2', cols: 130 }, { color: true, ascii: false })
   // Tab bar: active tab inverse, inactive tabs highlight number prefix in cyan, repo badge in magenta + cyan
   assert.match(c[0]!, / \x1b\[1;97;44m2 Tickets\x1b\[0m/)
   assert.match(c[0]!, /\x1b\[36m8 \x1b\[0mWorkflows/)

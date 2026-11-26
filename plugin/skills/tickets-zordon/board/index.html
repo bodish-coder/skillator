@@ -244,6 +244,7 @@ li.row.sub { padding-inline-start: 2ch; }
 }
 .tag b { font-weight: 400; opacity: 0.75; }
 .tag-owner { color: var(--ink); }
+.tag-priority { color: var(--ink); border-color: var(--accent); background: var(--accent-soft); }
 .tag-decide { color: var(--decide); border-color: var(--decide); background: var(--decide-soft); }
 .why {
   grid-column: 3; display: block;
@@ -564,7 +565,7 @@ function parse(text) {
     /* F43/F45: `[app: ..] [decide: @x] [owner: @x] [by: @y]` tags come off the title and draw
        as chips; a line without them parses exactly as before. */
     const tags = [];
-    let title = idm[3].replace(/\s*\[(app|src|decide|owner|by|session):\s*([^\]]*)\]/g,
+    let title = idm[3].replace(/\s*\[(app|src|priority|severity|release|depends-on|decide|owner|by|session):\s*([^\]]*)\]/g,
       (_, k, v) => { tags.push([k, v.trim()]); return ""; }).trim();
 
     /* A trailing parenthetical is a reason only when it names one. Everything

@@ -18,7 +18,7 @@ import { messageLines, pendingHandoffOf, selectedOf, unreadCount } from '../hook
 import { buildModel, chipsOf, headKey, HEAD, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
 import { isFinished, modeOf, runDetails, runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
-import { isOpen, paint, STATE_COLOR, visible } from '../hooks/lib/board'
+import { isOpen, paint, PRIORITIES, STATE_COLOR, priorityFilterOptions, prioritySelectors, visible } from '../hooks/lib/board'
 import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM, MUTED_HOW, mutedWords } from '../hooks/lib/facts'
 import type { Limits } from '../hooks/lib/facts'
 import { ticketsOf } from '../hooks/lib/team'
@@ -148,7 +148,7 @@ function windowOf(lines: Keyed[], id: string | null, h: number, area?: 'tickets'
 
 // --- the fixed lines ---
 
-const TABS: [State['tab'], string][] = [['dashboard', '1 Dashboard'], ['tickets', '2 Tickets'], ['health', '3 Health'], ['messages', '4 Messages'], ['explorer', '5 Explorer'], ['run', '6 Build'], ['help', '7 Help'], ['runs', '8 Workflows']]
+const TABS: [State['tab'], string][] = [['dashboard', '1 Dashboard'], ['tickets', '2 Tickets'], ['health', '3 Health'], ['messages', '4 Messages'], ['explorer', '5 Explorer'], ['run', '6 Build'], ['help', '7 Help'], ['runs', '8 Workflows'], ['priorities', '9 Priorities']]
 
 function tabsLines(s: State): Seg[][] {
   // F66: the unread count rides on the Messages label
@@ -157,6 +157,11 @@ function tabsLines(s: State): Seg[][] {
     if (id === 'messages') {
       const word = s.cols < 48 ? '4 Msgs' : l
       return unread ? `${word} (${unread})` : word
+    }
+    if (s.cols <= 40) {
+      if (id === 'explorer') return '5 Explore'
+      if (id === 'runs') return '8 Flows'
+      if (id === 'priorities') return '9 Prio'
     }
     return l
   }
@@ -242,6 +247,18 @@ function keysOf(s: State, m: Model): Seg[][] {
   if (s.setup?.confirmClear) return [h('y clear', 'y'), h('n cancel', 'n')]
   if (s.setup) return [field, h('space on/off', 'space'), h('enter activate/save', 'return'), cancel]
   if (s.person) return [field, h('enter add', 'return'), cancel]
+  if (s.autoPriority) {
+    if (s.autoPriority.busy) return []
+    if (s.autoPriority.option !== undefined) return [move, h('enter select', 'return'), h('esc back', 'escape')]
+    if (s.autoPriority.editing) return [move, h('enter choose', 'return'), h('p preview', 'p'), cancel]
+    if (s.autoPriority.preview) return [move, h('enter save', 'return'), h('e edit scope', 'e'), cancel]
+    return [h('a preview again', 'a'), h('e edit scope', 'e'), cancel]
+  }
+  if (s.priorityEdit) {
+    if (s.priorityEdit.busy) return [[dim('Working…')]]
+    if (s.priorityEdit.preview) return [h('enter save', 'return'), cancel]
+    return [...Object.keys(PRIORITIES).map(id => [hot(id, id.slice(1))]), cancel]
+  }
   if (s.dialog) return s.dialogField === 'ticket' ? [[dim('type the ID')], h('tab person', 'tab'), h('enter confirm', 'return'), cancel]
     : [[{ text: '[↑', color: 'suggestion', action: { kind: 'key', key: { name: 'up' } } }, { text: '↓ person]', color: 'suggestion', action: { kind: 'key', key: { name: 'down' } } }], [{ text: '[a', color: 'suggestion', action: { kind: 'key', key: { name: 'a' } } }, dim(' / '), { text: 'd kind]', color: 'suggestion', action: { kind: 'key', key: { name: 'd' } } }], h('tab ticket', 'tab'), h('enter confirm', 'return'), cancel]
   if (s.decide) return s.decide.field === 'ticket'
@@ -267,6 +284,7 @@ function keysOf(s: State, m: Model): Seg[][] {
     return [move, h(enter, 'return'), h('s Start', 's'), h('Engage', 'e'), h('Rerun', 'r'), h('Push Pending', 'p'), h('Mode: ||/seq', 'm'), quit]
   }
   if (s.tab === 'health') return [[hot('r refresh', 'r')], [hot('R resume', 'R', true)], [hot('c resume CLI', 'c')], [hot('F force resume', 'F', true)], [hot('p re-read status', 'p')], quit]
+  if (s.tab === 'priorities') return [h('a Auto-assign', 'a'), h('tab switch', 'tab'), quit]
   if (s.tab === 'dashboard') return [h('tab switch', 'tab'), quit]
   if (s.tab === 'messages') return [move, h('enter open', 'return'), h('c connect', 'c'), h('d disconnect', 'd'), h('y copy URL', 'y'), h('m mark all read', 'm'), h('s setup', 's'), quit]
   if (s.tab === 'explorer' && s.explorer.action) {
@@ -282,7 +300,8 @@ function keysOf(s: State, m: Model): Seg[][] {
   const head = isHead(s.selected ?? m.selected) ? m.groups.find(g => headKey(g.box) === (s.selected ?? m.selected)) : undefined
   const enter = isUsrHead ? (userOpen ? 'enter close' : 'enter open') : head ? (head.open ? 'enter close' : 'enter open') : 'enter line'
   const intake = s.rows <= 12 && s.cols <= 40 ? [] : [h('i intake', 'i')]
-  return [move, h(enter, 'return'), h('a assign', 'a'), h('d decide', 'd'), ...(sel && isDecidable(sel) ? [h('D decided', 'D')] : []), h('t team', 't'), h('c reconcile', 'c'), ...intake, h('u ask', 'u'), h('r reload', 'r'), quit]
+  const priority = sel && (s.rows > 12 || s.cols > 40) ? [h('p priority', 'p')] : []
+  return [move, h(enter, 'return'), h('a assign', 'a'), h('d decide', 'd'), ...(sel && isDecidable(sel) ? [h('D decided', 'D')] : []), h('t team', 't'), h('c reconcile', 'c'), ...intake, h('u ask', 'u'), h('r reload', 'r'), ...priority, quit]
 }
 
 export function keysLines(s: State, m: Model): Seg[][] {
@@ -489,7 +508,7 @@ function ticketLines(s: State, m: Model): Keyed[] {
       const titleStr = cut(clean(t.title), Math.max(4, room))
       const body = idStr + titleStr
       const tagText = tag ? ' '.repeat(Math.max(2, avail - cells(body) - cells(tag))) + tag : ''
-      const dot: Seg = { text: '●', color: paint(t.box) }
+      const dot: Seg = { text: '●', color: t.priority ? PRIORITIES[t.priority].color : paint(t.box) }
       const isDimRow = STATE_COLOR[t.box] === 'dim'
       const idColor = isDimRow ? undefined : paint(t.box) ?? 'suggestion'
       out.push({ key: 'row:' + itemKey, segs: sel
@@ -521,7 +540,7 @@ function ticketLines(s: State, m: Model): Keyed[] {
       const titleStr = `${cut(clean(t.title), Math.max(4, room))}${tail}`
       const body = idStr + titleStr
       const tagText = tag ? ' '.repeat(Math.max(2, avail - cells(body) - cells(tag))) + tag : ''
-      const dot: Seg = { text: '●', color: paint(t.box) }
+      const dot: Seg = { text: '●', color: t.priority ? PRIORITIES[t.priority].color : paint(t.box) }
       const isDimRow = STATE_COLOR[t.box] === 'dim'
       const idColor = isDimRow ? undefined : paint(t.box) ?? 'suggestion'
       out.push({ key: 'row:' + t.id, segs: sel
@@ -754,6 +773,47 @@ function boxBody(s: State, b: Boxed): Seg[][] {
   }
   out.push([{ text: pad + '└' + '─'.repeat(inner) + '┘', color: 'suggestion' }])
   return out
+}
+
+function autoPriorityBody(s: State, room: number): Seg[][] {
+  const draft = s.autoPriority!
+  const scope = prioritySelectors(draft.filters).join(' · ') || 'All open unranked tickets'
+  if (draft.editing) {
+    const fields = priorityFilterOptions(s.board)
+    const field = fields[draft.field]!
+    const choosing = draft.option !== undefined
+    const title = choosing ? 'Choose ' + field.label : 'Auto-assign priorities'
+    const rows: Boxed['rows'] = choosing
+      ? ['-', ...field.values].map(value => ({ text: value, action: { kind: 'priority-option', value } }))
+      : fields.map(({ key, label }, index) => ({
+        text: label.padEnd(12) + (draft.filters[key] ?? '-') + ' ▾', action: { kind: 'priority-filter', index },
+      }))
+    const active = Math.min(rows.length - 1, draft.option ?? draft.field)
+    const page = Math.max(1, room - (room >= 5 ? 3 : 2))
+    const offset = Math.max(0, active - page + 1)
+    const visible = rows.slice(offset, offset + page).map((row, index) => ({
+      ...row, text: (offset + index === active ? '› ' : '  ') + row.text,
+      color: offset + index === active ? 'suggestion' as const : undefined,
+    }))
+    if (room >= 5) visible.push({
+      text: choosing ? '- clears this filter.' : '- means any value.',
+      color: undefined, action: undefined,
+    })
+    return boxBody(s, { title, rows: visible })
+  }
+  const preview = draft.preview
+  const rows: Boxed['rows'] = [{ text: draft.message ?? '' }]
+  if (preview) {
+    const counts = cells(preview.counts) <= innerOf(s)
+      ? preview.counts : preview.counts.replace(/: /g, ':').replace(/ · /g, '  ')
+    rows.push({ text: counts, color: 'suggestion' })
+    if (room >= 6) rows.push({ text: 'Scope: ' + scope })
+    const page = Math.max(1, room - 2 - rows.length)
+    rows.push(...preview.rows.slice(preview.offset, preview.offset + page).map(text => ({ text })))
+  } else {
+    rows.push({ text: 'Scope: ' + scope })
+  }
+  return boxBody(s, { title: 'Auto-assign priorities', rows })
 }
 
 function dialogBody(s: State): Seg[][] {
@@ -1163,6 +1223,9 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.setup ? setupBody(s)
     : s.person ? formBody(s)
     : s.dialog ? dialogBody(s)
+    : s.autoPriority ? autoPriorityBody(s, room)
+    : s.priorityEdit ? boxBody(s, { title: `Priority · ${s.priorityEdit.id}`,
+        rows: [{ text: s.priorityEdit.message ?? `Current priority: ${s.priorityEdit.current ?? 'Unranked'}` }] })
     : s.decide ? decideBody(s)
     : s.reconcile ? boxBody(s, { title: recTitle, rows: [...recRows.map((text, index) => ({ text, action: { kind: 'reconcile' as const, index } })), { text: '' },
         { text: '', segs: [dim('  '), hot('Enter apply picked', 'return'), dim(' · '), hot('a accept all', 'a'), dim(' · '), hot('Esc none', 'escape')] }] })   // F81
@@ -1196,12 +1259,17 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.tab === 'runs' ? runsBody(s, room)
     : s.tab === 'health' ? healthBody(s, room)
     : s.tab === 'dashboard' ? dashboardBody(s, room)
+    : s.tab === 'priorities' ? [
+      ...Object.entries(PRIORITIES).map(([id, { color, label }]) =>
+        [{ text: '● ' + id, color }, { text: '  ' + label }]),
+      [dim('Unprioritized tickets follow P5 in Queue Jarvis.')],
+    ].slice(0, room)
     : s.tab === 'messages' ? messagesBody(s, room)
     : s.tab === 'explorer' ? explorerBody(s, room)
     : s.tab === 'run' ? windowOf(runTabLines(s), s.runForm ? null : s.runSel, room, 'run')
     : ticketsBody(s, m, room)
   // B25: a modal box taller than the room keeps its last rows (the buttons, the bottom edge)
-  const boxed = !!(s.setup || s.person || s.dialog || s.decide || s.reconcile || s.intake || s.engage || s.startRun) && !(s.help || s.tab === 'help')
+  const boxed = !!(s.setup || s.person || s.dialog || s.autoPriority || s.priorityEdit || s.decide || s.reconcile || s.intake || s.engage || s.startRun) && !(s.help || s.tab === 'help')
   const top = boxed && main.length > room && room >= 4
     ? [...main.slice(0, room - 2), ...main.slice(-2)]
     : main.slice(0, room)

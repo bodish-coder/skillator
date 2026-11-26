@@ -153,7 +153,7 @@ function Get-Board {
       $note = ''
       $x = [regex]::Match($r, '\(testing:[^)]*\)')
       if ($x.Success) { $note = $x.Value.Substring(9, $x.Length - 10).Trim(' ') }
-      $r = [regex]::Replace($r, '\[(app|src|owner|decide|by|session):[^\]]*\]', '')
+      $r = [regex]::Replace($r, '\[(app|src|priority|severity|release|depends-on|owner|decide|by|session):[^\]]*\]', '')
       $r = [regex]::Replace($r, '\(@[^() ]+\)', '')
       $r = [regex]::Replace($r, '\(testing:[^)]*\)', '')
       $a = $r.IndexOf(' (', [StringComparison]::Ordinal)

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, FsEntry, RenderElement, RenderInput } from 'claude-code'
-import type { AssignDraft, Box as State, LiveSession, Member, PersonDraft, Ticket } from '../types'
-import { parseBoard, SESSION_HEARTBEAT_MS, STATE_NAME, ticketById } from './lib/board'
+import type { AssignDraft, AutoPriorityDraft, Box as State, LiveSession, Member, PersonDraft, Priority, PriorityDraft, Ticket } from '../types'
+import { parseBoard, PRIORITIES, priorityFilterOptions, prioritySelectors, SESSION_HEARTBEAT_MS, STATE_NAME, ticketById } from './lib/board'
 export { isOpen } from './lib/board'
 import { runCall } from './lib/host'
 import { norm } from './lib/calls'
@@ -38,6 +38,9 @@ const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
 const teamA = atom({ plugin: 'ops-board', key: 'team' } as const, [])
 const meA = atom({ plugin: 'ops-board', key: 'me' } as const, null)
 const assignA = atom({ plugin: 'ops-board', key: 'assign' } as const, null)
+const priorityA = atom({ plugin: 'ops-board', key: 'priorityDraft' } as const, null)
+const autoPriorityA = atom({ plugin: 'ops-board', key: 'autoPriority' } as const, null)
+let priorityRequest = 0
 const personA = atom({ plugin: 'ops-board', key: 'person' } as const, null)
 const statusA = atom({ plugin: 'ops-board', key: 'status' } as const, null)
 const reconcileA = atom({ plugin: 'ops-board', key: 'reconcile' } as const, null)   // F81: reconcile.tsx's form
@@ -135,7 +138,7 @@ export async function openAssign($: EngineInterface, kind: AssignDraft['kind'], 
 const whoKey = (d: AssignDraft) => (d.handle ? 'who:' + d.handle : 'who:+add')
 
 export async function isFormUp($: EngineInterface): Promise<boolean> {
-  return (await read($, statusA)) !== null || (await read($, assignA)) !== null || (await read($, personA)) !== null || (await read($, reconcileA)) !== null || (await read($, intakeA)) !== null
+  return (await read($, statusA)) !== null || (await read($, assignA)) !== null || (await read($, personA)) !== null || (await read($, reconcileA)) !== null || (await read($, intakeA)) !== null || (await read($, priorityA)) !== null || (await read($, autoPriorityA)) !== null
 }
 
 export async function clearForm($: EngineInterface) {
@@ -146,6 +149,8 @@ export async function clearForm($: EngineInterface) {
   await update($, personA, () => null)
   await update($, reconcileA, () => null)
   await update($, intakeA, () => null)
+  await update($, priorityA, () => null)
+  await update($, autoPriorityA, () => null)
 }
 
 // Done or Cancel: back to the view the form came from, Esc the pane's own again
@@ -155,6 +160,170 @@ export async function closeForm($: EngineInterface) {
   if (!(await isFormUp($))) return
   await clearForm($)
   await $.ui.open({ id: PANE, title: PANE_NAME })
+}
+
+export async function openPriority($: EngineInterface, id: string | null) {
+  if (!id || !(await findTicket($, id))) { say($, 'ops board: select a ticket first'); return }
+  await clearForm($)
+  const request = ++priorityRequest
+  await update($, priorityA, () => ({ request, id, level: null, busy: false, preview: null, result: null }))
+  await showForm($, 'priority:P1')
+}
+
+async function changePriority($: EngineInterface, draft: PriorityDraft, level: Priority, save = false) {
+  const token = save ? draft.preview?.token : undefined
+  if (save && !token) return
+  let started = false
+  const request = ++priorityRequest
+  await update($, priorityA, current => {
+    started = !!current && current.request === draft.request && !current.busy
+    return started ? { ...draft, request, level, busy: true, preview: null, result: null } : current
+  })
+  if (!started) return
+
+  const args = token ? ['apply', token, level] : ['preview', level]
+  const next = (preview: PriorityDraft['preview'], result: string | null) =>
+    update($, priorityA, current => current?.request === request ? { ...current, busy: false, preview, result } : current)
+  const r = await runCall($, 'queue-priority', ['--current-worktree', ...args, 'id=' + draft.id])
+    .catch(err => ({ code: -1, out: '', err: String(err) }))
+  if (r.code !== 0) {
+    await next(null, r.err.trim() || r.out.trim() || `Queue Jarvis exited ${r.code}`)
+    return
+  }
+  if (token) {
+    await refreshBoardTicket($, draft.id, t => ({ ...t, priority: level }))
+    say($, `✓ ${draft.id} priority set to ${level}`, { timeoutMs: 8000 })
+    if ((await read($, priorityA))?.request === request) await closeForm($)
+    return
+  }
+
+  const previewToken = /^Preview token: ([a-f0-9]{64})\s*$/m.exec(r.out)?.[1]
+  const change = r.out.split(/\r?\n/).find(line => line.startsWith(draft.id + ' ') && line.includes(' -> '))
+  if (!previewToken || !change) {
+    await next(null, 'No priority change to save. Check the ticket and choose a level again.')
+    return
+  }
+  await next({ token: previewToken, change: change.replace(/ {2,}/g, ' ') }, null)
+  if ((await read($, priorityA))?.request === request) {
+    void $.ui.focus({ requestId: PANE, key: 'priority:save' }).catch(() => {})
+  }
+}
+
+export async function openAutoPriority($: EngineInterface) {
+  await clearForm($)
+  const request = ++priorityRequest
+  await update($, autoPriorityA, () => ({ request, selection: {}, picker: null, busy: false, error: null, preview: null }))
+  await showForm($, 'priority:auto-filter:id')
+}
+
+export async function runAutoPriority($: EngineInterface, save = false): Promise<boolean> {
+  const draft = await read($, autoPriorityA)
+  if (!draft || draft.busy || (save && !draft.preview?.token)) return false
+  const request = ++priorityRequest
+  let started = false
+  await update($, autoPriorityA, current => {
+    started = current?.request === draft.request && !current.busy && !current.picker
+      && JSON.stringify(current.selection) === JSON.stringify(draft.selection)
+    return started ? { ...draft, request, busy: true, error: null, preview: null } : current
+  })
+  if (!started) return false
+  const finish = (preview: AutoPriorityDraft['preview'], error: string | null) =>
+    update($, autoPriorityA, current => current?.request === request ? { ...current, busy: false, error, preview } : current)
+  const selectors = save ? draft.preview!.selectors : prioritySelectors(draft.selection)
+  const args = save ? ['auto-apply', draft.preview!.token!] : ['auto-preview']
+  const r = await runCall($, 'queue-priority', ['--current-worktree', ...args, ...selectors])
+    .catch(err => ({ code: -1, out: '', err: String(err) }))
+  if (r.code !== 0) {
+    await finish(null, r.err.trim() || r.out.trim() || `Queue Jarvis exited ${r.code}`)
+    return false
+  }
+  if (save) {
+    say($, r.out.trim() || 'Ticket priorities assigned.', { timeoutMs: 8000 })
+    if ((await read($, autoPriorityA))?.request === request) await closeForm($)
+    return true
+  }
+
+  const [, count = '', levels = '', ...rows] = r.out.trimEnd().split(/\r?\n/)
+  const expected = /^(\d+) ticket\(s\) would change\.$/.exec(count)?.[1]
+  const token = /^Preview token: ([a-f0-9]{64})$/.exec(rows.at(-1) ?? '')?.[1] ?? null
+  const changes = token ? rows.slice(0, -1) : rows
+  if (expected === undefined || !levels.startsWith('P1:') || Number(expected) !== changes.length || (changes.length > 0 && !token)
+    || changes.some(line => !/^[A-Z]{1,3}\d+[a-z]?\s+Unranked -> P[1-5]\s/.test(line))) {
+    await finish(null, 'Queue Jarvis returned an incomplete preview. Run Preview again.')
+    return false
+  }
+  await finish({ token, selectors, count, levels, changes }, null)
+  if (token && (await read($, autoPriorityA))?.request === request) {
+    void $.ui.focus({ requestId: PANE, key: 'priority:auto-save' }).catch(() => {})
+  }
+  return false
+}
+
+export async function renderAutoPriority($: EngineInterface, e: RenderInput<'Pane'>): Promise<RenderElement | null> {
+  const draft = await read($, autoPriorityA)
+  if (!draft) return null
+  const t = $.ui.resolve(e)
+  const { Box, Text, Button } = t
+  const Select = e.surface !== 'mobile' && 'Select' in t ? t.Select : null
+  const filters = priorityFilterOptions(await read($, boardA))
+  const optionsFor = (key: string, values: string[]) =>
+    [...new Set(['-', ...values, draft.selection[key] ?? '-'])]
+  const setFilter = (key: string, value: string) => {
+    void update($, autoPriorityA, current => {
+      if (!current || current.busy || current.request !== draft.request) return current
+      if ((current.selection[key] ?? '-') === value) return { ...current, picker: null }
+      return { ...current, picker: null, selection: { ...current.selection, [key]: value }, preview: null, error: null }
+    })
+  }
+  const setPicker = (picker: AutoPriorityDraft['picker']) => {
+    void update($, autoPriorityA, current => current && !current.busy && current.request === draft.request ? { ...current, picker } : current)
+  }
+  const picker = draft.picker
+  const choosing = picker && filters.find(filter => filter.key === picker.key)
+  if (picker && choosing) {
+    const values = optionsFor(choosing.key, choosing.values)
+    const pageSize = 12
+    const start = picker.page * pageSize
+    return (
+      <Box flexDirection="column">
+        <Text bold>{choosing.label}</Text>
+        {values.slice(start, start + pageSize).map(value =>
+          <Button key={'priority:auto-option:' + value} plain variant={(draft.selection[picker.key] ?? '-') === value ? 'primary' : undefined}
+            onPress={() => setFilter(picker.key, value)}>{value}</Button>)}
+        <Box flexDirection="row" flexWrap="wrap" gap={2}>
+          {start > 0 && <Button key="priority:auto-previous" plain onPress={() => setPicker({ ...picker, page: picker.page - 1 })}>Previous</Button>}
+          {start + pageSize < values.length && <Button key="priority:auto-next" plain onPress={() => setPicker({ ...picker, page: picker.page + 1 })}>Next</Button>}
+          <Button key="priority:auto-back" plain onPress={() => setPicker(null)}>Back</Button>
+        </Box>
+      </Box>
+    )
+  }
+  return (
+    <Box flexDirection="column">
+      <Box key="form:title"><Text bold>Auto-assign priorities</Text><Text dimColor>{'  Esc cancels'}</Text></Box>
+      <Text dimColor wrap="wrap">Only open unprioritized tickets are eligible. Leave a filter at - to include any value.</Text>
+      {filters.map(({ key, label, values }) => {
+        const elementKey = 'priority:auto-filter:' + key
+        const value = draft.selection[key] ?? '-'
+        if (draft.busy) return <Text key={elementKey} wrap="wrap">{label + ' ' + value}</Text>
+        return Select
+          ? <Select key={elementKey} label={label} value={value} options={optionsFor(key, values).map(option => ({ value: option, label: option }))}
+              onSelect={option => setFilter(key, option)} />
+          : <Button key={elementKey} plain onPress={() => setPicker({ key, page: 0 })}>{label + ' ' + value}</Button>
+      })}
+      {draft.busy && <Text dimColor>Working…</Text>}
+      {draft.error && <Box key="priority:auto-error"><Text color="error" wrap="wrap">{draft.error}</Text></Box>}
+      {draft.preview && <Box key="priority:auto-summary" flexDirection="column">
+        <Text>{draft.preview.count}</Text><Text wrap="wrap">{draft.preview.levels}</Text>
+      </Box>}
+      <Box flexDirection="row" flexWrap="wrap" gap={2}>
+        {!draft.busy && <Button key="priority:auto-preview" plain onPress={() => { void runAutoPriority($) }}>Preview</Button>}
+        {draft.preview?.token && <Button key="priority:auto-save" variant="primary" onPress={() => {}}>Save</Button>}
+        <Button key="priority:auto-cancel" plain onPress={() => { void closeForm($) }}>Cancel</Button>
+      </Box>
+      {draft.preview?.changes.length ? <Box key="priority:auto-changes"><Text wrap="wrap">{draft.preview.changes.join('\n')}</Text></Box> : null}
+    </Box>
+  )
 }
 
 // Assign: ticket-meta assign|decide|assign-tester <ID> @h. Done: a toast with what it said and
@@ -300,7 +469,8 @@ export async function makeLead($: EngineInterface, h: string) {
 export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Promise<RenderElement | null> {
   const p = await read($, personA)
   const d = await read($, assignA)
-  if (!p && !d) return null
+  const priority = await read($, priorityA)
+  if (!p && !d && !priority) return null
   const t = $.ui.resolve(e)
   const { Box, Text, Button } = t
   const Input = e.surface !== 'mobile' && 'Input' in t ? t.Input : null
@@ -309,6 +479,27 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
   const team = await read($, teamA)
   const label = (s: string) => <Text dimColor>{s}</Text>
   const heading = (s: string) => <Box key="form:title"><Text bold>{s}</Text><Text dimColor>{'  Esc cancels'}</Text></Box>
+
+  if (priority) {
+    const level = priority.level
+    return (
+      <Box flexDirection="column">
+        {heading(`Priority for ${priority.id}`)}
+        {(Object.keys(PRIORITIES) as Priority[]).map(value =>
+          <Button key={'priority:' + value} plain hotkey={value.slice(1)} variant={value === level ? 'primary' : undefined}
+            onPress={() => { void changePriority($, priority, value) }}>
+            <Text color={PRIORITIES[value].color}>{value}</Text>{'  ' + PRIORITIES[value].label}
+          </Button>)}
+        {priority.busy && <Text dimColor>Working…</Text>}
+        {priority.preview && <Box key="priority:preview"><Text wrap="wrap">{priority.preview.change}</Text></Box>}
+        {priority.result && <Box key="priority:result"><Text color="error" wrap="wrap">{priority.result}</Text></Box>}
+        <Box flexDirection="row" gap={2}>
+          {priority.preview && level && <Button key="priority:save" variant="primary" onPress={() => { void changePriority($, priority, level, true) }}>Save</Button>}
+          <Button key="priority:cancel" plain onPress={() => { void closeForm($) }}>Cancel</Button>
+        </Box>
+      </Box>
+    )
+  }
 
   if (p) {
     const armed = focus === 'add' || focus === 'cancel'

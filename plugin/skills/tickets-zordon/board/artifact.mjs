@@ -33,7 +33,7 @@ const inGroups = (id) => GROUPS.some(([p]) => id.startsWith(p));
 const LINE = /^(\s*)- \[([ x~!?%v>-])\]\s+([A-Za-z]+\d+[a-z]?)\s*[—-]\s*(.*)$/;
 // F43/F45: trailing `[app: ..] [decide: @x] [owner: @x] [by: @y, a@b]` tags. Lifted out of the
 // title and drawn as chips; a line without them parses exactly as before.
-const TAG = /\s*\[(app|src|decide|owner|by|session):\s*([^\]]*)\]/g;
+const TAG = /\s*\[(app|src|priority|severity|release|depends-on|decide|owner|by|session):\s*([^\]]*)\]/g;
 
 export function parse(md) {
   const out = [];

@@ -1,5 +1,13 @@
 import type { Color } from 'claude-code'
-import type { Board, Box, Filter, Ticket } from '../../types'
+import type { Board, Box, Filter, Priority, Ticket } from '../../types'
+
+export const PRIORITIES: Record<Priority, { color: Color; label: string }> = {
+  P1: { color: 'error', label: 'Critical · address immediately' },
+  P2: { color: 'warning', label: 'High · address next' },
+  P3: { color: 'suggestion', label: 'Normal · schedule with planned work' },
+  P4: { color: 'permission', label: 'Low · address as capacity allows' },
+  P5: { color: 'inactive', label: 'Lowest · revisit when higher priorities are clear' },
+}
 
 export type StateColor = 'amber' | 'cyan' | 'red' | 'pink' | 'orange' | 'dim' | 'green' | 'purple'
 // The pane shows state by colour; listView() keeps the bracket codes.
@@ -15,6 +23,48 @@ export const paint = (b: Box): Color => PAINT[STATE_COLOR[b]]
 // F62: [%] is testing - built, waiting on a test result.
 const OPEN: Box[] = [' ', '~', '%', 'v', '!', '?']
 export const isOpen = (t: Ticket) => OPEN.includes(t.box)
+
+export const PRIORITY_FILTERS = [
+  { key: 'app', label: 'App' },
+  { key: 'src', label: 'Source' },
+  { key: 'owner', label: 'Owner' },
+  { key: 'id', label: 'Ticket ID' },
+  { key: 'type', label: 'Ticket type' },
+  { key: 'status', label: 'Status' },
+  { key: 'severity', label: 'Severity' },
+  { key: 'release', label: 'Release' },
+  { key: 'depends-on', label: 'Depends on' },
+] as const
+
+export function priorityFilterOptions(board: Board | null): { key: string; label: string; values: string[] }[] {
+  const eligible = (board?.tickets ?? []).filter(ticket => isOpen(ticket) && !/\[priority:/i.test(ticket.line))
+  const status = ['pending', 'in-progress', 'testing', 'verified', 'blocked', 'decide']
+  const types = ['bug', 'feature', 'agent-found']
+  const severities = ['critical', 'high', 'medium', 'low', 'trivial']
+  return PRIORITY_FILTERS.map(({ key, label }) => {
+    if (key === 'type') return { key, label, values: types }
+    if (key === 'status') return { key, label, values: status }
+    const tagPattern = new RegExp('\\[' + key + ':\\s*([^\\]]*)\\]', 'i')
+    const observed = new Set(key === 'severity' ? severities : [])
+    for (const ticket of eligible) {
+      const raw = key === 'id' ? ticket.id : tagPattern.exec(ticket.line)?.[1] ?? ''
+      for (const item of key === 'app' || key === 'depends-on' ? raw.split(',') : [raw]) {
+        const value = item.trim()
+        if (!value || value === '-' || /[\p{Cc}\p{Cf}]/u.test(value)) continue
+        observed.add(key === 'id' ? value : key === 'depends-on' ? value.replace(/^[a-z]+/i, prefix => prefix.toUpperCase()).replace(/[A-Z]$/, suffix => suffix.toLowerCase()) : value.toLowerCase())
+      }
+    }
+    const values = [...observed].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    return { key, label, values }
+  })
+}
+
+export function prioritySelectors(selection: Record<string, string>): string[] {
+  return PRIORITY_FILTERS.flatMap(({ key }) => {
+    const value = selection[key]
+    return value && value !== '-' ? [key + '=' + value] : []
+  })
+}
 // F77: the ticket a typed ID names on the board - case-insensitive, blanks ignored
 // (`f12` is F12); null when none does or nothing is typed.
 export function ticketById(tickets: readonly Ticket[] | undefined, text: string): Ticket | null {
@@ -55,12 +105,14 @@ export function parseBoard(text: string, path: string, mtimeMs: number, size: nu
     let session: string | null = null
     const s = SESSION_TAIL.exec(body)
     if (s) { session = s[1]!; body = body.slice(0, s.index) }
-    let cut = body.search(/ \[(?:app|src|decide|owner|session|working|work-history|tester|by):/)
+    let cut = body.search(/ \[(?:app|src|priority|severity|release|depends-on|decide|owner|session|working|work-history|tester|by):/)
     if (cut < 0) cut = body.search(/ \([^()]*\)\s*$/)
     const baseTitle = (cut < 0 ? body : body.slice(0, cut)).trim()
     const title = al ? `${al} ${baseTitle}` : baseTitle
     while (stack.length && stack[stack.length - 1]!.indent >= indent) stack.pop()
+    const priority = tag(body, 'priority')?.toUpperCase()
     const t: Ticket = {
+      ...(priority && Object.hasOwn(PRIORITIES, priority) ? { priority: priority as Priority } : {}),
       id: m[3]!, box: m[2] as Box, title, line, parent: stack.length ? stack[stack.length - 1]!.id : null,
       indent, section,
       apps: handles(tag(body, 'app') ?? ''), decide: tag(body, 'decide')?.toLowerCase() ?? null,
