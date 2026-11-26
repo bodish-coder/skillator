@@ -27,6 +27,7 @@ import { ActionConfirm, enterExplorer, ExplorerTab, readExplorer, readExplorerAc
 import { enterHelp, HelpTab } from './helptab'
 import { LogTab, readLog, say } from './logtab'
 import { DASHBOARD_WIDE, dashboardPanels } from './lib/dashboard'
+import { loadRules, renderRuleForm, renderRules } from './rules'
 
 // The ops board pane (design §5): tab bar, the Tickets tab with its filter row,
 // status rails, a yielding list, and wrapping footer keys.
@@ -334,6 +335,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
               void pollAgents($).catch(() => {})
             }
             if (x.id === 'messages' && tab !== 'messages') void enterMessages($).catch(() => {})
+            if (x.id === 'priorities') void loadRules($).catch(() => {})            // F203: the rules list
             if (x.id === 'explorer') void enterExplorer($).catch(() => {})        // F75: read on entering the tab
             if (x.id === 'run') void enterRun($).catch(() => {})            // F79: first open scans
             if (x.id === 'help') void enterHelp($).catch(() => {})          // F160 / A198: load selected skill doc
@@ -369,15 +371,13 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
     )
   }
   if (tab === 'priorities') {
-    const form = await renderAutoPriority($, e)
+    const form = (await renderAutoPriority($, e)) ?? (await renderRuleForm($, e))
     if (form) return form
     return (
       <Box flexDirection="column">
         {bar}
         <Text> </Text>
-        {Object.entries(PRIORITIES).map(([id, { color, label }]) =>
-          <Text key={id}><Text color={ascii ? undefined : color}>{ascii ? '' : glyphs.dot + ' '}{id}</Text>{'  ' + label}</Text>)}
-        <Text dimColor>Unprioritized tickets follow P5 in Queue Jarvis.</Text>
+        {await renderRules($, e, ascii, glyphs.dot)}
         <Button key="priority:auto-open" plain hotkey="a" onPress={() => { void openAutoPriority($) }}>Auto-assign</Button>
       </Box>
     )

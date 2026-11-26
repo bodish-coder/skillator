@@ -7,7 +7,7 @@ import type { Host, RunResult } from './nodehost'
 import { errorText, readSkillDoc } from './nodehost'
 import { MUTE_FILE, muteKv } from '../hooks/lib/facts'
 import type { Effect, Key, PointerAction, State, Step } from './state'
-import { onBoard, onInbox, onMachine, onRuns, onUsage, reduce, afterRun, point, openHelp, onSkillDoc, readProfiles } from './state'
+import { onBoard, onInbox, onMachine, onRuns, onUsage, reduce, afterRun, point, openHelp, onSkillDoc, readProfiles, loadRulesEffect } from './state'
 import { INBOX_FILE, READ_FILE } from '../hooks/lib/inbox'
 import { parseBoard, withWorkingStates } from '../hooks/lib/board'
 import { meOf, parseTeam } from '../hooks/lib/team'
@@ -131,7 +131,9 @@ export function makeEngine(o: EngineOpts): Engine {
       if (e.then) await apply(afterRun({ then: e.then }, r, state, Date.now()))
       return
     }
-    if (once && e.call !== 'relay-decide') return
+    // F203: `rules list` is a read, so --once runs it too; every other queue-priority run stays out
+    const reads = e.call === 'relay-decide' || (e.call === 'queue-priority' && e.args.join(' ') === '--current-worktree rules list')
+    if (once && !reads) return
     const r = await run(e.call, e.args, e.stdin)
     if (stopped) return
     const result = e.call === 'pending-machine' ? await withMute(r) : r
@@ -347,6 +349,8 @@ export function makeEngine(o: EngineOpts): Engine {
       if (stopped) return
       if (state.tab === 'run') await runEffect(enterRunEffect())    // --tab run: read run.json (never scanned in --once)
       if (stopped) return
+      if (state.tab === 'priorities') await runEffect(loadRulesEffect())   // F203: --tab priorities reads the rules list
+      if (stopped) return
       if (state.tab === 'help') {
         if (!state.help) await apply(openHelp(state))
         else await runEffect({ kind: 'skill-doc', skillId: state.help.selected, then: onSkillDoc(state.help.selected) })
@@ -361,6 +365,7 @@ export function makeEngine(o: EngineOpts): Engine {
       if (state.tab === 'runs') void guarded('runs', pollRuns)
       if (state.tab === 'explorer') void apply(enterExplorer(state))
       if (state.tab === 'run') void runEffect(enterRunEffect())
+      if (state.tab === 'priorities') void runEffect(loadRulesEffect())
       if (state.tab === 'help') {
         if (!state.help) void apply(openHelp(state))
         else void runEffect({ kind: 'skill-doc', skillId: state.help.selected, then: onSkillDoc(state.help.selected) })

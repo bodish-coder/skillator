@@ -61,6 +61,17 @@ export type AutoPriorityDraft = {
   busy: boolean; error: string | null
   preview: { token: string | null; selectors: string[]; count: string; levels: string; changes: string[] } | null
 }
+// F203: the Priorities tab's rules (queue-jarvis `rules list`), the add/edit form and the apply preview.
+// Rule and RulesPreview live here (the types contract must be self-contained); hooks/lib/rules.ts re-exports them.
+export type Rule = { n: number; level: Priority; conditions: [string, string[]][] }
+export type RulesPreview = { token: string | null; count: string; levels: string; changes: string[] }
+export type RulesView = { loading: boolean; error: string | null; revision: string; rules: Rule[]; invalid: string[] }
+export type RuleDraft = {
+  request: number; n: number | null; level: Priority; values: Record<string, string[]>
+  picker: { key: string; page: number } | null; busy: boolean; error: string | null; confirmDelete: boolean; revision: string
+  origin: Rule | null   // the rule the form was opened on (null: a new rule)
+}
+export type RulesPreviewDraft = { request: number; busy: boolean; error: string | null; preview: RulesPreview | null }
 export type LiveSession = { code: string; owner: string | null }
 // F47 team management (T6): the Team view in the Tickets tab, and the Add person form
 // (drawn as a form in the ops-board pane; `back` = where a finished add returns).
@@ -203,6 +214,7 @@ declare module 'claude-code' {
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]
       runs: RunView[]; assign: AssignDraft | null; priorityDraft: PriorityDraft | null; narrow: boolean
       autoPriority: AutoPriorityDraft | null
+      priorityRules: RulesView | null; ruleDraft: RuleDraft | null; rulesPreview: RulesPreviewDraft | null   // F203
       engage: Engage | null             // F85: the engage confirm up in the Workflows tab
       startRun: StartRunDraft | null    // F113/A196: the Start Run form up in the Workflows tab
       openTickets: Ticket[]             // F113/A196: open tickets cached for Start Run form

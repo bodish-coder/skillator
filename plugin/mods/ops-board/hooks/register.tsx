@@ -25,6 +25,7 @@ import { closeRunForm, dropRunForm, enterRun, isRunFormUp } from './runtab'
 import { arrowExplorer, cancelAction, dropAction, enterExplorer, focusExplorer, isActionUp, isExplorerItem } from './explorertab'
 import { arrowHelp, enterHelp, focusHelp, isHelpItem } from './helptab'
 import { readLog, say } from './logtab'
+import { closeRulePicker, loadRules, runRulesPreview } from './rules'
 
 // Wiring only (design §4): /ops, the 2 s TICKETS.md poll, team and me, the pane
 // and its keys; the 60 s machine / relay / usage poll, the band, the watchdog hold on
@@ -544,6 +545,7 @@ export const register: Register = on => {
     if (tab && tab !== 'explorer') await dropAction($)    // F103: the git action confirm likewise
     if (tab === 'tickets' && (await read($, tabA)) !== 'tickets') await collapseTickets($)   // F202
     if (tab) await update($, tabA, () => tab)
+    if (tab === 'priorities') void loadRules($).catch(() => {})   // F203: the rules list loads on /ops priorities
     if (sec) await update($, runsOpenA, x => (x.includes(sec) ? x : [...x, sec]))
     if (tab === 'runs' || tab === 'dashboard') void pollRuns($).catch(() => {})
     if (tab === 'runs' || tab === 'dashboard') void pollAgents($).catch(() => {})
@@ -656,6 +658,7 @@ export const register: Register = on => {
     }
     if (e.id !== PANE_ID || !(await isFormUp($))) return next(e)
     if (e.origin.kind === 'unload') { await clearForm($); return next(e) }
+    if (await closeRulePicker($)) return { value: undefined }        // F203: Esc closes the value picker first
     await cancelPerson($)                                   // what the form's Cancel does
     return { value: undefined }
   }).catch(($, e, next) => next(e))
@@ -795,6 +798,12 @@ export const register: Register = on => {
 
   on('ui.press', { plugin: 'ops-board', element: 'priority:auto-save' }, async ($, e) => {
     if (await runAutoPriority($, true)) await poll($, true)
+    return { element: e.element }
+  })
+
+  // F203: Save in the rules preview applies the previewed token, then the board is read again
+  on('ui.press', { plugin: 'ops-board', element: 'rule:apply' }, async ($, e) => {
+    if (await runRulesPreview($, true)) await poll($, true)
     return { element: e.element }
   })
 

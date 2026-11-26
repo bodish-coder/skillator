@@ -25,3 +25,13 @@ Combine exact, case-insensitive `field=value` filters with AND. Quote a filter i
 | `depends-on` | `depends-on=F42` matches tickets with F42 in their `[depends-on:]` tag |
 
 Example: `preview P1 app=installer src=tester type=bug`. The dependency filter matches tickets explicitly tagged as depending on the supplied ticket.
+
+## Priority rules
+
+Standing rules live in `<root>/.skillator/priority-rules.md`, one per line: `- P1: type=bug app=a,b,c`. Conditions in a rule are AND-ed, a comma means any of, rules are OR-ed, and a ticket matching several levels gets the highest. Rules match open tickets unless the rule names a `status`. Lines starting with `#` are comments. A ticket tag holding commas (`[release: 1.0, 1.1]`) matches a rule value equal to any of its parts.
+
+The root is the main checkout by default, or the current worktree when `--current-worktree` is the first argument (`queue.mjs --current-worktree rules list`). The ops board Priorities tab always passes `--current-worktree`, so it edits the file of the checkout it displays; in a linked worktree, pass `--current-worktree` on every `rules` command too, to edit the same file the board shows.
+
+- `rules list` shows the numbered rules, any invalid line, and the revision. Always pass that revision as `--rev <revision>` to `rules edit` and `rules remove`, so a change made meanwhile (by the board or by hand) is refused instead of overwritten.
+- `rules add <P1–P5> <field=value[,value...]>...`, `rules edit <n> <P1–P5> <conditions...> --rev <revision>` and `rules remove <n> --rev <revision>` change one rule. For a plain-language request ("make bugs in apps a, b and c P1", "drop the severity rule"), run `rules list`, then the matching command, and report the rule as written. Editing the file by hand is equally valid; run `rules list` afterwards to check for invalid lines.
+- `rules preview` shows every ticket the rules would change as `from -> to` with the rule number; it overrides an existing priority on a matching ticket. After the user explicitly approves that preview, run `rules apply <preview-token>`. If the board or the rules changed, show a fresh preview and ask again.

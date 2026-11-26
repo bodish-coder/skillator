@@ -14,6 +14,8 @@ export { decideQuestionsPrompt, holoTicketCmd }
 import { appliedHead, appliedLine, applyOf, buildModel, canApply, HEAD, headKey, isHead, isUserHead, parseReconcile, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
 import { PRIORITIES, STATE_NAME, priorityFilterOptions, prioritySelectors, ticketById } from '../hooks/lib/board'
+import { orderedRules, parseRulesList, parseRulesPreview, ruleArgs, ruleOptions, sameRule, toggleValue } from '../hooks/lib/rules'
+import type { Rule } from '../hooks/lib/rules'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, MUTE_FILE, MUTED_HOW, mutedWords, muteText, parseMachine, unmuteDue, usageFromLevel } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
@@ -80,6 +82,9 @@ export type PointerAction =
   | { kind: 'key'; key: Key }
   | { kind: 'priority-filter'; index: number }
   | { kind: 'priority-option'; value: string }
+  | { kind: 'rule-row'; index: number }      // F203: a rule in the Priorities list (index into orderedRules)
+  | { kind: 'rule-field'; row: number }      // a row of the rule form (0 = Level)
+  | { kind: 'rule-option'; index: number }   // a value in the rule form's picker
   | { kind: 'tab'; tab: Tab }
   | { kind: 'row'; area: 'tickets' | 'runs' | 'messages' | 'explorer' | 'run' | 'team'; id: string }
   | { kind: 'person'; index: number }
@@ -99,7 +104,7 @@ export type PointerAction =
   | { kind: 'start-run-field'; field: StartRunField }
   | { kind: 'explorer-branch'; branch: string }       // B25: a branch in the Explorer confirm's picker
 
-export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.priorityEdit || s.autoPriority || s.decide || s.reconcile || s.intake || s.teamConfirm || s.engage || s.startRun || s.filterField || s.runForm || s.help?.runPrompt != null || s.help?.filtering)
+export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.priorityEdit || s.autoPriority || s.ruleEdit || s.rulesPreview || s.rules?.confirm || s.decide || s.reconcile || s.intake || s.teamConfirm || s.engage || s.startRun || s.filterField || s.runForm || s.help?.runPrompt != null || s.help?.filtering)
 
 // Targets come only from the rendered frame, never from labels or terminal payloads.
 export function point(s: State, a: PointerAction): Step {
@@ -107,6 +112,18 @@ export function point(s: State, a: PointerAction): Step {
   if (a.kind === 'key') return reduce(s, a.key)
   if (a.kind === 'priority-filter') return openAutoPriorityFilter(s, a.index)
   if (a.kind === 'priority-option') return selectAutoPriorityFilter(s, a.value)
+  if (a.kind === 'rule-row') {
+    if (!s.rules || s.rules.confirm || s.rules.busy || s.ruleEdit || s.rulesPreview) return same
+    return s.rules.sel === a.index ? reduce(s, { name: 'return' }) : { state: { ...s, rules: { ...s.rules, sel: a.index } }, effects: [] }
+  }
+  if (a.kind === 'rule-field') {
+    if (!s.ruleEdit || s.ruleEdit.busy || s.ruleEdit.option !== undefined) return same
+    return reduce({ ...s, ruleEdit: { ...s.ruleEdit, row: a.row } }, { name: 'return' })
+  }
+  if (a.kind === 'rule-option') {
+    if (!s.ruleEdit || s.ruleEdit.busy || s.ruleEdit.option === undefined) return same
+    return reduce({ ...s, ruleEdit: { ...s.ruleEdit, option: a.index } }, { name: 'space' })
+  }
   if (a.kind === 'help') return s.help ? { state: { ...s, help: null, tab: s.tab === 'help' ? 'tickets' : s.tab }, effects: [] } : openHelp(s)
   if (a.kind === 'help-close') return { state: { ...s, help: null, tab: s.tab === 'help' ? 'tickets' : s.tab }, effects: [] }
   if (a.kind === 'help-run') {
@@ -220,6 +237,10 @@ export type State = {
   help: HelpState | null                       // F127: Help & Skills guide viewer
   priorityEdit?: { id: string; current?: Priority; busy?: boolean; message?: string; preview?: { level: Priority; token: string } }
   autoPriority?: { filters: Record<string, string>; field: number; option?: number; editing?: boolean; busy?: boolean; message?: string; preview?: { token: string; selectors: string[]; counts: string; rows: string[]; offset: number } }
+  // F203: the saved priority rules (queue-jarvis `rules list`), the add/edit form and the apply preview
+  rules?: { loading?: boolean; error?: string; revision: string; list: Rule[]; invalid: string[]; sel: number; confirm?: boolean; busy?: boolean }
+  ruleEdit?: RuleEdit
+  rulesPreview?: { busy?: boolean; message?: string; preview?: { token: string; counts: string; rows: string[]; offset: number } }
   explorer: ExState                        // F75: the Explorer tab (ops/explorer.ts)
 } & RunState                               // F79: the Run tab's file, row, form, job
 export type Setup = SetupValues & {
@@ -227,6 +248,9 @@ export type Setup = SetupValues & {
   confirmLogin: boolean; loginBusy: boolean; loginMessage: string | null
   confirmCheck?: boolean; confirmWalk?: boolean; setupBusy?: boolean; setupOut?: string | null; setupWalkCmd?: string | null
 }
+
+// F203: the rule form - n null for a new rule; option set while a field's picker is open
+export type RuleEdit = { n: number | null; level: Priority; values: Record<string, string[]>; row: number; option?: number; busy?: boolean; message?: string }
 
 export type Step = { state: State; effects: Effect[] }
 // A run's result folded into the state as it then is; it may ask for more effects.
@@ -1386,6 +1410,138 @@ function autoPriorityKey(s: State, k: Key): Step {
   return { state: { ...s, autoPriority: { ...draft, preview: { ...preview, offset } } }, effects: [] }
 }
 
+// --- F203: priority rules ---
+const RULES = ['--current-worktree', 'rules']
+const RULE_LEVELS = Object.keys(PRIORITIES) as Priority[]
+const onRules: Then = r => x => {
+  const list = r.code === 0 ? parseRulesList(r.out) : null
+  if (!list) return { ...x, rules: { revision: '', list: [], invalid: [], sel: 0,
+    error: r.code === 0 ? 'Queue Jarvis returned an incomplete rules list. Press r to reload.' : why(r, 'Queue Jarvis') } }
+  return { ...x, rules: { revision: list.revision, list: list.rules, invalid: list.invalid,
+    sel: Math.max(0, Math.min(x.rules?.sel ?? 0, list.rules.length - 1)) } }
+}
+export const loadRulesEffect = (): Effect => run('queue-priority', [...RULES, 'list'], onRules)
+const loadingRules = (s: State): State =>
+  ({ ...s, rules: { revision: '', list: [], invalid: [], sel: 0, ...s.rules, loading: true, error: undefined } })
+
+function previewRules(s: State): Step {
+  const done: Then = r => x => {
+    if (r.code !== 0) return { ...x, rulesPreview: { message: why(r, 'Queue Jarvis') } }
+    const preview = parseRulesPreview(r.out)
+    if (!preview) return { ...x, rulesPreview: { message: 'Queue Jarvis did not return a complete preview. Press p to try again.' } }
+    if (!preview.token) return { ...x, rulesPreview: { message: 'No ticket would change.' } }
+    return { ...x, rulesPreview: { message: preview.count, preview: { token: preview.token, counts: preview.levels, rows: preview.changes, offset: 0 } } }
+  }
+  return { state: { ...s, rulesPreview: { busy: true, message: 'Checking tickets against the rules…' } }, effects: [run('queue-priority', [...RULES, 'preview'], done)] }
+}
+
+function rulesPreviewKey(s: State, k: Key): Step {
+  const draft = s.rulesPreview!
+  const same = { state: s, effects: [] }
+  if (draft.busy) return same
+  if (k.name === 'escape' || (k.ctrl && k.name === 'c')) return { state: { ...s, rulesPreview: undefined }, effects: [] }
+  if (k.name === 'p') return previewRules(s)
+  const preview = draft.preview
+  if (!preview) return same
+  if (k.name === 'return' || k.name === 'enter') {
+    const done: Then = r => x => r.code === 0
+      ? { state: toast({ ...x, rulesPreview: undefined }, r.out.trim().split(/\r?\n/).at(-1) || 'Priority rules applied.'), effects: [{ kind: 'poll', what: 'board' }] }
+      : { ...x, rulesPreview: { message: why(r, 'Queue Jarvis') } }
+    return { state: { ...s, rulesPreview: { busy: true, message: 'Saving priorities…' } }, effects: [run('queue-priority', [...RULES, 'apply', preview.token], done)] }
+  }
+  const direction = k.name === 'up' || k.name === 'k' ? -1 : k.name === 'down' || k.name === 'j' ? 1 : 0
+  if (!direction) return same
+  const offset = Math.max(0, Math.min(preview.rows.length - 1, preview.offset + direction))
+  return { state: { ...s, rulesPreview: { ...draft, preview: { ...preview, offset } } }, effects: [] }
+}
+
+function ruleEditKey(s: State, k: Key): Step {
+  const edit = s.ruleEdit!
+  const same = { state: s, effects: [] }
+  if (edit.busy) return same
+  const set = (patch: Partial<RuleEdit>): Step => ({ state: { ...s, ruleEdit: { ...edit, message: undefined, ...patch } }, effects: [] })
+  const fields = priorityFilterOptions(s.board, true)
+  const submit = k.name === 'return' || k.name === 'enter'
+  const cancel = k.name === 'escape' || (k.ctrl && k.name === 'c')
+  const direction = k.name === 'up' || k.name === 'k' ? -1 : k.name === 'down' || k.name === 'j' ? 1 : 0
+  if (edit.option !== undefined) {
+    const field = fields[edit.row - 1]
+    if (cancel || !field) return set({ option: undefined })
+    const chosen = edit.values[field.key] ?? []
+    const options = ruleOptions(field.values, chosen)
+    const at = Math.min(edit.option, options.length - 1)
+    if (submit || k.name === 'space') return options.length ? set({ option: at, values: { ...edit.values, [field.key]: toggleValue(chosen, options[at]!) } }) : same
+    return direction ? set({ option: Math.max(0, Math.min(options.length - 1, at + direction)) }) : same
+  }
+  if (cancel) return { state: { ...s, ruleEdit: undefined }, effects: [] }
+  if (/^[1-5]$/.test(k.name)) return set({ level: ('P' + k.name) as Priority })
+  const move = k.name === 'tab' ? (k.shift ? -1 : 1) : direction
+  if (move) return set({ row: (edit.row + move + fields.length + 1) % (fields.length + 1) })
+  if (submit || k.name === 'space') {
+    return edit.row === 0 ? set({ level: RULE_LEVELS[(RULE_LEVELS.indexOf(edit.level) + 1) % RULE_LEVELS.length]! }) : set({ option: 0 })
+  }
+  if (k.name !== 's') return same
+  const args = ruleArgs(edit.level, edit.values)
+  if (args.length < 2) return set({ message: 'Choose at least one condition.' })
+  const form: RuleEdit = { n: edit.n, level: edit.level, values: edit.values, row: edit.row }
+  // A failed save reads the rules again; the next save takes the fresh revision only while the rule
+  // opened is still at number n, else it would hit another rule - the form closes instead.
+  const origin = s.rules?.list.find(rule => rule.n === edit.n)
+  const reloaded: Then = r => x => {
+    const y = onRules(r)(x) as State
+    if (edit.n === null || y.rules?.error || y.ruleEdit?.n !== edit.n || sameRule(y.rules?.list.find(rule => rule.n === edit.n), origin)) return y
+    return toast({ ...y, ruleEdit: undefined }, `The rules changed: rule ${edit.n} is now another rule. Open it again from the list.`)
+  }
+  // after a save the re-read list puts the cursor on the saved rule (queue-jarvis stores values lowercased)
+  const saved: Rule = { n: 0, level: edit.level, conditions: Object.entries(edit.values).filter(([, v]) => v.length).map(([k, v]): [string, string[]] => [k, v.map(x => x.toLowerCase())]) }
+  const onSaved: Then = r => x => {
+    const y = onRules(r)(x) as State
+    const at = y.rules ? orderedRules(y.rules.list).findIndex(rule => sameRule(rule, saved)) : -1
+    return at < 0 ? y : { ...y, rules: { ...y.rules!, sel: at } }
+  }
+  const done: Then = r => x => r.code === 0
+    ? { state: toast({ ...x, ruleEdit: undefined }, 'Priority rule saved.'), effects: [run('queue-priority', [...RULES, 'list'], onSaved)] }
+    : { state: { ...x, ruleEdit: { ...form, message: why(r, 'Queue Jarvis') } }, effects: [run('queue-priority', [...RULES, 'list'], reloaded)] }
+  const call = edit.n === null ? ['add', ...args] : ['edit', String(edit.n), ...args, '--rev', s.rules?.revision ?? '']
+  return { state: { ...s, ruleEdit: { ...form, busy: true, message: 'Saving the rule…' } }, effects: [run('queue-priority', [...RULES, ...call], done)] }
+}
+
+// The Priorities tab's own keys; null = not ours (tab switching, quit, Auto-assign fall through).
+function rulesKey(s: State, k: Key): Step | null {
+  // the delete question: every key but y keeps the rule (r and a included)
+  if (s.rules?.confirm && k.name !== 'y') return { state: { ...s, rules: { ...s.rules, confirm: undefined } }, effects: [] }
+  if (k.name === 'r') {
+    return { state: toast(loadingRules(s), '↻ TICKETS.md and priority rules reloaded'), effects: [{ kind: 'poll', what: 'board' }, { kind: 'poll', what: 'slow' }, loadRulesEffect()] }
+  }
+  const rules = s.rules
+  if (!rules || rules.loading || rules.busy) return null
+  const shown = orderedRules(rules.list)
+  const rule = shown[rules.sel]
+  if (rules.confirm) {
+    if (k.name !== 'y' || !rule) return { state: { ...s, rules: { ...rules, confirm: undefined } }, effects: [] }
+    const done: Then = r => x => ({
+      state: toast({ ...x, rules: x.rules && { ...x.rules, busy: undefined } }, r.code === 0 ? 'Priority rule deleted.' : why(r, 'Queue Jarvis')),
+      effects: [loadRulesEffect()],
+    })
+    return { state: { ...s, rules: { ...rules, confirm: undefined, busy: true } },
+      effects: [run('queue-priority', [...RULES, 'remove', String(rule.n), '--rev', rules.revision], done)] }
+  }
+  if (rules.error) return null
+  if (k.name === 'n') return { state: { ...s, ruleEdit: { n: null, level: 'P1', values: {}, row: 0 } }, effects: [] }
+  if (k.name === 'p') {
+    if (rules.invalid.length) return { state: toast(s, 'Fix the invalid lines in .skillator/priority-rules.md first.'), effects: [] }
+    return rules.list.length ? previewRules(s) : { state: toast(s, 'Add a rule first: press n.'), effects: [] }
+  }
+  const direction = k.name === 'up' || k.name === 'k' ? -1 : k.name === 'down' || k.name === 'j' ? 1 : 0
+  if (direction) return { state: { ...s, rules: { ...rules, sel: Math.max(0, Math.min(shown.length - 1, rules.sel + direction)) } }, effects: [] }
+  if (!rule) return null
+  if (k.name === 'e' || k.name === 'return' || k.name === 'enter') {
+    return { state: { ...s, ruleEdit: { n: rule.n, level: rule.level, values: Object.fromEntries(rule.conditions), row: 0 } }, effects: [] }
+  }
+  if (k.name === 'd') return { state: { ...s, rules: { ...rules, confirm: true } }, effects: [] }
+  return null
+}
+
 function priorityKey(s: State, k: Key): Step {
   const edit = s.priorityEdit!
   if (edit.busy) return { state: s, effects: [] }
@@ -1763,6 +1919,7 @@ function toTab(s: State, tab: Tab): Step {
   if (tab === 'messages' && s.tab !== 'messages') effects.push(showCfg(false), armStatus(s.armSeq))
   if (tab === 'explorer' && s.tab !== 'explorer') effects.push(...enterExplorer(s).effects)
   if (tab === 'run' && s.tab !== 'run') effects.push(enterRunEffect())
+  if (tab === 'priorities' && s.tab !== 'priorities') return { state: { ...loadingRules(s), tab, help: null }, effects: [...effects, loadRulesEffect()] }
   return { state: { ...s, tab, help: null }, effects }
 }
 
@@ -2963,6 +3120,8 @@ export function helpKey(s: State, k: Key): Step {
 export function reduce(s: State, k: Key): Step {
   if (s.autoPriority) return autoPriorityKey(s, k)
   if (s.priorityEdit) return priorityKey(s, k)
+  if (s.ruleEdit) return ruleEditKey(s, k)
+  if (s.rulesPreview) return rulesPreviewKey(s, k)
   const quit: Step = { state: { ...s, quit: true }, effects: [{ kind: 'quit' }] }
   // A146: a form holding typed text is not thrown away by one ctrl+c - it cancels the
   // form (as Esc), the board stays; the next ctrl+c quits. An empty form has nothing to lose.
@@ -2994,7 +3153,8 @@ export function reduce(s: State, k: Key): Step {
   if (s.tab === 'explorer' && k.name === 'r') return explorerKey(s, k)     // F75: r reads git again too
   if (s.tab === 'run' && (s.runForm || k.name === 'r')) return runKey(s, k)   // F79: r rescans here
   if (s.tab === 'runs' && k.name === 'r') return runsKey(s, k)                // F122: r reruns on Workflows tab
-  if (s.tab === 'priorities' && k.name === 'a') return { state: { ...s, autoPriority: { filters: {}, field: 0, editing: true } }, effects: [] }
+  if (s.tab === 'priorities' && k.name === 'a' && !s.rules?.confirm) return { state: { ...s, autoPriority: { filters: {}, field: 0, editing: true } }, effects: [] }
+  if (s.tab === 'priorities') { const step = rulesKey(s, k); if (step) return step }
   if (s.tab === 'health') {
     if (k.name === 'r') return refreshHealth(s)
     if (k.name === 'u' || k.name === 'R') return resume(s)

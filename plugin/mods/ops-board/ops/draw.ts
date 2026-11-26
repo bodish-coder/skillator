@@ -26,6 +26,7 @@ import { FIVE_HOLD_PCT, resetsText, usageColor, WEEKLY_STOP_PCT } from '../hooks
 import { runLines as runTabLines } from './runtab'
 import { explorerBody } from './explorer'
 import { DASHBOARD_WIDE, dashboardPanels } from '../hooks/lib/dashboard'
+import { hasValue, orderedRules, ruleOptions, ruleSummary } from '../hooks/lib/rules'
 
 export type Seg = BaseSeg & { action?: PointerAction }
 const hot = (text: string, name: string, shift = false, isDim = false): Seg => ({
@@ -254,6 +255,16 @@ function keysOf(s: State, m: Model): Seg[][] {
     if (s.autoPriority.preview) return [move, h('enter save', 'return'), h('e edit scope', 'e'), cancel]
     return [h('a preview again', 'a'), h('e edit scope', 'e'), cancel]
   }
+  if (s.ruleEdit) {
+    if (s.ruleEdit.busy) return [[dim('Working…')]]
+    if (s.ruleEdit.option !== undefined) return [move, h('space toggle', 'space'), h('esc back', 'escape')]
+    return [move, [dim('1-5 level')], h('enter choose', 'return'), h('s save', 's'), cancel]
+  }
+  if (s.rulesPreview) {
+    if (s.rulesPreview.busy) return []
+    if (s.rulesPreview.preview) return [move, h('enter save', 'return'), h('p preview again', 'p'), cancel]
+    return [h('p preview again', 'p'), cancel]
+  }
   if (s.priorityEdit) {
     if (s.priorityEdit.busy) return [[dim('Working…')]]
     if (s.priorityEdit.preview) return [h('enter save', 'return'), cancel]
@@ -284,7 +295,14 @@ function keysOf(s: State, m: Model): Seg[][] {
     return [move, h(enter, 'return'), h('s Start', 's'), h('Engage', 'e'), h('Rerun', 'r'), h('Push Pending', 'p'), h('Mode: ||/seq', 'm'), quit]
   }
   if (s.tab === 'health') return [[hot('r refresh', 'r')], [hot('R resume', 'R', true)], [hot('c resume CLI', 'c')], [hot('F force resume', 'F', true)], [hot('p re-read status', 'p')], quit]
-  if (s.tab === 'priorities') return [h('a Auto-assign', 'a'), h('tab switch', 'tab'), quit]
+  if (s.tab === 'priorities') {
+    if (s.rules?.confirm) return [h('y delete', 'y'), h('n keep', 'n')]
+    const usable = !!s.rules && !s.rules.loading && !s.rules.error
+    const has = usable && s.rules!.list.length > 0
+    return [...(has ? [move, h('enter edit', 'return'), h('d delete', 'd')] : []),
+      ...(has && !s.rules!.invalid.length ? [h('p apply rules', 'p')] : []),
+      ...(usable ? [h('n new rule', 'n')] : []), h('a Auto-assign', 'a'), h('tab switch', 'tab'), quit]
+  }
   if (s.tab === 'dashboard') return [h('tab switch', 'tab'), quit]
   if (s.tab === 'messages') return [move, h('enter open', 'return'), h('c connect', 'c'), h('d disconnect', 'd'), h('y copy URL', 'y'), h('m mark all read', 'm'), h('s setup', 's'), quit]
   if (s.tab === 'explorer' && s.explorer.action) {
@@ -816,6 +834,76 @@ function autoPriorityBody(s: State, room: number): Seg[][] {
   return boxBody(s, { title: 'Auto-assign priorities', rows })
 }
 
+// F203: the legend with each level's rules under it; the status lines stay pinned below the list.
+function prioritiesBody(s: State, room: number): Seg[][] {
+  const rules = s.rules
+  const shown = orderedRules(rules?.list ?? [])
+  const lines: Seg[][] = []
+  let cursor = 0, index = 0
+  for (const [id, { color, label }] of Object.entries(PRIORITIES)) {
+    lines.push([{ text: '● ' + id, color }, { text: '  ' + label }])
+    for (const rule of shown.filter(r => r.level === id)) {
+      const on = index === rules!.sel
+      if (on) cursor = lines.length
+      lines.push([{ text: (on ? '› ' : '  ') + String(rule.n).padStart(2) + '  ' + ruleSummary(rule),
+        color: on ? 'suggestion' : undefined, action: { kind: 'rule-row', index } }])
+      index++
+    }
+  }
+  lines.push([dim('Unprioritized tickets follow P5 in Queue Jarvis.')])
+  const status: Seg[][] = []
+  const selected = shown[rules?.sel ?? 0]
+  if (!rules || rules.loading) status.push([dim('Loading priority rules…')])
+  else if (rules.error) status.push([{ text: rules.error, color: 'error' }])
+  else if (rules.confirm && selected) status.push([{ text: `Delete rule ${selected.n}? ${selected.level}: ${ruleSummary(selected)}`, color: 'warning' }])
+  else if (rules.busy) status.push([dim('Working…')])
+  else if (!shown.length && !rules.invalid.length) status.push([dim('No priority rules yet. Press n to add one, e.g. P1 for bugs in an app.')])
+  if (rules?.invalid.length && !rules.error) {
+    status.push(...rules.invalid.slice(0, 3).map(text => [{ text, color: 'warning' as Color }]))
+    status.push([dim('Fix these in .skillator/priority-rules.md; rules cannot be applied until then.')])
+  }
+  const tail = status.slice(0, Math.max(0, room - 1))
+  const space = Math.max(1, room - tail.length)
+  const offset = Math.max(0, Math.min(cursor - Math.floor(space / 2), lines.length - space))
+  return [...lines.slice(offset, offset + space), ...tail].slice(0, room)
+}
+
+function ruleEditBody(s: State, room: number): Seg[][] {
+  const edit = s.ruleEdit!
+  const fields = priorityFilterOptions(s.board, true)
+  const picking = edit.option !== undefined ? fields[edit.row - 1] : undefined
+  const chosen = picking ? edit.values[picking.key] ?? [] : []
+  const rows: Boxed['rows'] = picking
+    ? ruleOptions(picking.values, chosen).map((value, index) => ({ text: (hasValue(chosen, value) ? '[x] ' : '[ ] ') + value, action: { kind: 'rule-option', index } }))
+    : [{ text: 'Level'.padEnd(12) + edit.level, action: { kind: 'rule-field', row: 0 } },
+      ...fields.map(({ key, label }, index) => ({
+        text: label.padEnd(12) + (edit.values[key]?.length ? edit.values[key]!.join(', ') : 'any') + ' ▾', action: { kind: 'rule-field' as const, row: index + 1 },
+      }))]
+  if (picking && !rows.length) rows.push({ text: 'No open ticket has a value for this field.' })
+  const active = Math.max(0, Math.min(rows.length - 1, picking ? edit.option! : edit.row))
+  const note = edit.message ?? (picking ? 'Checked values: any of them matches.' : 'Every chosen field must match.')
+  const page = Math.max(1, room - (room >= 5 ? 3 : 2))
+  const offset = Math.max(0, active - page + 1)
+  const visible: Boxed['rows'] = rows.slice(offset, offset + page).map((row, index) => ({
+    ...row, text: (offset + index === active ? '› ' : '  ') + row.text,
+    color: offset + index === active ? 'suggestion' as const : undefined,
+  }))
+  if (room >= 5) visible.push({ text: note, color: edit.message && !edit.busy ? 'warning' as const : undefined, action: undefined })
+  return boxBody(s, { title: picking ? 'Choose ' + picking.label : edit.n === null ? 'New priority rule' : 'Edit rule ' + edit.n, rows: visible })
+}
+
+function rulesPreviewBody(s: State, room: number): Seg[][] {
+  const draft = s.rulesPreview!
+  const rows: Boxed['rows'] = [{ text: draft.message ?? '' }]
+  if (draft.preview) {
+    const counts = cells(draft.preview.counts) <= innerOf(s) ? draft.preview.counts : draft.preview.counts.replace(/: /g, ':').replace(/ · /g, '  ')
+    rows.push({ text: counts, color: 'suggestion' })
+    const page = Math.max(1, room - 2 - rows.length)
+    rows.push(...draft.preview.rows.slice(draft.preview.offset, draft.preview.offset + page).map(text => ({ text })))
+  }
+  return boxBody(s, { title: 'Apply priority rules', rows })
+}
+
 function dialogBody(s: State): Seg[][] {
   const r = s.dialog?.result ? '  ' + s.dialog.result : null
   const ls = dialogLines(s)
@@ -1224,6 +1312,8 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.person ? formBody(s)
     : s.dialog ? dialogBody(s)
     : s.autoPriority ? autoPriorityBody(s, room)
+    : s.ruleEdit ? ruleEditBody(s, room)
+    : s.rulesPreview ? rulesPreviewBody(s, room)
     : s.priorityEdit ? boxBody(s, { title: `Priority · ${s.priorityEdit.id}`,
         rows: [{ text: s.priorityEdit.message ?? `Current priority: ${s.priorityEdit.current ?? 'Unranked'}` }] })
     : s.decide ? decideBody(s)
@@ -1259,17 +1349,13 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.tab === 'runs' ? runsBody(s, room)
     : s.tab === 'health' ? healthBody(s, room)
     : s.tab === 'dashboard' ? dashboardBody(s, room)
-    : s.tab === 'priorities' ? [
-      ...Object.entries(PRIORITIES).map(([id, { color, label }]) =>
-        [{ text: '● ' + id, color }, { text: '  ' + label }]),
-      [dim('Unprioritized tickets follow P5 in Queue Jarvis.')],
-    ].slice(0, room)
+    : s.tab === 'priorities' ? prioritiesBody(s, room)
     : s.tab === 'messages' ? messagesBody(s, room)
     : s.tab === 'explorer' ? explorerBody(s, room)
     : s.tab === 'run' ? windowOf(runTabLines(s), s.runForm ? null : s.runSel, room, 'run')
     : ticketsBody(s, m, room)
   // B25: a modal box taller than the room keeps its last rows (the buttons, the bottom edge)
-  const boxed = !!(s.setup || s.person || s.dialog || s.autoPriority || s.priorityEdit || s.decide || s.reconcile || s.intake || s.engage || s.startRun) && !(s.help || s.tab === 'help')
+  const boxed = !!(s.setup || s.person || s.dialog || s.autoPriority || s.ruleEdit || s.rulesPreview || s.priorityEdit || s.decide || s.reconcile || s.intake || s.engage || s.startRun) && !(s.help || s.tab === 'help')
   const top = boxed && main.length > room && room >= 4
     ? [...main.slice(0, room - 2), ...main.slice(-2)]
     : main.slice(0, room)

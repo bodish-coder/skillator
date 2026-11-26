@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -156,4 +156,178 @@ test('a selector applies to more than ten tickets from a linked checkout', t => 
   assert.equal(readFileSync(linkedBoard, 'utf8'), originalLinked.replace('- [ ] F40 — Item 1 [app: docs]', '- [x] F40 — Item 1 [app: docs] [priority: P5]'));
   assert.equal(readFileSync(board, 'utf8'), before);
   assert.equal(git('rev-parse', 'HEAD'), head);
+});
+
+const rulesBoard = [
+  '- [ ] B1 — Crash in a [app: a] [severity: low]',
+  '- [ ] B2 — Crash in d [app: d]',
+  '- [ ] F3 — Feature in c [app: c, a] [priority: P3]',
+  '- [ ] F4 — Feature in a [app: a] [severity: critical] [priority: P1]',
+  '- [~] A5 — Follow-up [app: b] [priority: P4]',
+  '- [x] B6 — Closed bug [app: a]',
+  '- [ ] B7 — Bug in b [app: b] [priority: P2]',
+].join('\n') + '\n';
+const rulesFile = cwd => join(cwd, '.skillator', 'priority-rules.md');
+const revisionOf = stdout => stdout.match(/^Rules revision: ([a-f0-9]{64})$/m)?.[1];
+function ruled(t) {
+  const { cwd, board } = fixture(t);
+  writeFileSync(board, rulesBoard);
+  for (const rule of [['P1', 'type=bug', 'app=a,b,c'], ['P1', 'type=feature', 'app=c'], ['P1', 'severity=critical'], ['P2', 'app=b']]) {
+    const added = run(cwd, 'rules', 'add', ...rule);
+    assert.equal(added.status, 0, added.stderr);
+  }
+  return { cwd, board };
+}
+
+test('rules file: grammar, comments, spaces in values and invalid lines', t => {
+  const { cwd } = fixture(t);
+  const empty = run(cwd, 'rules', 'list');
+  assert.equal(empty.status, 0, empty.stderr);
+  assert.match(empty.stdout, /^0 rule\(s\)\.$/m);
+  assert.ok(revisionOf(empty.stdout));
+  assert.equal(existsSync(rulesFile(cwd)), false);
+  mkdirSync(join(cwd, '.skillator'));
+  const text = '\uFEFF# Priority rules\r\n\r\n- p1: Type=Bug  app=A, b ,c\r\n* P2: release=Next release app=ops board,web\r\n'
+    + 'P3: type=bug\r\n- P2: colour=red\r\n- P2: app=a app=b\r\n- P9: app=a\r\n- P2: status=open\r\n';
+  writeFileSync(rulesFile(cwd), text);
+  const listed = run(cwd, 'rules', 'list');
+  assert.equal(listed.status, 0, listed.stderr);
+  assert.match(listed.stdout, /^2 rule\(s\)\.$/m);
+  assert.match(listed.stdout, /^1  P1: type=bug app=a,b,c$/m);
+  assert.match(listed.stdout, /^2  P2: release=next release app=ops board,web$/m);
+  for (const line of [5, 6, 7, 8, 9]) assert.match(listed.stdout, new RegExp(`^Invalid line ${line}: .+`, 'm'));
+  assert.match(listed.stdout, /^Invalid line 6: Unknown field colour\./m);
+  assert.match(listed.stdout, /^Invalid line 7: Field app is repeated\./m);
+  assert.match(listed.stdout, /^Invalid line 9: Unknown status: open/m);
+  assert.match(listed.stdout.trimEnd().split('\n').at(-1), /^Rules revision: [a-f0-9]{64}$/);
+  assert.notEqual(revisionOf(listed.stdout), revisionOf(empty.stdout));
+  const blocked = run(cwd, 'rules', 'preview');
+  assert.notEqual(blocked.status, 0);
+  assert.match(blocked.stderr, /Fix line 5 of \.skillator[\\/]priority-rules\.md before applying rules/);
+  assert.equal(readFileSync(rulesFile(cwd), 'utf8'), text);
+});
+
+test('rules add, edit and remove change one line and keep the rest', t => {
+  const { cwd } = fixture(t);
+  const added = run(cwd, 'rules', 'add', 'p1', 'TYPE=bug', 'app=A, b,c');
+  assert.equal(added.status, 0, added.stderr);
+  assert.match(added.stdout, /Rule added\n1  P1: type=bug app=a,b,c\nRules revision: [a-f0-9]{64}\n$/);
+  const created = readFileSync(rulesFile(cwd), 'utf8');
+  assert.match(created, /^# Priority rules\n# One rule per line:/);
+  assert.ok(created.endsWith('- P1: type=bug app=a,b,c\n'));
+  writeFileSync(rulesFile(cwd), created.replace(/\n/g, '\r\n') + '\r\n# keep me\r\nnot a rule\r\n  - P3: release=next release');
+  assert.equal(run(cwd, 'rules', 'add', 'P2', 'severity=high').status, 0);
+  const before = run(cwd, 'rules', 'list').stdout;
+  assert.match(before, /^1  P1: type=bug app=a,b,c$/m);
+  assert.match(before, /^2  P3: release=next release$/m);
+  assert.match(before, /^3  P2: severity=high$/m);
+  assert.match(before, /^Invalid line \d+: .*\| not a rule$/m);
+  const edited = run(cwd, 'rules', 'edit', '2', 'P4', 'release=next release', 'owner=@Sher', '--rev', revisionOf(before));
+  assert.equal(edited.status, 0, edited.stderr);
+  assert.match(edited.stdout, /Rule updated\n2  P4: release=next release owner=@sher\n/);
+  const removed = run(cwd, 'rules', 'remove', '1', '--rev', revisionOf(edited.stdout));
+  assert.equal(removed.status, 0, removed.stderr);
+  assert.match(removed.stdout, /Rule removed\nP1: type=bug app=a,b,c\n/);
+  const after = readFileSync(rulesFile(cwd), 'utf8');
+  assert.ok(after.includes('\r\n# keep me\r\nnot a rule\r\n  - P4: release=next release owner=@sher\r\n- P2: severity=high\r\n'));
+  assert.doesNotMatch(after, /^- P1: type=bug/m); // the header comment also says "type=bug"
+  assert.doesNotMatch(after, /[^\r]\n/);
+  assert.equal(existsSync(`${rulesFile(cwd)}.lock`), false);
+});
+
+test('rules edits refuse a stale revision, a duplicate and the lock', t => {
+  const { cwd } = ruled(t);
+  const original = readFileSync(rulesFile(cwd), 'utf8');
+  const duplicate = run(cwd, 'rules', 'add', 'P1', 'app=c,b,a', 'type=BUG');
+  assert.notEqual(duplicate.status, 0);
+  assert.match(duplicate.stderr, /already exists \(rule 1\)/);
+  assert.match(run(cwd, 'rules', 'remove', '1', '--rev', 'a'.repeat(64)).stderr, /The rules changed\. Reload them and try again\./);
+  assert.match(run(cwd, 'rules', 'remove', '9').stderr, /No rule 9\./);
+  assert.notEqual(run(cwd, 'rules', 'add', 'P1').status, 0);
+  assert.notEqual(run(cwd, 'rules', 'add', 'P6', 'app=a').status, 0);
+  assert.notEqual(run(cwd, 'rules', 'add', 'P1', 'app=').status, 0);
+  assert.notEqual(run(cwd, 'rules', 'add', 'P1', 'type=story').status, 0);
+  assert.notEqual(run(cwd, 'rules', 'preview', 'app=a').status, 0);
+  writeFileSync(`${rulesFile(cwd)}.lock`, '321 other\n');
+  assert.match(run(cwd, 'rules', 'add', 'P5', 'app=z').stderr, /locked/i);
+  assert.equal(readFileSync(`${rulesFile(cwd)}.lock`, 'utf8'), '321 other\n');
+  assert.equal(readFileSync(rulesFile(cwd), 'utf8'), original);
+});
+
+test('rules preview ranks matching open tickets, highest level wins', t => {
+  const { cwd, board } = ruled(t);
+  const shown = run(cwd, 'rules', 'preview');
+  assert.equal(shown.status, 0, shown.stderr);
+  assert.match(shown.stdout, /^4 ticket\(s\) would change\.$/m);
+  assert.match(shown.stdout, /^P1: 3 · P2: 1 · P3: 0 · P4: 0 · P5: 0$/m);
+  assert.match(shown.stdout, /^B1 +Unranked +-> P1 +rule 1 +Crash in a$/m);
+  assert.match(shown.stdout, /^F3 +P3 +-> P1 +rule 2 +Feature in c$/m);
+  assert.match(shown.stdout, /^A5 +P4 +-> P2 +rule 4 +Follow-up$/m);
+  assert.match(shown.stdout, /^B7 +P2 +-> P1 +rule 1 +Bug in b$/m);
+  assert.doesNotMatch(shown.stdout, /^(B2|F4|B6) /m);
+  assert.match(shown.stdout, /^Preview token: [a-f0-9]{64}$/m);
+  assert.equal(readFileSync(board, 'utf8'), rulesBoard);
+  assert.equal(run(cwd, 'rules', 'add', 'P5', 'status=done', 'id=B6').status, 0);
+  assert.match(run(cwd, 'rules', 'preview').stdout, /^B6 +Unranked +-> P5 +rule 5 +Closed bug$/m);
+  const none = fixture(t);
+  assert.match(run(none.cwd, 'rules', 'preview').stderr, /No priority rules yet\. Add one: rules add P1 type=bug/);
+});
+
+test('rules apply writes the previewed plan and refuses a stale token', t => {
+  const { cwd, board } = ruled(t);
+  const token = run(cwd, 'rules', 'preview').stdout.match(/^Preview token: ([a-f0-9]{64})$/m)?.[1];
+  assert.ok(token);
+  assert.equal(run(cwd, 'rules', 'add', 'P3', 'app=d').status, 0);
+  assert.match(run(cwd, 'rules', 'apply', token).stderr, /The board or rule changed\. Run a new preview before applying\./);
+  assert.equal(readFileSync(board, 'utf8'), rulesBoard);
+  const fresh = run(cwd, 'rules', 'preview').stdout;
+  assert.match(fresh, /^5 ticket\(s\) would change\.$/m);
+  const next = fresh.match(/^Preview token: ([a-f0-9]{64})$/m)?.[1];
+  writeFileSync(`${board}.lock`, '321 ps1\n');
+  assert.match(run(cwd, 'rules', 'apply', next).stderr, /locked/i);
+  rmSync(`${board}.lock`);
+  const applied = run(cwd, 'rules', 'apply', next);
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.match(applied.stdout, /^5 ticket\(s\) updated by the priority rules\.$/m);
+  assert.equal(readFileSync(board, 'utf8'), rulesBoard
+    .replace('[app: a] [severity: low]', '[app: a] [priority: P1] [severity: low]')
+    .replace('B2 — Crash in d [app: d]', 'B2 — Crash in d [app: d] [priority: P3]')
+    .replace('[app: c, a] [priority: P3]', '[app: c, a] [priority: P1]')
+    .replace('[app: b] [priority: P2]', '[app: b] [priority: P1]')        // B7 first: A5 becomes P2 on the next line
+    .replace('[app: b] [priority: P4]', '[app: b] [priority: P2]'));
+  assert.equal(existsSync(`${board}.lock`), false);
+  assert.doesNotMatch(run(cwd, 'rules', 'preview').stdout, /Preview token:/);
+  assert.notEqual(run(cwd, 'rules', 'apply', next).status, 0);
+});
+
+test('rules add and edit refuse a value that holds whitespace then word=', t => {
+  const { cwd } = ruled(t);
+  const before = readFileSync(rulesFile(cwd), 'utf8');
+  for (const condition of ['release=q3 scope=wide', 'release=v2 type=bug', 'app=a\tb=c']) {
+    const added = run(cwd, 'rules', 'add', 'P3', condition);
+    assert.equal(added.status, 1, condition);
+    assert.match(added.stderr, /^Queue Jarvis: .*cannot contain whitespace followed by word=/m);
+    const edited = run(cwd, 'rules', 'edit', '1', 'P3', 'app=a', condition);
+    assert.equal(edited.status, 1, condition);
+    assert.match(edited.stderr, /^Queue Jarvis: .*cannot contain whitespace followed by word=/m);
+  }
+  assert.equal(readFileSync(rulesFile(cwd), 'utf8'), before);
+  assert.equal(run(cwd, 'rules', 'add', 'P3', 'release=next release').status, 0);
+});
+
+test('rules match any comma-separated part of a ticket tag value on every field', t => {
+  const { cwd, board } = fixture(t);
+  writeFileSync(board, [
+    '- [ ] F1 — Two releases [release: 1.0, 1.1]',
+    '- [ ] F2 — Two owners [owner: Asha, Ben]',
+    '- [ ] F3 — Other release [release: 2.0]',
+  ].join('\n') + '\n');
+  assert.equal(run(cwd, 'rules', 'add', 'P2', 'release=1.1').status, 0);
+  assert.equal(run(cwd, 'rules', 'add', 'P3', 'owner=asha').status, 0);
+  const shown = run(cwd, 'rules', 'preview');
+  assert.equal(shown.status, 0, shown.stderr);
+  assert.match(shown.stdout, /^F1 +Unranked +-> P2 +rule 1 +Two releases$/m);
+  assert.match(shown.stdout, /^F2 +Unranked +-> P3 +rule 2 +Two owners$/m);
+  assert.doesNotMatch(shown.stdout, /^F3 /m);
+  assert.equal(run(cwd, 'list', 'release=1.1').stdout.includes('F1'), false);
 });

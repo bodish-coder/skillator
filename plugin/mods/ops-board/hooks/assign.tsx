@@ -27,7 +27,7 @@ const PANE_NAME = 'ops board'     // pane.tsx's PANE_TITLE
 // While a form is up, Esc (closeOnEscape) raises ui.close on the pane, which the
 // register hook refuses and turns into Cancel; the ring goes to the form's first
 // element. A deny (the pane does not hold the keys) leaves the ring to the person.
-async function showForm($: EngineInterface, ring: string) {
+export async function showForm($: EngineInterface, ring: string) {
   await update($, actionFocusA, () => null)
   await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
   void $.ui.focus({ requestId: PANE, key: ring }).catch(() => {})
@@ -40,6 +40,8 @@ const meA = atom({ plugin: 'ops-board', key: 'me' } as const, null)
 const assignA = atom({ plugin: 'ops-board', key: 'assign' } as const, null)
 const priorityA = atom({ plugin: 'ops-board', key: 'priorityDraft' } as const, null)
 const autoPriorityA = atom({ plugin: 'ops-board', key: 'autoPriority' } as const, null)
+const ruleDraftA = atom({ plugin: 'ops-board', key: 'ruleDraft' } as const, null)         // F203: rules.tsx's forms
+const rulesPreviewA = atom({ plugin: 'ops-board', key: 'rulesPreview' } as const, null)
 let priorityRequest = 0
 const personA = atom({ plugin: 'ops-board', key: 'person' } as const, null)
 const statusA = atom({ plugin: 'ops-board', key: 'status' } as const, null)
@@ -138,7 +140,7 @@ export async function openAssign($: EngineInterface, kind: AssignDraft['kind'], 
 const whoKey = (d: AssignDraft) => (d.handle ? 'who:' + d.handle : 'who:+add')
 
 export async function isFormUp($: EngineInterface): Promise<boolean> {
-  return (await read($, statusA)) !== null || (await read($, assignA)) !== null || (await read($, personA)) !== null || (await read($, reconcileA)) !== null || (await read($, intakeA)) !== null || (await read($, priorityA)) !== null || (await read($, autoPriorityA)) !== null
+  return (await read($, statusA)) !== null || (await read($, assignA)) !== null || (await read($, personA)) !== null || (await read($, reconcileA)) !== null || (await read($, intakeA)) !== null || (await read($, priorityA)) !== null || (await read($, autoPriorityA)) !== null || (await read($, ruleDraftA)) !== null || (await read($, rulesPreviewA)) !== null
 }
 
 export async function clearForm($: EngineInterface) {
@@ -151,6 +153,8 @@ export async function clearForm($: EngineInterface) {
   await update($, intakeA, () => null)
   await update($, priorityA, () => null)
   await update($, autoPriorityA, () => null)
+  await update($, ruleDraftA, () => null)
+  await update($, rulesPreviewA, () => null)
 }
 
 // Done or Cancel: back to the view the form came from, Esc the pane's own again

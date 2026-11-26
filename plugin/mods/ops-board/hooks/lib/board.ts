@@ -36,8 +36,9 @@ export const PRIORITY_FILTERS = [
   { key: 'depends-on', label: 'Depends on' },
 ] as const
 
-export function priorityFilterOptions(board: Board | null): { key: string; label: string; values: string[] }[] {
-  const eligible = (board?.tickets ?? []).filter(ticket => isOpen(ticket) && !/\[priority:/i.test(ticket.line))
+// F203: with `ranked` true every open ticket is eligible (the rules editor), not only the unprioritized ones.
+export function priorityFilterOptions(board: Board | null, ranked = false): { key: string; label: string; values: string[] }[] {
+  const eligible = (board?.tickets ?? []).filter(ticket => isOpen(ticket) && (ranked || !/\[priority:/i.test(ticket.line)))
   const status = ['pending', 'in-progress', 'testing', 'verified', 'blocked', 'decide']
   const types = ['bug', 'feature', 'agent-found']
   const severities = ['critical', 'high', 'medium', 'low', 'trivial']
