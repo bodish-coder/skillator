@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, Color, ElementConstructor, EngineInterface, RenderElement, RenderInput,
   SelectProps, TextProps } from 'claude-code'
-import type { Filter } from '../types'
+import type { Filter, FilterPicker } from '../types'
 import { PRIORITIES, STATE_COLOR } from './lib/board'
 import { buildModel, chipsOf, groupKey, headKey, isDecidable, toggleGroup, toggleUserSection, UNI, ASCII, cutTo, headText, userHeadText, rowText, chromeRows, windowOf, paneTabs } from './lib/ticketsmodel'
 import type { Model, PANE_TABS, UserSection, View } from './lib/ticketsmodel'
@@ -51,6 +51,7 @@ const ticketOffsetA = atom({ plugin: 'ops-board', key: 'ticketOffset' } as const
 const expandedA = atom({ plugin: 'ops-board', key: 'expanded' } as const, null)
 const filterA = atom({ plugin: 'ops-board', key: 'filter' } as const, { app: null, who: null, mine: false, showDone: false })
 const filterOpenA = atom({ plugin: 'ops-board', key: 'filterOpen' } as const, false)
+const filterPickerA = atom({ plugin: 'ops-board', key: 'filterPicker' } as const, null)   // B35
 const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 // F61: the boxes of the open groups, this session; empty = every group collapsed. Only
 // the set is held, never rows: the board's own value stays within $.state's cap (B4).
@@ -107,17 +108,39 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
       void collapseTickets($, true)
     }}>{v.byPriority ? 'by state' : 'by priority'}</Button>
   )
+  const choices = {
+    app: ['all', ...[...new Set((v.board?.tickets ?? []).flatMap(t => t.apps))].sort()],
+    who: ['all', ...v.team.map(p => p.handle)],
+  }
+  const pick = (key: 'app' | 'who', val: string) => setFilter(x => key === 'app'
+    ? { ...x, app: val === 'all' ? null : val } : { ...x, who: val === 'all' ? null : val, mine: false })
+  const setPicker = (p: FilterPicker) => { void update($, filterPickerA, () => p) }
+  // B35: past 64 choices the filter pages in place of the list, as B33's Auto-assign filters do
+  const pk = v.filterOpen ? v.filterPicker : null
+  if (pk) {
+    const pageSize = 12, start = pk.page * pageSize, values = choices[pk.key]
+    return [
+      <Text key="filter:title" bold>{pk.key}</Text>,
+      ...values.slice(start, start + pageSize).map(value =>
+        <Button key={'filter:option:' + value} plain variant={(f[pk.key] ?? 'all') === value ? 'primary' : undefined}
+          onPress={() => { setPicker(null); pick(pk.key, value) }}>{value}</Button>),
+      <Box key="filter:pages" flexDirection="row" flexWrap="wrap" gap={2}>
+        {start > 0 && <Button key="filter:previous" plain onPress={() => setPicker({ ...pk, page: pk.page - 1 })}>Previous</Button>}
+        {start + pageSize < values.length && <Button key="filter:next" plain onPress={() => setPicker({ ...pk, page: pk.page + 1 })}>Next</Button>}
+        <Button key="filter:back" plain onPress={() => setPicker(null)}>Back</Button>
+      </Box>,
+    ]
+  }
+  const filterSelect = (key: 'app' | 'who') => choices[key].length <= 64
+    ? <Select key={'sel:' + key} label={key} value={f[key] ?? 'all'} options={choices[key].map(c => ({ value: c, label: c }))}
+        onSelect={val => pick(key, val)} />
+    : <Button key={'sel:' + key} plain onPress={() => setPicker({ key, page: 0 })}>{key + ' ' + (f[key] ?? 'all')}</Button>
   // filter row (closed: the g button's label, its 'g: ' hotkey prefix and the gap come off the text width)
   if (v.filterOpen && Select) {
-    const apps = [...new Set((v.board?.tickets ?? []).flatMap(t => t.apps))].sort()
     out.push(
       <Box key="filters" flexDirection="row" gap={2}>
-        <Select key="sel:app" label="app" value={f.app ?? 'all'}
-          options={[{ value: 'all', label: 'all' }, ...apps.map(a => ({ value: a, label: a }))]}
-          onSelect={val => setFilter(x => ({ ...x, app: val === 'all' ? null : val }))} />
-        {hasTeam && <Select key="sel:who" label="who" value={f.who ?? 'all'}
-          options={[{ value: 'all', label: 'all' }, ...v.team.map(p => ({ value: p.handle, label: p.handle }))]}
-          onSelect={val => setFilter(x => ({ ...x, who: val === 'all' ? null : val, mine: false }))} />}
+        {filterSelect('app')}
+        {hasTeam && filterSelect('who')}
         {hasTeam && v.me && <Button key="key:mine" hotkey="m" plain onPress={() => setFilter(x => ({ ...x, mine: !x.mine, who: null }))}>
           {(f.mine ? '[x]' : '[ ]') + ' mine'}</Button>}
       </Box>,
@@ -178,7 +201,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
         </Box>,
       )
     }
-    if (v.expanded === itemKey || (itemKey === t.id && v.expanded === t.id)) {
+    if (v.expanded === itemKey || v.expanded === t.id) {   // B36: as buildModel counts it (the ops TUI expands by bare id)
       const raw = `    - [${t.box}] ${t.line}`
       const at = list.slice(0, entries.length).reduce((n, l) => n + l.rows, 0)
       const from = Math.max(0, w.start - at), to = Math.min(Math.ceil(raw.length / v.cols), w.end - at)
@@ -275,7 +298,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
 export async function readView($: EngineInterface, cols: number, rows: number | null = null, unread = 0, logCount = 0): Promise<View> {
   return {
     board: await read($, boardA), team: await read($, teamA), me: await read($, meA),
-    filter: await read($, filterA), filterOpen: await read($, filterOpenA),
+    filter: await read($, filterA), filterOpen: await read($, filterOpenA), filterPicker: await read($, filterPickerA),
     selected: await read($, selectedA), expanded: await read($, expandedA), open: await read($, openA),
     session: await read($, sessionA), byPriority: await read($, byPriorityA),
     cols, ascii: await read($, asciiA), rows, unread, logCount, offset: await read($, ticketOffsetA),
