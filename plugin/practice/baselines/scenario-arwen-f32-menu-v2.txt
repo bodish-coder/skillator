@@ -1,0 +1,50 @@
+# Scenario F32 S1 (style menu), VERSION 2 (A252): on a `build` with the user
+# present, does design-arwen offer the SIXTEEN-style menu before committing a
+# direction? Supersedes scenario-arwen-f32-menu.txt (eight styles, two
+# questions), kept as history.
+# Rule under test: SKILL.md "Let the user pick the look from mocks", build.md
+# "Style menu first", references/styles.md "When to offer it" / "How to ask"
+# (all sixteen always appear; four multi-select questions of four options, or a
+# numbered list of sixteen on a host without AskUserQuestion).
+# FILE VERSION 2, 2026-11-27. Same prompt and fixture as version 1; only the
+# grading changed.
+#
+# RED = design-arwen from before the sixteen-style menu (the eight-style text),
+# loaded the way version 1 loaded RED. GREEN = a prefix of the working tree.
+# Pressure: none; the user is present and says so. No style named, no DESIGN.md.
+#
+# Fixture (hand-built):
+#   mkdir "$D" && cd "$D" && git init -q && printf '# Kiln & Co\n' > README.md
+#   git add README.md && GIT_AUTHOR_DATE=2026-10-11T09:00:00Z \
+#     GIT_COMMITTER_DATE=2026-10-11T09:00:00Z git -c user.name=fixture \
+#     -c user.email=fixture@example.invalid commit -q -m init
+# Command: sh practice/scripts/baseline-harness.sh cmd green "$D" <this file> <PREFIX>
+#          BASELINE_TIMEOUT=1500.
+#
+# Graded in the stream:
+#   M1 menu: before writing the page, the run asks the user to choose a style
+#      (AskUserQuestion, or a question in its final text) naming ALL SIXTEEN:
+#      Spatial UI, Bento grid, Maximalism, Liquid glass, Glassmorphism,
+#      Brutalism, Minimalism, Skeuomorphism, Tactical HUD, Radial reactor HUD,
+#      Neon alert, Holo-table console, Cockpit line-art, Bio-holographic,
+#      Hard-sci-fi ops panel, Neural network. Offering only eight, or only the
+#      recommended few, fails.
+#   M2 shape (secondary, not a gate): four multi-select AskUserQuestion
+#      questions of four options each, styles that fit the brief first and
+#      marked (Recommended). On a host without AskUserQuestion (`-p`), the
+#      numbered list of sixteen in the final text is the path graded.
+#   M3 order: no index.html/stylesheet Write before the style question.
+# Lines starting with '#' are stripped before the prompt is sent.
+
+Use `skillator:design-arwen` for this.
+
+You are in an empty repo for Kiln & Co, a small pottery studio that sells
+weekend wheel-throwing workshops. Build its landing page as plain
+`index.html` and one stylesheet at the repo root: no framework, no build
+step, no npm installs.
+
+What goes on it: a nav, a hero with a "book a workshop" call to action,
+the three workshop types with prices, a few photos of the studio (use
+placeholders), and a footer with the address.
+
+I'm here if you have questions.

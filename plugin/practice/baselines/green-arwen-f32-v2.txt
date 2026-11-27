@@ -1,0 +1,21 @@
+# GREEN record for F32 against the sixteen-style menu (A252): NOT RUN YET.
+# Supersedes green-arwen-f32.txt (eight-style menu, run 2026-10-11), kept as
+# history; its transcripts stay under transcripts/f32-*.
+# FILE VERSION 2, 2026-11-27. Prompts and grading: scenario-arwen-f32-menu-v2.txt,
+# scenario-arwen-f32-round2-v2.txt, scenario-arwen-f32-unattended-v2.txt.
+#
+# No run is recorded here. When these scenarios are run, append the claude
+# version, the prefix, the per-run grades and the transcript names below, and
+# say whether the run was isolated (A63).
+#
+# Expected behaviour (what a GREEN run must show):
+#   S1 menu       M1 all sixteen named before any page is written; M3 no Write
+#                 before the pick. M2 (four 4-option multi-selects) only where
+#                 AskUserQuestion exists; `-p` runs ask with a numbered list.
+#   S2 round 2    R1 no menu (style pinned), R2 every mock in that style, R3 one
+#                 axis per variant, labelled, R4 nothing built before the pick.
+#   S3 unattended U1 no menu and the page built; U2a a style picked from the
+#                 sixteen and on DESIGN.md's Read line; U2b the report names it
+#                 by menu name (see green-arwen-a114-v2.txt).
+#
+# Results: none yet.
