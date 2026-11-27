@@ -10,6 +10,7 @@ import type { Draft, IntakePaths } from '../hooks/lib/intake'
 import type { View } from '../hooks/lib/ticketsmodel'
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
 import { NO_SCRIPTS, decideQuestionsPrompt, holoTicketCmd, loginMessage, loginStatus } from '../hooks/lib/calls'
+import { QUICK_WORDS } from '../hooks/lib/dashboard'
 export { decideQuestionsPrompt, holoTicketCmd }
 import { appliedHead, appliedLine, applyOf, buildModel, canApply, HEAD, headKey, isHead, isUserHead, parseReconcile, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
@@ -730,7 +731,7 @@ function teamKey(s: State, k: Key): Step {
   }
 }
 
-// D: ticket-meta decided <ID> ([?] -> [ ], the [decide:] tag kept).
+// D: ticket-meta decided <ID> ([?] -> [ ], the [decide:] tag cleared).
 function decided(s: State): Step {
   const raw = rawTicketId(s.selected)
   const id = raw && !isHead(raw) ? raw : buildModel(viewOf(s)).ticket
@@ -3172,6 +3173,10 @@ export function reduce(s: State, k: Key): Step {
     if (k.name === 'c') return resumeCli(s)
     if (k.name === 'f' || k.name === 'F') return forceResume(s)
     if (k.name === 'p') return readProfiles(s)
+  }
+  if (s.tab === 'dashboard' && !k.ctrl && !k.meta) {   // F206: the TUI cannot reach a Claude session, so the quick row copies the word
+    const word = QUICK_WORDS.find(([, hk]) => hk === k.name)?.[0]
+    if (word) return { state: s, effects: [{ kind: 'copy', text: word, then: r => x => toast(x, r.code === 0 ? `✓ Copied: ${word}` : `✗ Copy failed: ${r.err.trim() || 'clipboard unavailable'} (${word})`) }] }
   }
   switch (k.name) {
     case 'q': return quit

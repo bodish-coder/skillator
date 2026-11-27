@@ -26,7 +26,7 @@ import { enterRun, isRunFormUp, RunTab } from './runtab'
 import { ActionConfirm, enterExplorer, ExplorerTab, readExplorer, readExplorerAction } from './explorertab'
 import { enterHelp, HelpTab } from './helptab'
 import { LogTab, readLog, say } from './logtab'
-import { DASHBOARD_WIDE, dashboardPanels } from './lib/dashboard'
+import { DASHBOARD_WIDE, dashboardPanels, QUICK_WORDS } from './lib/dashboard'
 import { loadRules, renderRuleForm, renderRules } from './rules'
 
 // The ops board pane (design §5): tab bar, the Tickets tab with its filter row,
@@ -387,9 +387,24 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
         {panel.details?.map(text => <Text key={text} wrap="truncate-end" dimColor>{text}</Text>)}
       </Box>
     ))
+    // F206: the words the owner types most, sent to the session as if typed
+    const quick = (
+      <Box key="quick" flexDirection="row" flexWrap="wrap" gap={1}>
+        {QUICK_WORDS.map(([word, hotkey]) => (
+          <Button key={'quick:' + word} plain dimColor hotkey={hotkey} onPress={() => {
+            void $.prompt.submit({ text: word }).then(
+              () => { say($, `✓ Sent to session: ${word}`, { timeoutMs: 8000 }) },
+              err => { say($, `✗ ${String(err)}`, { timeoutMs: 8000 }) },
+            )
+          }}>{word}</Button>
+        ))}
+      </Box>
+    )
     return (
       <Box flexDirection="column">
         {bar}
+        <Text> </Text>
+        {quick}
         <Text> </Text>
         {wide ? <Box flexDirection="column" gap={1}>
           <Box flexDirection="row" gap={4}>{panels.slice(0, 2)}</Box>

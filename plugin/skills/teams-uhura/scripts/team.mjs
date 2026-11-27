@@ -190,15 +190,23 @@ export function verifyHmac(raw, header, tokenB64) {
 
 // --- who sent it ---
 
-// team.md as ticket-meta reads it: `- @handle: a@x, b@y`; emails lower-cased.
+// team.md as ticket-meta reads it: `- @handle: a@x, b@y`, then an optional indented
+// `  name: Full Name`; emails lower-cased.
 export function parseTeam(text) {
   const out = []
+  let last = null   // as ops-board lib/team.ts: only lines directly under the member; the last name: wins
   for (const raw of String(text).split(/\r?\n/)) {
     const m = /^[ \t]*[-*][ \t]*(@[A-Za-z0-9_.-]+)[ \t]*:(.*)$/.exec(raw)
-    if (m) out.push({ handle: m[1], emails: m[2].split(',').map(s => s.trim().toLowerCase()).filter(Boolean) })
+    if (m) { last = { handle: m[1], emails: m[2].split(',').map(s => s.trim().toLowerCase()).filter(Boolean) }; out.push(last); continue }
+    const n = /^[ \t]+name:[ \t]*(.*?)[ \t]*$/.exec(raw)
+    if (n && last) { if (n[1]) last.name = n[1]; else delete last.name; continue }
+    last = null
   }
   return out
 }
+
+// The repo's team (team.md at the git root of cwd); none or unreadable = [].
+const membersAt = cwd => { try { return parseTeam(readFileSync(join(mainRoot(cwd).root, TEAM), 'utf8')) } catch { return [] } }
 
 // The sender links: <git dir>/skillator/teams-ids.json, { "<aadObjectId>": "email" },
 // written only by `link` (the owner's act). Map of lower-cased id -> lower-cased email.
@@ -347,18 +355,35 @@ export function startListener({ root, port, token, log = () => {}, nonce = null 
 // --- posting back: the Workflows "post to a channel when a webhook request is received"
 // template takes a message whose attachments are Adaptive Cards ---
 
-export function cardPayload(text) {
+// Each @handle on team.md (whole word, any case; a URL or an email address is left
+// alone) becomes <at>Display</at> plus one Teams mention entity per distinct text.
+// Display = the member's name:, else the handle; id = the first email (the Teams UPN).
+export function mentions(text, members = []) {
+  const entities = new Map()
+  const out = String(text).replace(/[A-Za-z][A-Za-z0-9+.-]*:\/\/\S+|(?<![\w.@/-])@([A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)(?![\w@-])/g, (all, h) => {
+    const m = h && members.find(x => x.emails?.length && x.handle.toLowerCase() === '@' + h.toLowerCase())
+    if (!m) return all
+    let name = (m.name || '').replace(/[<>]/g, '') || m.handle.slice(1)
+    // two members sharing a display name would both resolve to the first one's entity: add the handle
+    if ([...entities.values()].some(e => e.text === `<at>${name}</at>` && e.mentioned.id !== m.emails[0])) name = `${name} (${m.handle})`
+    const at = `<at>${name}</at>`
+    if (!entities.has(at)) entities.set(at, { type: 'mention', text: at, mentioned: { id: m.emails[0], name } })
+    return at
+  })
+  return { text: out, entities: [...entities.values()] }
+}
+
+export function cardPayload(text, members = []) {
+  const m = mentions(text, members)
+  const content = {
+    $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+    type: 'AdaptiveCard', version: '1.4',
+    body: [{ type: 'TextBlock', text: m.text, wrap: true }],
+  }
+  if (m.entities.length) content.msteams = { entities: m.entities }
   return {
     type: 'message',
-    attachments: [{
-      contentType: 'application/vnd.microsoft.card.adaptive',
-      contentUrl: null,
-      content: {
-        $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-        type: 'AdaptiveCard', version: '1.4',
-        body: [{ type: 'TextBlock', text, wrap: true }],
-      },
-    }],
+    attachments: [{ contentType: 'application/vnd.microsoft.card.adaptive', contentUrl: null, content }],
   }
 }
 
@@ -366,15 +391,16 @@ const TEXT_MAX = 8000
 const loopback = h => h === '127.0.0.1' || h === 'localhost' || h === '[::1]'
 
 // { ok } or { ok: false, error } - the error never carries the URL (its sig= is the secret).
-export async function say(text, cfg, { timeoutMs = 10_000 } = {}) {
+export async function say(text, cfg, { timeoutMs = 10_000, members = [] } = {}) {
   const raw = cfg?.TEAMS_WORKFLOW_URL
   if (!raw) return { ok: false, error: `TEAMS_WORKFLOW_URL is not set (${configPath()} or the environment) - see teams-uhura references/setup.md` }
   let u
   try { u = new URL(raw) } catch { return { ok: false, error: 'TEAMS_WORKFLOW_URL is not a URL' } }
   if (u.protocol !== 'https:' && !(u.protocol === 'http:' && loopback(u.hostname))) return { ok: false, error: 'refused: the Workflows URL must be https' }
-  const t = String(text).length > TEXT_MAX ? String(text).slice(0, TEXT_MAX - 1) + '…' : String(text)
+  // cut on a word boundary, so no partial @handle is left to match a different member
+  const t = String(text).length > TEXT_MAX ? String(text).slice(0, TEXT_MAX - 1).replace(/\S*$/, '') + '…' : String(text)
   try {
-    const res = await fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cardPayload(t)), signal: AbortSignal.timeout(timeoutMs) })
+    const res = await fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cardPayload(t, members)), signal: AbortSignal.timeout(timeoutMs) })
     await res.arrayBuffer().catch(() => {})
     return res.ok ? { ok: true, status: res.status } : { ok: false, error: `the Workflows webhook answered HTTP ${res.status}` }
   } catch (e) {
@@ -666,7 +692,7 @@ async function cmdMessage(argv, cfg) {
       out(`queued locally for ${member.handle} in this clone's inbox (id ${rec.id}; status: failed_post, local_queue: retained, channel: not_configured, ack: unacknowledged - remote delivery failed, local storage is not cross-machine receipt)`)
       return 1
     }
-    const sayRes = await say(rec.text, cfg)
+    const sayRes = await say(rec.text, cfg, { members })
     if (!sayRes.ok) {
       err(`channel post failed: ${sayRes.error}`)
       err(`recovery: local record (id ${rec.id}) retained in ${inboxPath}; retry remote post with: node team.mjs message ${member.handle} --retry ${rec.id}`)
@@ -729,7 +755,7 @@ async function cmdMessage(argv, cfg) {
   appendRecord(box, rec)
 
   if (cfg?.TEAMS_WORKFLOW_URL) {
-    const sayRes = await say(text.trim(), cfg)
+    const sayRes = await say(text.trim(), cfg, { members })
     if (!sayRes.ok) {
       err(`channel post failed: ${sayRes.error}`)
       err(`recovery: local record (id ${id}) retained in ${inboxPath}; retry remote post with: node team.mjs message ${member.handle} --retry ${id}`)
@@ -766,7 +792,7 @@ async function cmdPostStatus(argv, cfg) {
     const id = args[0].replace(/[^A-Za-z0-9_.-]/g, '')
     line = readFileSync(join(root, 'TICKETS.md'), 'utf8').split(/\r?\n/).find(l => new RegExp(`^\\s*[-*]\\s*\\[.\\]\\s*${id}(\\s|$)`).test(l)) ?? null
   } catch { /* no board: no title */ }
-  const r = await say(statusText(sub, args, line, basename(root)), cfg, { timeoutMs: 5000 })
+  const r = await say(statusText(sub, args, line, basename(root)), cfg, { timeoutMs: 5000, members: membersAt(root) })
   if (!r.ok) { err(r.error); return 1 }
   return 0
 }
@@ -833,7 +859,7 @@ export async function main(argv) {
         }
         text = text.replace(/\r?\n$/, '')
         if (!text.trim()) { err('say: no text on stdin'); return 2 }
-        const r = await say(text, cfg)
+        const r = await say(text, cfg, { members: membersAt(process.cwd()) })
         if (!r.ok) { err(r.error); return 1 }
         out('posted to the Teams channel')
         const box = inboxDir(process.cwd())

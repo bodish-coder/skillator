@@ -472,8 +472,8 @@ test('F175: decision-matrix resolves across Claude Code and host copies; fixture
   // 3. Read back: zero open questions remain, and each writer recorded the exact state without touching other rows.
   assert.deepEqual(collectQuestions(), []);
   const afterBoard = readFileSync(join(repo, 'TICKETS.md'), 'utf8');
-  // ticket-meta decided: [?] -> [ ], the [decide:] tag stays (its documented contract)
-  assert.match(afterBoard, /^- \[ \] F12 — Pick auth token storage .*\[decide: @sabre\]$/m);
+  // ticket-meta decided: [?] -> [ ], the [decide:] tag cleared (B41)
+  assert.match(afterBoard, /^- \[ \] F12 — Pick auth token storage \(cookie vs memory\) \[owner: @sabre\]$/m);
   assert.match(afterBoard, /^- \[>\] A7 — Choose audit retention window .* \(deferred: after v1 launch\)/m);
   assert.match(afterBoard, /^- \[ \] F10 — Build login form \[owner: @sabre\]$/m);
   assert.match(afterBoard, /^- \[~\] B4 — Fix header alignment \[owner: @sabre\]$/m);

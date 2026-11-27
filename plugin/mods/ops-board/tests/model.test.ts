@@ -200,6 +200,13 @@ test('A199: buildModel includes personalized Assigned and Decide groups, folding
   expect(mFolded.ticket).toBeNull()
 })
 
+test('B41: Mine to decide lists only [?] tickets; a decided line keeping its [decide:] tag drops out', () => {
+  const b = parseBoard('- [?] F1 — open choice [decide: @asha]\n- [ ] F2 — decided before [decide: @asha]\n- [~] F3 — busy [decide: @asha]\n', 'T', 0, 0)
+  const m = buildModel(view({ board: b, me: '@asha', open: ['unfold:decide'] }))
+  expect(m.userGroups.find(g => g.id === 'decide')!.tickets.map(t => t.id)).toEqual(['F1'])
+  expect(ticketsOf({ handle: '@asha', emails: [] }, b, null)).toBe('1 decide')
+})
+
 // F178: a third personal section, 'This session (<code>)', only when the board knows its session code
 test('F178: the This session section lists open tickets tagged [session: <code>], only with a session code', () => {
   const b = parseBoard('- [ ] F1 — mine [session: cc-1ir0]\n- [ ] F2 — other [session: cc-zzzz]\n- [x] F3 — done [session: cc-1ir0]\n', 'T', 0, 0)

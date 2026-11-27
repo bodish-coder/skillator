@@ -378,7 +378,7 @@ async function confirmSession($: EngineInterface, t: Ticket, d: AssignDraft) {
   await closeForm($)
 }
 
-// The Decided button: ticket-meta decided <ID> ([?] -> [ ], the [decide:] tag kept).
+// The Decided button: ticket-meta decided <ID> ([?] -> [ ], the [decide:] tag cleared).
 export async function runDecided($: EngineInterface, id: string) {
   const t = await findTicket($, id)
   const r = await runCall($, 'meta-decided', [id])

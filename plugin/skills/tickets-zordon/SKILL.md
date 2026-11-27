@@ -207,8 +207,9 @@ closed, deferred or in someone else's progress:
   `[owner: ..]` and the box becomes `[ ]`, from any state.
 - **"assign it for a decision to @asha"**, "Asha decides F12" → `decide`: sets or
   replaces `[decide: ..]` and the box becomes `[?]`, from any state.
-- **"decided"**, "Asha decided F12" → `decided`: `[?]` back to `[ ]`; the
-  `[decide: ..]` tag stays as the record. It refuses a ticket that is not `[?]`.
+- **"decided"**, "Asha decided F12" → `decided`: `[?]` back to `[ ]` and the
+  `[decide: ..]` tag cleared, so it leaves the decider's "Mine to decide" (which
+  lists only `[?]` tickets). It refuses a ticket that is not `[?]`.
 - The same handle again for the same kind, with the box already `[ ]` (assign)
   or `[?]` (decide), changes nothing and says `no change`; any other box still
   moves.

@@ -11,7 +11,7 @@
 #   ticket-meta.sh assign-tester <ID> @handle [tester: @handle], box kept
 #   ticket-meta.sh assign-session <ID> <code>|-  F178: [session: <code>] (a F109 session code), box kept; - clears
 #   ticket-meta.sh decide <ID> @handle  [decide: @handle] (must decide), box -> [?]
-#   ticket-meta.sh decided <ID>         [?] -> [ ]; the [decide:] tag stays
+#   ticket-meta.sh decided <ID>         [?] -> [ ]; the [decide:] tag is cleared
 #   ticket-meta.sh testing <ID> <test>  box -> [%] testing, the line says ` (testing: <test>)`
 #   ticket-meta.sh tested <ID> pass|fail  [%] -> [x] (pass) or [~] (fail); the note stays
 #   ticket-meta.sh verify <ID> pass|fail|owner <evidence>  PASS -> [v]; FAIL or OWNER -> [%], with a dated verdict
@@ -75,7 +75,7 @@ MAIN=''
 LOCKF=''
 LOCK_ME=''
 # Guarded options never come from the inherited environment.
-GUARDED_STATUS='' EXPECT_ROW='' DROP_WAIT='' KEEP_SESSION='' SET_SESSION='' DROP_SESSION=''
+GUARDED_STATUS='' EXPECT_ROW='' DROP_WAIT='' KEEP_SESSION='' SET_SESSION='' DROP_SESSION='' DROP_DECIDE=''
 FILL_APP='' SET_SRC=''
 
 die() { board_unlock; echo "ticket-meta: $*" >&2; exit 1; }
@@ -542,6 +542,7 @@ edit_line() {
         if (ENVIRON["SET_OWNER"] != "") line = settag(line, "owner", ENVIRON["SET_OWNER"])
         if (ENVIRON["SET_SESSION"] != "") line = settag(line, "session", ENVIRON["SET_SESSION"])
         if (ENVIRON["DROP_SESSION"] != "" && find(line, "session")) line = substr(line, 1, RSTART - 1) substr(line, RSTART + RLENGTH)
+        if (ENVIRON["DROP_DECIDE"] != "" && find(line, "decide")) line = substr(line, 1, RSTART - 1) substr(line, RSTART + RLENGTH)
         if (ENVIRON["WORK_HISTORY"] != "") line = settag(line, "work-history", ENVIRON["WORK_HISTORY"])
         if (ENVIRON["WORKING"] != "") line = settag(line, "working", ENVIRON["WORKING"])
         if (ENVIRON["SET_TESTER"] != "") line = settag(line, "tester", ENVIRON["SET_TESTER"])
@@ -827,11 +828,11 @@ cmd_decide() {
   SET_MARK='?' SET_APP='' SET_DECIDE=$HANDLE SET_OWNER='' SET_BY='' SAME_KEY=decide SAME_VAL=$HANDLE NEED_MARK='' edit_line
 }
 
-# The decision is made: [?] -> [ ]; the [decide:] tag stays as the record.
+# The decision is made: [?] -> [ ] and the [decide:] tag cleared (B41).
 cmd_decided() {
   [ $# -eq 1 ] || die "usage: decided <ID>"
   norm_id "$1"
-  SET_MARK=' ' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' SAME_KEY='' NEED_MARK='?' edit_line
+  SET_MARK=' ' SET_APP='' SET_DECIDE='' DROP_DECIDE=1 SET_OWNER='' SET_BY='' SAME_KEY='' NEED_MARK='?' edit_line
 }
 
 # F62: built, waiting on a test: the box [%] and ` (testing: <test>)` on the
@@ -1484,7 +1485,7 @@ selftest() {
   eq "assign from [?]" "$(run assign F20 @vidul)" "- [ ] F20 $D Done thing [decide: @asha] [owner: @vidul] (@cc-1)"
   eq "assign from [-]" "$(run assign F23 @vidul)" "- [ ] F23 $D Dropped thing [owner: @vidul]"
   eq "assign from [x]" "$(run assign F26 @asha)" "- [ ] F26 $D Shipped [owner: @asha] (@cc-3)"
-  eq "decided" "$(run decided F24)" "- [ ] F24 $D Waiting [decide: @asha]"
+  eq "decided" "$(run decided F24)" "- [ ] F24 $D Waiting"
   # the same handle with the box not yet the target still moves the box (by its owner, F80 review)
   eq "same owner from [x]" "$(SKILLATOR_ME=@asha sh "$self" assign F27 @asha 2>&1)" "- [ ] F27 $D Kept [owner: @asha]"
   eq "same decider from [ ]" "$(run decide F28 @asha)" "- [?] F28 $D Decided before [decide: @asha]"
@@ -1520,7 +1521,7 @@ selftest() {
     printf -- '- [?] F21 %s Later thing [decide: @asha] (deferred: q4) (@cc-2)\n' "$D"
     printf -- '- [?] F22 %s Open thing [decide: @vidul]\n' "$D"
     printf -- '- [ ] F23 %s Dropped thing [owner: @vidul]\n' "$D"
-    printf -- '- [ ] F24 %s Waiting [decide: @asha]\n' "$D"
+    printf -- '- [ ] F24 %s Waiting\n' "$D"
     printf -- '- [ ] F25 %s Both [app: web] [decide: @asha] [owner: @vidul] [by: @vidul]\n' "$D"
     printf -- '- [ ] F26 %s Shipped [owner: @asha] (@cc-3)\n' "$D"
     printf -- '- [ ] F27 %s Kept [owner: @asha]\n' "$D"
@@ -2056,7 +2057,7 @@ selftest() {
     sh "$self" decide F2 @asha > /dev/null 2>&1 || { echo "FAIL: $nl decide failed"; fail=1; }
     sh "$self" decided F3 > /dev/null 2>&1 || { echo "FAIL: $nl decided failed"; fail=1; }
     sh "$self" tag F4 > /dev/null 2>&1 || { echo "FAIL: $nl tag failed"; fail=1; }
-    printf -- "# TICKETS$r\n$r\n- [ ] F1 %s One [owner: @vidul]$r\n- [?] F2 %s Two [decide: @asha]$r\n- [ ] F3 %s Three [decide: @asha]$r\n- [ ] F4 %s Four [by: @vidul]$r\n" \
+    printf -- "# TICKETS$r\n$r\n- [ ] F1 %s One [owner: @vidul]$r\n- [?] F2 %s Two [decide: @asha]$r\n- [ ] F3 %s Three$r\n- [ ] F4 %s Four [by: @vidul]$r\n" \
       "$D" "$D" "$D" "$D" > "$T/want-$nl.md"
     cmp -s TICKETS.md "$T/want-$nl.md" || { echo "FAIL: $nl board line endings or bytes"; od -c TICKETS.md | head -n 4; fail=1; }
   done
