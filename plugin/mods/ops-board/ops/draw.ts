@@ -25,7 +25,7 @@ import { ticketsOf } from '../hooks/lib/team'
 import { FIVE_HOLD_PCT, resetsText, usageColor, WEEKLY_STOP_PCT } from '../hooks/lib/healthlines'
 import { runLines as runTabLines } from './runtab'
 import { explorerBody } from './explorer'
-import { DASHBOARD_WIDE, dashboardPanels } from '../hooks/lib/dashboard'
+import { DASHBOARD_WIDE, dashboardPanels, QUICK_WORDS } from '../hooks/lib/dashboard'
 import { hasValue, orderedRules, ruleMatchLine, ruleOptions, ruleReads, ruleSummary } from '../hooks/lib/rules'
 
 export type Seg = BaseSeg & { action?: PointerAction }
@@ -303,7 +303,7 @@ function keysOf(s: State, m: Model): Seg[][] {
       ...(has && !s.rules!.invalid.length ? [h('p apply rules', 'p')] : []),
       ...(usable ? [h('n new rule', 'n')] : []), h('a Auto-assign', 'a'), h('tab switch', 'tab'), quit]
   }
-  if (s.tab === 'dashboard') return [h('tab switch', 'tab'), quit]
+  if (s.tab === 'dashboard') return [[dim('copy')], ...QUICK_WORDS.map(([word, k]) => h(`${k} ${word}`, k)), h('tab switch', 'tab'), quit]
   if (s.tab === 'messages') return [move, h('enter open', 'return'), h('c connect', 'c'), h('d disconnect', 'd'), h('y copy URL', 'y'), h('m mark all read', 'm'), h('s setup', 's'), quit]
   if (s.tab === 'explorer' && s.explorer.action) {
     const a = s.explorer.action

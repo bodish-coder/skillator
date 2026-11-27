@@ -609,6 +609,41 @@ test('/ops dashboard shows ticket, health, missing relay facts and unread summar
   }
 })
 
+const QUICK = ['next', 'continue', 'resume', 'go', 'status']
+test('F206: the Dashboard quick row sends each word to the session exactly as typed', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  const submits: string[] = []
+  on('prompt.submit', ($, e) => { submits.push(e.text); return { text: e.text } })
+  on('ui.toast', () => ({ value: undefined }))
+  await start($, clock)
+  await $.command.run({ command: 'ops', args: 'dashboard', ...RUN })
+  await clock.settle()
+  const ui = await mountPane($, 'terminal')
+  for (const word of QUICK) await ui.press({ key: 'quick:' + word })
+  expect(submits).toEqual(QUICK)
+  await ui.unmount()
+})
+
+test('F206: the Dashboard quick row wraps and fits 40 columns', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  await start($, clock)
+  await $.command.run({ command: 'ops', args: 'dashboard', ...RUN })
+  await clock.settle()
+  const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: 40 })
+  const row = (await ui.find({ key: 'quick' }))!
+  expect(row.props.flexWrap).toBe('wrap')
+  let used = 0, rows = 1
+  for (const child of row.children) {
+    const width = labelOf(child).length + ((child as Drawn).props?.hotkey ? 3 : 0)
+    expect(width).toBeLessThanOrEqual(40)
+    const gap = used ? Number(row.props.gap ?? 0) : 0
+    if (used && used + gap + width > 40) { rows++; used = width } else used += gap + width
+  }
+  expect(rows).toBeLessThanOrEqual(2)
+  for (const word of QUICK) expect((await ui.find({ key: 'quick:' + word }))?.text).toBe(word)
+  await ui.unmount()
+})
+
 test('F162: Tickets tab bottom keys row displays the session owner handle', WITH, async ($, on) => {
   const [, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
   await start($, clock)

@@ -8,6 +8,8 @@ Needs node 22.18 or newer.
 Open **Dashboard** for ticket counts, machine and quota health, workflow activity,
 and unread messages. In the standalone board, press `1` or launch with
 `ops --tab dashboard`. In Claude Code, use `/ops dashboard`.
+In the Claude Code pane its quick row sends `next` (n), `continue` (c), `resume` (u),
+`go` (g) or `status` (s) to the session as if typed; the standalone board copies the word.
 Explorer shows a team handle beside each matching commit author. It matches
 Git's mailmap-aware author email against `.skillator/team.md` and shows the
 Git author name when there's no match.
