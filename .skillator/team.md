@@ -7,5 +7,7 @@ lead: @sabre
   name: shamsher
 - @sabre: founder@bodish.in
   name: sabre
-
-
+- @pragya: pragya.singh@ikran.in
+  name: Pragya Singh
+- @megha: megha.umale@ikran.in
+  name: Megha Umale
