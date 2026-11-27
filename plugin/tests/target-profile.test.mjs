@@ -4,7 +4,7 @@
 // full selftests.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, lstatSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -206,6 +206,80 @@ test('sh: a target profile whose skills dir is the source, reached through a lin
     { env, encoding: 'utf8', timeout: 120000, windowsHide: true });
   assert.equal(r.status, 2, r.stdout + r.stderr);
   assert.match(r.stderr, /overlaps the installer source/);
+});
+
+// B38: the guard runs both ways - a source checkout inside the selected skills dir is refused
+// too. A minimal copy of the installer under <profile>/skills; --dry-run, so nothing is written.
+for (const [port, skip] of ports) test(`${port}: an installer source inside the selected skills dir exits 2`, { skip }, t => {
+  const { T, env } = home(t);
+  const prof = profile(T, 'prof');
+  const clone = profile(prof, 'skills', 'clone');
+  for (const f of ['install.ps1', 'install.sh', '.claude-plugin/plugin.json', 'skills/tickets-zordon/SKILL.md']) {
+    mkdirSync(join(clone, f, '..'), { recursive: true });
+    writeFileSync(join(clone, f), readFileSync(join(plugin, f)));
+  }
+  const r = port === 'ps'
+    ? spawnSync(ps, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(clone, 'install.ps1'), '-DryRun', '-Force', '-TargetHost', 'pi', '-TargetProfile', prof],
+      { env, encoding: 'utf8', timeout: 120000, windowsHide: true })
+    : spawnSync('sh', [fwd(join(clone, 'install.sh')), '--dry-run', '--force', '--target-host', 'pi', '--target-profile', fwd(prof)],
+      { env, encoding: 'utf8', timeout: 120000, windowsHide: true });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /overlaps the installer source/);
+});
+
+// A254: pwsh on Linux/macOS takes a POSIX target profile; Windows keeps the drive/UNC rule.
+// The check line itself, run with $posixHost either way (no pwsh-on-Linux needed).
+test('ps: a POSIX target profile counts as absolute only off Windows', { skip: !ps && 'no powershell' }, () => {
+  const line = readFileSync(join(plugin, 'install.ps1'), 'utf8').match(/^\s*\$absolute = .*$/m)?.[0];
+  assert.ok(line, 'install.ps1: no $absolute check');
+  const absolute = (posix, p) => spawnSync(ps, ['-NoProfile', '-Command', `$posixHost = $${posix}; $TargetProfile = '${p}'\n${line}\nif ($absolute) { exit 0 } else { exit 1 }`],
+    { encoding: 'utf8', timeout: 30000, windowsHide: true }).status === 0;
+  assert.ok(absolute(true, '/home/me/.pi/agent'), 'a POSIX path off Windows');
+  assert.ok(!absolute(true, 'home/me'), 'a relative path off Windows');
+  assert.ok(!absolute(false, '/home/me/.pi/agent'), 'a POSIX path on Windows');
+  assert.ok(absolute(false, String.raw`C:\Users\me\.pi`) && absolute(false, String.raw`\\server\share\p`), 'a drive or UNC path on Windows');
+});
+
+// A254: a plain run over a dest already recorded at this version skips the per-skill hashing -
+// a kept copy edited since is not compared, so the record stays
+for (const [port, skip] of ports) test(`${port}: a plain run over a dest recorded at this version skips the comparison`, { skip }, t => {
+  const { T, env } = home(t);
+  const codex = profile(T, '.codex');
+  const skills = join(codex, 'skills');
+  ok(install[port](env, 'codex', codex));
+  writeFileSync(join(skills, 'tickets-zordon/SKILL.md'), readFileSync(join(skills, 'tickets-zordon/SKILL.md'), 'utf8') + '\nedited\n');
+  ok(install[port](env, 'codex', codex, true));
+  assert.equal(readFileSync(join(skills, '.skillator-version'), 'utf8'), `${version}\n`, `${port}: the record was dropped, so the copies were hashed`);
+  assert.match(readFileSync(join(skills, 'tickets-zordon/SKILL.md'), 'utf8'), /edited/, `${port}: a plain run replaced a kept copy`);
+});
+
+// B37: a full -Force install keeps a skill dir linked to another copy, as install.sh does -
+// never deleting it (or recursing through it into the copy it points at)
+test('ps: a full -Force install keeps a skill dir linked to another copy', { skip: !ps && 'no powershell' }, t => {
+  const { T, env } = home(t);
+  const shared = profile(T, 'shared', 'tickets-zordon');
+  writeFileSync(join(shared, 'SKILL.md'), 'shared copy\n');
+  writeFileSync(join(shared, 'notes.txt'), 'the user keeps notes here\n');
+  const link = join(profile(T, '.codex', 'skills'), 'tickets-zordon');
+  symlinkSync(shared, link, 'junction');
+  const r = spawnSync(ps, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(plugin, 'install.ps1'), '-Force', '-Profile', join(T, 'profile.ps1')],
+    { env: { ...env, LOCALAPPDATA: join(T, 'lad'), SKILLATOR_MUSE: join(T, 'no-muse') }, encoding: 'utf8', timeout: 600000, windowsHide: true });
+  ok(r);
+  assert.equal(readFileSync(join(shared, 'SKILL.md'), 'utf8'), 'shared copy\n', 'the link target was changed');
+  assert.equal(readFileSync(join(shared, 'notes.txt'), 'utf8'), 'the user keeps notes here\n', 'a file in the link target was deleted');
+  assert.ok(lstatSync(link).isSymbolicLink(), 'the link was replaced');
+});
+
+// B37 review: a dangling link is no live copy - it is removed (by itself) and the skill reinstalled
+test('ps: a dangling skill link is replaced by the shipped skill', { skip: !ps && 'no powershell' }, t => {
+  const { T, env } = home(t);
+  const gone = profile(T, 'gone', 'tickets-zordon');
+  const link = join(profile(T, '.codex', 'skills'), 'tickets-zordon');
+  symlinkSync(gone, link, 'junction');
+  rmSync(join(T, 'gone'), { recursive: true });
+  ok(install.ps(env, 'codex', join(T, '.codex')));
+  assert.ok(!lstatSync(link).isSymbolicLink(), 'the dangling link was kept');
+  assert.equal(readFileSync(join(link, 'SKILL.md'), 'utf8'), readFileSync(join(plugin, 'skills/tickets-zordon/SKILL.md'), 'utf8'));
 });
 
 // F204 review 3, item 5: /c is a drive root only under MSYS (cygpath present) - a Linux /p is a
