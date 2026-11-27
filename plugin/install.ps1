@@ -48,7 +48,10 @@ function Test-FsRoot([string]$path) {
 # as install.sh: a bad target is one line on stderr and exit 2, not a thrown error
 function Stop-Target([string]$message) { [Console]::Error.WriteLine($message); exit 2 }
 if ($TargetHost) {
-  if ($TargetProfile -notmatch '^(?:[A-Za-z]:[\\/]|[\\/]{2})') { Stop-Target 'TargetProfile must be an existing, absolute profile directory' }
+  # A254: a drive or UNC path on Windows; pwsh on Linux/macOS takes a POSIX one
+  $posixHost = $PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows
+  $absolute = if ($posixHost) { [IO.Path]::IsPathRooted($TargetProfile) } else { $TargetProfile -match '^(?:[A-Za-z]:[\\/]|[\\/]{2})' }
+  if (-not $absolute) { Stop-Target 'TargetProfile must be an existing, absolute profile directory' }
   if (Test-FsRoot $TargetProfile) { Stop-Target 'TargetProfile must be a profile directory below the filesystem root' }
   if (-not (Test-Path -LiteralPath $TargetProfile -PathType Container)) { Stop-Target 'TargetProfile must be an existing, absolute profile directory' }
   $TargetProfile = (Get-Item -LiteralPath $TargetProfile -Force).FullName
@@ -59,7 +62,6 @@ if ($TargetHost) {
 $src = Join-Path $PSScriptRoot 'skills'
 $selfPath = $PSCommandPath
 $pluginVersion = try { "$(([IO.File]::ReadAllText((Join-Path $PSScriptRoot '.claude-plugin\plugin.json')) | ConvertFrom-Json).version)".Trim() } catch { '' }
-$sharedLinks = @{}   # scoped dest -> the skills in it linked to another copy (kept, never followed)
 
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { "$HOME\.codex" }
 # F67: opencode's config dir - $env:XDG_CONFIG_HOME\opencode when that is set, else
@@ -1536,7 +1538,10 @@ if ($TargetHost) {
   $dest = Join-Path $TargetProfile 'skills'
   # both sides links resolved: an installer reached through a junction still sees its own source
   $destReal = Resolve-Real $dest; $srcReal = Resolve-Real $src
-  if ($destReal -eq $srcReal -or $destReal.StartsWith($srcReal + '\', [StringComparison]::OrdinalIgnoreCase)) {
+  # B38: either way round - a source under the dest would be removed from under itself mid-install
+  $sep = [IO.Path]::DirectorySeparatorChar   # A254: '/' under pwsh on Linux/macOS
+  if ($destReal -eq $srcReal -or $destReal.StartsWith($srcReal + $sep, [StringComparison]::OrdinalIgnoreCase) -or
+      $srcReal.StartsWith($destReal + $sep, [StringComparison]::OrdinalIgnoreCase)) {
     Stop-Target 'The selected skills directory overlaps the installer source'
   }
   $scopedDests = @($dest)
@@ -1552,20 +1557,8 @@ if ($TargetHost) {
   $scopedPaths = @()
   foreach ($sd in $scopedDests) {
     $scopedPaths += $sd
-    $sharedLinks[$sd] = @()
     if (-not (Test-Path -LiteralPath $sd -PathType Container)) { continue }
     $scopedPaths += @($manifest,'.skillator-source','.skillator-version','.ignore','PLATFORMS.md','PRACTICE.md','WORKFLOW.md','practice','references','ops-board' | ForEach-Object { Join-Path $sd $_ })
-    foreach ($skill in $skills) {
-      $skillPath = Join-Path $sd $skill.Name
-      $item = Get-Item -LiteralPath $skillPath -Force -ErrorAction SilentlyContinue
-      # as install.sh: a live link is left alone (never replaced or followed), a dangling one reinstalled
-      if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -and
-          ($item.LinkType -ne 'SymbolicLink' -or "$($item.Target)" -ne $skill.FullName) -and
-          (Test-Path -LiteralPath $skillPath -PathType Container)) {
-        Write-Host "        kept ${skillPath}: a link to another copy" -ForegroundColor DarkGray
-        $sharedLinks[$sd] += $skill.Name
-      }
-    }
   }
   if ($TargetHost -eq 'pi' -and (Test-Path -LiteralPath "$TargetProfile\extensions")) {
     $scopedPaths += "$TargetProfile\extensions\skillator-ops.ts", "$TargetProfile\extensions\skillator-shifu.ts"
@@ -1605,7 +1598,15 @@ foreach ($cli in $targets.Keys) {
     $linked = @(Get-ChildItem -LiteralPath $dest -Directory -ErrorAction SilentlyContinue |
                 Where-Object { $_.LinkType -eq 'SymbolicLink' -and "$($_.Target)" -like "$src*" } |
                 ForEach-Object { $_.Name })
-    $kept = if ($sharedLinks.ContainsKey($dest)) { @($sharedLinks[$dest]) } else { @() }
+    # B37, as install.sh: any other live link is left alone (never replaced or followed), a dangling one reinstalled
+    $kept = @($skills | Where-Object {
+      $p = Join-Path $dest $_.Name
+      $i = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+      # live: enumerated through the link (Test-Path -PathType Container is true for a dangling one)
+      $_.Name -notin $linked -and $i -and $i.LinkType -in 'SymbolicLink', 'Junction' -and
+        $(try { [void][IO.Directory]::GetFileSystemEntries($p); $true } catch { $false })
+    } | ForEach-Object { $_.Name })
+    foreach ($k in $kept) { Write-Host "        kept $(Join-Path $dest $k): a link to another copy" -ForegroundColor DarkGray }
     $linked += $kept
     # F204: an older run's command wrapper in a shipped skill's place is reinstalled, -Force or not
     $missing = @($skills | Where-Object {
@@ -1616,12 +1617,15 @@ foreach ($cli in $targets.Keys) {
     # F204: true while every shipped skill here is written, refreshed, the same as this source or a
     # live link to it - only then does .skillator-version claim this source's version
     $current = $kept.Count -eq 0
+    # A254: a dest already recorded at this version skips the hashing below (an unmarked copy is still compared)
+    $record = Join-Path $dest '.skillator-version'
+    $fresh = $pluginVersion -and $(try { [IO.File]::ReadAllText($record).Trim() -ceq $pluginVersion } catch { $false })
     foreach ($s in $(if ($DryRun) { @() } else { $skills })) {
       $t = Join-Path $dest $s.Name
       if ($s.Name -in $linked -or $missing -contains $s) { continue }
       $unmarked = -not (Test-Path -LiteralPath (Join-Path $t $owned))
       # compared while the record still holds, and always for an unmarked copy (adoption)
-      if (-not $current -and -not $unmarked) { continue }
+      if ((-not $current -or $fresh) -and -not $unmarked) { continue }
       if (Test-SameContents $t $s.FullName) {
         # adopt an unmarked copy that is exactly this repo's current skill
         if ($unmarked -and (Test-Path -LiteralPath (Join-Path $t 'SKILL.md') -PathType Leaf)) { Write-Owned $t $s.FullName }
@@ -1629,7 +1633,7 @@ foreach ($cli in $targets.Keys) {
     }
 
     if ($missing.Count -eq 0) {
-      $how = if ($linked.Count -eq $skills.Count) { "symlinked to this repo" } else { "already installed" }
+      $how = if ($linked.Count - $kept.Count -eq $skills.Count) { "symlinked to this repo" } else { "already installed" }
       Write-Host "ok    $cli (all $($skills.Count) skills $how) -> $dest" -ForegroundColor DarkGray
     } else {
       Write-Host "$cli -> $dest" -ForegroundColor Cyan
@@ -1637,7 +1641,10 @@ foreach ($cli in $targets.Keys) {
         if ($DryRun) { Write-Host "        would install $($s.Name)"; continue }
         New-Item -ItemType Directory -Force $dest | Out-Null
         $t = Join-Path $dest $s.Name
-        if (Test-Path -LiteralPath $t) { Remove-Item -LiteralPath $t -Recurse -Force }   # handles reparse points
+        $ti = Get-Item -LiteralPath $t -Force -ErrorAction SilentlyContinue
+        # B37: a (dangling) link goes by itself - PS 5.1's Remove-Item -Recurse can follow it into its target
+        if ($ti -and ($ti.Attributes -band [IO.FileAttributes]::ReparsePoint)) { $ti.Delete() }
+        elseif ($ti) { Remove-Item -LiteralPath $t -Recurse -Force }
         if ($Link) {
           try {
             New-Item -ItemType SymbolicLink -Path $t -Target $s.FullName -ErrorAction Stop | Out-Null
