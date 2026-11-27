@@ -354,9 +354,7 @@ function rulesCommand(root, args) {
     if (rest.length !== 1) throw new Error('Rules remove takes one rule number.');
     const { text, revision } = editRules(path, rev, ({ rules, lines }) => {
       const rule = pick(rules, rest[0]);
-      if (rule.index + 1 < lines.length) lines.splice(rule.index, 2);
-      else if (rule.index > 0) lines.splice(rule.index - 1, 2);
-      else lines[0] = '';
+      lines.splice(rule.index, 2);
       return { text: ruleText(rule) };
     });
     return console.log(`${heading('Rule removed')}\n${text}\nRules revision: ${revision}`);

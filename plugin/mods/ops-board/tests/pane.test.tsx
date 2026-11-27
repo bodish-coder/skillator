@@ -274,6 +274,16 @@ test('F111: selected full-width bar and owner from 56 columns', WITH, async ($, 
     await ui.unmount()
   }
 })
+test('A251: a P-chipped row keeps its owner at 56 columns', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': '- [~] F3 — cart drawer [owner: @vidul] [priority: P1]\n' })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: 56 })
+  if (!(await ui.find({ key: 'row:F3' }))) await ui.press({ key: 'head:~' })
+  const row = (await ui.find({ key: 'row:F3' }))!
+  expect(row.text.length).toBe(56)
+  expect(row.text.endsWith('@vidul')).toBe(true)
+  await ui.unmount()
+})
 for (const cols of [40, 60, 80, 120]) {
   for (const ascii of [false, true]) {
     test(`F111: long owner stays within ${cols} columns, ASCII ${ascii}, selected and unselected`, WITH, async ($, on) => {

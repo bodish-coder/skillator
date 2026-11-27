@@ -860,6 +860,7 @@ function prioritiesBody(s: State, room: number): Seg[][] {
   else if (!shown.length && !rules.invalid.length) status.push([dim('No priority rules yet. Press n to add one, e.g. P1 for bugs in an app.')])
   if (rules?.invalid.length && !rules.error) {
     status.push(...rules.invalid.slice(0, 3).map(text => [{ text, color: 'warning' as Color }]))
+    if (rules.invalid.length > 3) status.push([{ text: `+${rules.invalid.length - 3} more`, color: 'warning' }])
     status.push([dim('Fix these in .skillator/priority-rules.md; rules cannot be applied until then.')])
   }
   const tail = status.slice(0, Math.max(0, room - 1))

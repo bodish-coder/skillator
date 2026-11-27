@@ -163,7 +163,8 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
   const pushTicketEntry = (t: Model['rows'][number], itemKey: string, nested: boolean) => {
     const isSel = itemKey === m.selected
     const priorityWidth = t.priority ? 3 : 0   // F201: 'P1 ' in place of the 2-cell rail
-    const row = rowText(t, v.cols - (t.priority && !v.ascii ? priorityWidth - 2 : priorityWidth), glyphs, !!v.ascii, nested, isSel ? 3 : 0)
+    // A251: the chip goes in the prefix so rowText's 56-column owner cut-off sees the pane width
+    const row = rowText(t, v.cols, glyphs, !!v.ascii, nested, (isSel ? 3 : 0) + (t.priority && !v.ascii ? priorityWidth - 2 : priorityWidth))
     const body = v.ascii && isSel ? '> ' + row.text.slice(2) : row.text
     entries.push(
       <Button key={'row:' + itemKey} hotkey={isSel ? 'o' : undefined} plain onPress={() => {
