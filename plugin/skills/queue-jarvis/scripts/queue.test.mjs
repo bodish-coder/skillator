@@ -235,6 +235,15 @@ test('rules add, edit and remove change one line and keep the rest', t => {
   assert.equal(existsSync(`${rulesFile(cwd)}.lock`), false);
 });
 
+test('rules remove of an unterminated last line keeps the previous line end', t => {
+  const { cwd } = fixture(t);
+  assert.equal(run(cwd, 'rules', 'add', 'P1', 'type=bug').status, 0);
+  writeFileSync(rulesFile(cwd), readFileSync(rulesFile(cwd), 'utf8').replace(/\n/g, '\r\n') + '- P2: severity=high');
+  const removed = run(cwd, 'rules', 'remove', '2');
+  assert.equal(removed.status, 0, removed.stderr);
+  assert.ok(readFileSync(rulesFile(cwd), 'utf8').endsWith('\r\n- P1: type=bug\r\n'));
+});
+
 test('rules edits refuse a stale revision, a duplicate and the lock', t => {
   const { cwd } = ruled(t);
   const original = readFileSync(rulesFile(cwd), 'utf8');

@@ -42,6 +42,10 @@ test('F203: entering Priorities loads the rules; the cursor moves over them', ()
   const invalid = settle(runOf(entered).then(ok(LIST.replace('Rules revision', 'Invalid line 9: Unknown field colour. | - P2: colour=red\nRules revision')))(entered.state)).state
   assert.match(text(invalid), /Invalid line 9: Unknown field colour/)
   assert.equal(runOf(reduce(invalid, key('p'))), undefined)
+  const five = [5, 6, 7, 8, 9].map(n => `Invalid line ${n}: Unknown field colour. | - P2: colour=red`).join('\n')
+  const many = text(settle(runOf(entered).then(ok(LIST.replace('Rules revision', `${five}\nRules revision`)))(entered.state)).state)
+  assert.match(many, /Invalid line 7:/); assert.doesNotMatch(many, /Invalid line 8:/)
+  assert.match(many, /\+2 more/)
   assert.deepEqual(runOf(reduce(loaded, key('r'))).args, ['--current-worktree', 'rules', 'list'])
   assert.ok(press(loaded, 'a').autoPriority?.editing)      // Auto-assign still opens
   assert.equal(reduce(loaded, key('2')).state.tab, 'tickets')
