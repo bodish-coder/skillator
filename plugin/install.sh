@@ -944,7 +944,8 @@ if [ -n "$selftest" ]; then
   grep -qF "mode: 'sequential'," "$_mw" || { echo "FAIL: marathon-workflow.js PLAN has no mode line (F112)"; exit 1; }
   grep -qF "PLAN.mode must be 'sequential', 'parallel' or 'parallel <N>'" "$_mw" || { echo "FAIL: marathon-workflow.js does not check PLAN.mode (F112)"; exit 1; }
   if command -v node >/dev/null 2>&1; then
-    awk '{sub(/^return /, "export default "); print} /code: .XXXX., ticket: .F0./ {print "      { stage: 1, code: \047YYYY\047, ticket: \047F1\047, files: [\047b\047], done: \047d\047, prompt: \047p\047 },"}' "$_mw" > "$T/mw.mjs"
+    # the Workflow tool runs the script as an async function body (nested returns are legal) - wrap it the same way
+    awk 'BEGIN {print "await (async () => {"} {sub(/^export /, ""); print} /code: .XXXX., ticket: .F0./ {print "      { stage: 1, code: \047YYYY\047, ticket: \047F1\047, files: [\047b\047], done: \047d\047, prompt: \047p\047 },"} END {print "})()"}' "$_mw" > "$T/mw.mjs"
     _o=$(node --input-type=module -e "import {pathToFileURL} from 'node:url'; globalThis.args={phase:1}; await import(pathToFileURL(process.argv[1]).href)" -- "$T/mw.mjs" 2>&1) || :
     printf '%s' "$_o" | grep -qF 'PLAN.mode sequential needs one ticket per phase - phase 1 holds 2' || { echo "FAIL: marathon-workflow.js runs a two-ticket phase under mode sequential (F112): $_o"; exit 1; }
   fi

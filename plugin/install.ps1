@@ -1015,7 +1015,8 @@ function Invoke-SelfTest([string]$T) {
   if (-not $mw.Contains("PLAN.mode must be 'sequential', 'parallel' or 'parallel <N>'")) { return 'marathon-workflow.js does not check PLAN.mode (F112)' }
   if (Get-Command node -ErrorAction SilentlyContinue) {
     $mwt = Join-Path $T 'mw.mjs'
-    [IO.File]::WriteAllText($mwt, (($mw -replace '(?m)^return ', 'export default ') -replace "(?m)^(      \{ stage: 0, code: 'XXXX', ticket: 'F0'.*)$", "`$1`n      { stage: 1, code: 'YYYY', ticket: 'F1', files: ['b'], done: 'd', prompt: 'p' },"))
+    # the Workflow tool runs the script as an async function body (nested returns are legal) - wrap it the same way
+    [IO.File]::WriteAllText($mwt, "await (async () => {`n" + (($mw -replace '(?m)^export ', '') -replace "(?m)^(      \{ stage: 0, code: 'XXXX', ticket: 'F0'.*)$", "`$1`n      { stage: 1, code: 'YYYY', ticket: 'F1', files: ['b'], done: 'd', prompt: 'p' },") + "`n})()")
     $o = & { $ErrorActionPreference = 'Continue'; & node --input-type=module -e "import {pathToFileURL} from 'node:url'; globalThis.args={phase:1}; await import(pathToFileURL(process.argv[1]).href)" -- $mwt 2>&1 | Out-String }
     if ($o -notmatch [regex]::Escape('PLAN.mode sequential needs one ticket per phase - phase 1 holds 2')) { return "marathon-workflow.js runs a two-ticket phase under mode sequential (F112): $o" }
   }
