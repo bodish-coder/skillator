@@ -1,10 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cells, frame, screen } from '../draw'
+import { cells, frame, ruleEditBody, rulesPreviewBody, screen } from '../draw'
 import { initial, onBoard, point, reduce, settle } from '../state'
 import type { State } from '../state'
 import { makeEngine } from '../engine'
 import { parseBoard } from '../../hooks/lib/board'
+import { ruleMatchLine } from '../../hooks/lib/rules'
 
 const REV = '5'.repeat(64), TOKEN = '7'.repeat(64)
 const BOARD = '- [ ] B1 — First [app: ops-board] [owner: @sher]\n- [ ] F2 — Second [app: web] [priority: P3]\n- [x] B3 — Closed [app: old]\n'
@@ -42,6 +43,10 @@ test('F203: entering Priorities loads the rules; the cursor moves over them', ()
   const invalid = settle(runOf(entered).then(ok(LIST.replace('Rules revision', 'Invalid line 9: Unknown field colour. | - P2: colour=red\nRules revision')))(entered.state)).state
   assert.match(text(invalid), /Invalid line 9: Unknown field colour/)
   assert.equal(runOf(reduce(invalid, key('p'))), undefined)
+  const five = [5, 6, 7, 8, 9].map(n => `Invalid line ${n}: Unknown field colour. | - P2: colour=red`).join('\n')
+  const many = text(settle(runOf(entered).then(ok(LIST.replace('Rules revision', `${five}\nRules revision`)))(entered.state)).state)
+  assert.match(many, /Invalid line 7:/); assert.doesNotMatch(many, /Invalid line 8:/)
+  assert.match(many, /\+2 more/)
   assert.deepEqual(runOf(reduce(loaded, key('r'))).args, ['--current-worktree', 'rules', 'list'])
   assert.ok(press(loaded, 'a').autoPriority?.editing)      // Auto-assign still opens
   assert.equal(reduce(loaded, key('2')).state.tab, 'tickets')
@@ -224,4 +229,77 @@ test('F203: after a save the cursor lands on the saved rule; after a delete it s
   const deleted = settle(runOf(deleting).then(ok('Queue Jarvis | Rule removed\nRules revision: ' + REV))(deleting.state))
   const afterDelete = settle(runOf(deleted).then(ok(`Queue Jarvis | Priority rules\n2 rule(s).\n1  P1: type=bug app=ops-board,web\n2  P1: severity=critical\nRules revision: ${REV}\n`))(deleted.state)).state
   assert.equal(afterDelete.rules?.sel, 1)
+})
+
+// A253: the box rows joined, so a wrapped line reads as one
+const flat = (x: State) => text(x).split('\n').map(l => l.replace(/^\s*│/, '').replace(/│\s*$/, '').trim()).join(' ')
+
+test('A253: the rule form reads as a sentence with a live count of the tickets it matches', () => {
+  const blank = press(loaded, 'n')
+  assert.match(flat(blank), /Reads as: P1 - choose at least one field/)
+  assert.doesNotMatch(flat(blank), /Matches/)
+  const two: State = { ...loaded, ruleEdit: { n: null, level: 'P2', values: { app: ['ops-board', 'web'] }, row: 0 } }
+  assert.match(flat(two), /Reads as: P2 when app is ops-board or web/)
+  assert.match(flat(two), /Matches 2 tickets now: B1 · F2/)
+  const one: State = { ...two, ruleEdit: { ...two.ruleEdit!, values: { app: ['ops-board', 'web', 'old'], type: ['bug'] } } }
+  assert.match(flat(one), /Reads as: P2 when app is ops-board, web or old and ticket type is bug/)
+  assert.match(flat(one), /Matches 1 ticket now: B1/)                 // B3 is closed
+  const closed: State = { ...two, ruleEdit: { ...two.ruleEdit!, values: { status: ['done'] } } }
+  assert.match(flat(closed), /Matches 1 ticket now: B3/)              // a status condition reaches closed tickets
+  const none: State = { ...two, ruleEdit: { ...two.ruleEdit!, values: { app: ['nowhere'] } } }
+  assert.match(flat(none), /Matches no ticket now/)
+})
+
+test('A253: the preview warns when a hand-set priority would go down', () => {
+  const started = reduce(loaded, key('p'))
+  const out = `2 ticket(s) would change.\nP1: 1 · P2: 0 · P3: 0 · P4: 1 · P5: 0\nB1       Unranked -> P1   rule 2   First\nF2       P3       -> P4   rule 4   Second\n`
+    + `Warning: 1 ticket goes down from a priority set by hand: F2 P3 -> P4 (rule 4).\nPreview token: ${TOKEN}\n`
+  const ready = settle(runOf(started).then(ok(out))(started.state)).state
+  assert.match(flat(ready), /Warning: 1 ticket goes down from a priority set by hand: F2 P3 -> P4 \(rule 4\)\./)
+  assert.match(flat(ready), /\[enter save\]/)
+})
+
+test('A253: an expanded Tickets row shows rule:N only when its priority carries the rule marker', () => {
+  const board = parseBoard('- [ ] B1 — Ruled [app: web] [priority: P1] [priority-rule: 3]\n- [ ] B2 — By hand [app: web] [priority: P2]\n- [ ] B3 — Marker alone [priority-rule: 4]\n', 'T', 1, 1)
+  assert.deepEqual(board.tickets.map(t => t.rule), [3, undefined, undefined])
+  assert.equal(board.tickets[0]!.title, 'Ruled')
+  assert.equal(board.tickets[2]!.title, 'Marker alone')
+  const st = { ...onBoard(initial(80, 24, 0), board, [], null), open: [' '] as State['open'] }
+  assert.match(text(reduce({ ...st, selected: 'B1' }, key('return')).state), /app:web +rule:3/)
+  assert.doesNotMatch(text(reduce({ ...st, selected: 'B2' }, key('return')).state), /rule:/)
+  const mixed = parseBoard('- [ ] B4 — Mixed case [app: web] [priority: P2] [Priority-Rule: 2]\n', 'T', 1, 1)
+  assert.equal(mixed.tickets[0]!.rule, 2)
+  const ms = { ...onBoard(initial(80, 24, 0), mixed, [], null), open: [' '] as State['open'] }
+  assert.match(text(reduce({ ...ms, selected: 'B4' }, key('return')).state), /app:web +rule:2/)
+})
+
+test('A253: the rule form and the preview never draw more rows than the room', () => {
+  const apps = Array.from({ length: 12 }, (_, i) => 'application-' + i)
+  const form: State = { ...loaded, cols: 40, ruleEdit: { n: null, level: 'P2', values: { app: apps, type: ['bug'] }, row: 0 } }
+  const body = ruleEditBody(form, 8)
+  assert.ok(body.length <= 8, `${body.length} rows`)
+  assert.match(body.map(l => l.map(x => x.text).join('')).join('\n'), /…|more/)
+  const warning = 'Warning: 30 tickets go down from a priority set by hand: ' + Array.from({ length: 30 }, (_, i) => `B${i + 1} P1 -> P4 (rule 4)`).join(', ') + '.'
+  const rows = Array.from({ length: 30 }, (_, i) => `B${i + 1} P1 -> P4 rule 4 Ticket ${i + 1}`)
+  const preview: State = { ...loaded, cols: 40, rulesPreview: { message: '30 ticket(s) would change.', preview: { token: TOKEN, counts: 'P1: 0 · P2: 0 · P3: 0 · P4: 30 · P5: 0', rows, offset: 0, warning } } }
+  const shown = rulesPreviewBody(preview, 8)
+  assert.ok(shown.length <= 8, `${shown.length} rows`)
+  assert.match(shown.map(l => l.map(x => x.text).join('')).join('\n'), /…|more/)
+})
+
+test('A253: a small room still shows a real hand-set warning row', () => {
+  const warning = 'Warning: 30 tickets go down from a priority set by hand: ' + Array.from({ length: 30 }, (_, i) => `B${i + 1} P1 -> P4 (rule 4)`).join(', ') + '.'
+  const rows = Array.from({ length: 30 }, (_, i) => `B${i + 1} P1 -> P4 rule 4 Ticket ${i + 1}`)
+  const preview: State = { ...loaded, cols: 40, rulesPreview: { message: '30 ticket(s) would change.', preview: { token: TOKEN, counts: 'P1: 0 · P2: 0 · P3: 0 · P4: 30 · P5: 0', rows, offset: 0, warning } } }
+  for (const room of [5, 6, 8]) {
+    const shown = rulesPreviewBody(preview, room)
+    assert.match(shown.map(l => l.map(x => x.text).join('')).join('\n'), /Warning/, `room ${room}`)
+    assert.ok(shown.length <= room, `room ${room}: ${shown.length} rows`)
+  }
+})
+
+test('A253: the live count reads the last of two same-named tags, as rules preview does', () => {
+  const board = parseBoard('- [ ] B1 — Twice [app: old] [app: web]\n- [ ] B2 — Once [app: old]\n', 'T', 1, 1)
+  assert.equal(ruleMatchLine(board.tickets, { app: ['web'] }), 'Matches 1 ticket now: B1')
+  assert.equal(ruleMatchLine(board.tickets, { app: ['old'] }), 'Matches 1 ticket now: B2')
 })

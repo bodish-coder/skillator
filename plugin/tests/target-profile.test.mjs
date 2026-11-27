@@ -4,7 +4,7 @@
 // full selftests.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, lstatSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -208,6 +208,121 @@ test('sh: a target profile whose skills dir is the source, reached through a lin
   assert.match(r.stderr, /overlaps the installer source/);
 });
 
+// B38: the guard runs both ways - a source checkout inside the selected skills dir is refused
+// too. A minimal copy of the installer under <profile>/skills; --dry-run, so nothing is written.
+// Review item 2: pi's default profile also writes its sibling ~/.pi/skills, so that dest is checked too.
+for (const [port, skip] of ports) for (const [what, profAt, cloneAt] of [
+  ['the selected skills dir', ['prof'], ['prof', 'skills', 'clone']],
+  ["pi's default-profile sibling ~/.pi/skills", ['.pi', 'agent'], ['.pi', 'skills', 'clone']],
+]) test(`${port}: an installer source inside ${what} exits 2`, { skip }, t => {
+  const { T, env } = home(t);
+  const prof = profile(T, ...profAt);
+  const clone = profile(T, ...cloneAt);
+  for (const f of ['install.ps1', 'install.sh', '.claude-plugin/plugin.json', 'skills/tickets-zordon/SKILL.md']) {
+    mkdirSync(join(clone, f, '..'), { recursive: true });
+    writeFileSync(join(clone, f), readFileSync(join(plugin, f)));
+  }
+  const r = port === 'ps'
+    ? spawnSync(ps, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(clone, 'install.ps1'), '-DryRun', '-Force', '-TargetHost', 'pi', '-TargetProfile', prof],
+      { env, encoding: 'utf8', timeout: 120000, windowsHide: true })
+    : spawnSync('sh', [fwd(join(clone, 'install.sh')), '--dry-run', '--force', '--target-host', 'pi', '--target-profile', fwd(prof)],
+      { env, encoding: 'utf8', timeout: 120000, windowsHide: true });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /overlaps the installer source/);
+});
+
+// A254: pwsh on Linux/macOS takes a POSIX target profile; Windows keeps the drive/UNC rule.
+// The check line itself, run with $posixHost either way (no pwsh-on-Linux needed).
+test('ps: a POSIX target profile counts as absolute only off Windows', { skip: !ps && 'no powershell' }, () => {
+  const line = readFileSync(join(plugin, 'install.ps1'), 'utf8').match(/^\s*\$absolute = .*$/m)?.[0];
+  assert.ok(line, 'install.ps1: no $absolute check');
+  const absolute = (posix, p) => spawnSync(ps, ['-NoProfile', '-Command', `$posixHost = $${posix}; $TargetProfile = '${p}'\n${line}\nif ($absolute) { exit 0 } else { exit 1 }`],
+    { encoding: 'utf8', timeout: 30000, windowsHide: true }).status === 0;
+  assert.ok(absolute(true, '/home/me/.pi/agent'), 'a POSIX path off Windows');
+  assert.ok(!absolute(true, 'home/me'), 'a relative path off Windows');
+  assert.ok(!absolute(false, '/home/me/.pi/agent'), 'a POSIX path on Windows');
+  assert.ok(absolute(false, String.raw`C:\Users\me\.pi`) && absolute(false, String.raw`\\server\share\p`), 'a drive or UNC path on Windows');
+});
+
+// A254: a plain run over a dest already recorded at this version skips the per-skill hashing -
+// a kept copy edited since is not compared, so the record stays
+for (const [port, skip] of ports) test(`${port}: a plain run over a dest recorded at this version skips the comparison`, { skip }, t => {
+  const { T, env } = home(t);
+  const codex = profile(T, '.codex');
+  const skills = join(codex, 'skills');
+  ok(install[port](env, 'codex', codex));
+  writeFileSync(join(skills, 'tickets-zordon/SKILL.md'), readFileSync(join(skills, 'tickets-zordon/SKILL.md'), 'utf8') + '\nedited\n');
+  ok(install[port](env, 'codex', codex, true));
+  assert.equal(readFileSync(join(skills, '.skillator-version'), 'utf8'), `${version}\n`, `${port}: the record was dropped, so the copies were hashed`);
+  assert.match(readFileSync(join(skills, 'tickets-zordon/SKILL.md'), 'utf8'), /edited/, `${port}: a plain run replaced a kept copy`);
+});
+
+// B37: a full -Force install keeps a skill dir linked to another copy, as install.sh does -
+// never deleting it (or recursing through it into the copy it points at)
+test('ps: a full -Force install keeps a skill dir linked to another copy', { skip: !ps && 'no powershell' }, t => {
+  const { T, env } = home(t);
+  const shared = profile(T, 'shared', 'tickets-zordon');
+  writeFileSync(join(shared, 'SKILL.md'), 'shared copy\n');
+  writeFileSync(join(shared, 'notes.txt'), 'the user keeps notes here\n');
+  const link = join(profile(T, '.codex', 'skills'), 'tickets-zordon');
+  symlinkSync(shared, link, 'junction');
+  const r = spawnSync(ps, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(plugin, 'install.ps1'), '-Force', '-Profile', join(T, 'profile.ps1')],
+    { env: { ...env, LOCALAPPDATA: join(T, 'lad'), SKILLATOR_MUSE: join(T, 'no-muse') }, encoding: 'utf8', timeout: 600000, windowsHide: true });
+  ok(r);
+  assert.equal(readFileSync(join(shared, 'SKILL.md'), 'utf8'), 'shared copy\n', 'the link target was changed');
+  assert.equal(readFileSync(join(shared, 'notes.txt'), 'utf8'), 'the user keeps notes here\n', 'a file in the link target was deleted');
+  assert.ok(lstatSync(link).isSymbolicLink(), 'the link was replaced');
+});
+
+// B37 review: a dangling link is no live copy - it is removed (by itself) and the skill reinstalled
+test('ps: a dangling skill link is replaced by the shipped skill', { skip: !ps && 'no powershell' }, t => {
+  const { T, env } = home(t);
+  const gone = profile(T, 'gone', 'tickets-zordon');
+  const link = join(profile(T, '.codex', 'skills'), 'tickets-zordon');
+  symlinkSync(gone, link, 'junction');
+  rmSync(join(T, 'gone'), { recursive: true });
+  ok(install.ps(env, 'codex', join(T, '.codex')));
+  assert.ok(!lstatSync(link).isSymbolicLink(), 'the dangling link was kept');
+  assert.equal(readFileSync(join(link, 'SKILL.md'), 'utf8'), readFileSync(join(plugin, 'skills/tickets-zordon/SKILL.md'), 'utf8'));
+});
+
+// Review item 1: only a symlink or junction is deleted by itself; any other reparse point
+// (OneDrive Files On-Demand, dedup) is a real folder and goes with Remove-Item -Recurse.
+test('ps: a reparse-point folder that is no link is removed recursively', { skip: !ps && 'no powershell' }, () => {
+  const lines = readFileSync(join(plugin, 'install.ps1'), 'utf8').match(/^\s*if \(\$ti -and .*\r?\n\s*elseif \(\$ti\) .*$/m)?.[0];
+  assert.ok(lines, 'install.ps1: no reparse-point removal');
+  const how = linkType => spawnSync(ps, ['-NoProfile', '-Command',
+    `function Remove-Item { 'recurse' }; $t = 'x'\n$ti = [pscustomobject]@{ Attributes = [IO.FileAttributes]'Directory, ReparsePoint'; LinkType = ${linkType} }\n` +
+    `$ti | Add-Member ScriptMethod Delete { 'delete' }\n${lines}`], { encoding: 'utf8', timeout: 30000, windowsHide: true }).stdout.trim();
+  assert.equal(how('$null'), 'recurse', 'a cloud/dedup folder was deleted non-recursively');
+  assert.equal(how("'Junction'"), 'delete');
+  assert.equal(how("'SymbolicLink'"), 'delete');
+});
+
+// Review item 3: the scoped block builds paths with Join-Path - a '\' join breaks under pwsh off Windows
+test('ps: the scoped install joins $HOME and profile paths with Join-Path', () => {
+  const text = readFileSync(join(plugin, 'install.ps1'), 'utf8');
+  const block = text.match(/^if \(\$TargetHost\) \{\r?\n  if \(Test-UnderLink[\s\S]*?^foreach \(\$cli in \$targets\.Keys\)/m)?.[0];
+  assert.ok(block, 'install.ps1: no scoped block');
+  assert.deepEqual(block.match(/"\$(HOME|TargetProfile)\\[^"]*"/g) ?? [], []);
+  assert.deepEqual(text.match(/Resolve-Real "\$HOME\\[^"]*"/g) ?? [], []);
+});
+
+// Review items 4 and 5: a skill link counts as this source's only when it points at that skill's own
+// source dir - a symlink or a junction; a link to another skill under the source is kept, no record
+for (const [kind, what, target, linked] of [['junction', 'its own source skill', 'tickets-zordon', true], ['dir', 'another source skill', 'audit-sherlock', false]])
+  test(`ps: a ${kind === 'dir' ? 'symlink' : kind} to ${what} ${linked ? 'counts as linked' : 'is kept and records no version'}`, { skip: !ps && 'no powershell' }, t => {
+    const { T, env } = home(t);
+    const codex = profile(T, '.codex');
+    try { symlinkSync(join(plugin, 'skills', target), join(profile(codex, 'skills'), 'tickets-zordon'), kind); }
+    catch (e) { if (e.code === 'EPERM') return t.skip('no symlink privilege'); throw e; }
+    const r = install.ps(env, 'codex', codex);
+    ok(r);
+    assert.ok(lstatSync(join(codex, 'skills/tickets-zordon')).isSymbolicLink(), 'the link was replaced');
+    assert.equal(/a link to another copy/.test(r.stdout), !linked, r.stdout);
+    assert.equal(existsSync(join(codex, 'skills/.skillator-version')), linked, 'version record');
+  });
+
 // F204 review 3, item 5: /c is a drive root only under MSYS (cygpath present) - a Linux /p is a
 // valid directory - and a UNC share root //host/share is a root too
 test('sh: root_profile refuses /c only where cygpath exists, and a bare UNC share root everywhere', { skip: !hasSh && 'no sh' }, () => {
@@ -314,4 +429,54 @@ test('ps: the second positional argument still binds -Profile', { skip: !ps && '
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.ok(r.stdout.includes(prof), `the dry run does not name the positional profile\n${r.stdout}`);
   assert.ok(!existsSync(prof), 'a dry run wrote the profile');
+});
+
+// Review 2, item 1: under pwsh off Windows [IO.File] takes '\' as a filename character, so every path
+// the scoped run reaches - the version read, the install loop, the command writers - uses Join-Path
+test('ps: the scoped run reaches no backslash path join', () => {
+  const text = readFileSync(join(plugin, 'install.ps1'), 'utf8').replaceAll('\r', '');
+  const parts = [
+    text.match(/^\$pluginVersion = .*$/m)?.[0],
+    text.match(/^foreach \(\$cli in \$targets\.Keys\)[\s\S]*?^if \(\$TargetHost\) \{ exit 0 \}/m)?.[0],
+    ...['Remove-Unshipped', 'Write-PiExt', 'Write-AgyExt', 'Write-Commands'].map(f => text.match(new RegExp(`^function ${f}\\([\\s\\S]*?^\\}`, 'm'))?.[0]),
+  ];
+  assert.ok(parts.every(Boolean), 'install.ps1: a scoped-path section was not found');
+  const code = parts.join('\n').split('\n').filter(l => !/^\s*(#|Write-Host|if \(\$cli -eq 'pi'\) \{ Write-Host)/.test(l)).join('\n');
+  assert.deepEqual(code.match(/(\$\w+|\$\([^)]*\)|'[^'\s]*[\w.])\\[\w.$*]/g) ?? [], []);
+});
+
+// Review 2, item 2: ~/.pi/skills is resolved before the overlap check - a HOME reached through a link
+// with the source inside its ~/.pi/skills still exits 2 (--dry-run, nothing is written)
+test('sh: a source inside ~/.pi/skills under a HOME reached through a link exits 2', { skip: !hasSh && 'no sh' }, t => {
+  const { T, env } = home(t);
+  const real = profile(T, 'real');
+  const via = join(T, 'via');
+  symlinkSync(real, via, 'junction');
+  const prof = profile(real, '.pi', 'agent');
+  const clone = profile(real, '.pi', 'skills', 'clone');
+  for (const f of ['install.sh', '.claude-plugin/plugin.json', 'skills/tickets-zordon/SKILL.md']) {
+    mkdirSync(join(clone, f, '..'), { recursive: true });
+    writeFileSync(join(clone, f), readFileSync(join(plugin, f)));
+  }
+  const r = spawnSync('sh', [fwd(join(clone, 'install.sh')), '--dry-run', '--force', '--target-host', 'pi', '--target-profile', fwd(prof)],
+    { env: { ...env, HOME: fwd(via), USERPROFILE: via }, encoding: 'utf8', timeout: 120000, windowsHide: true });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /overlaps the installer source/);
+});
+
+// Review 2, item 3: a live skill link whose target exists but cannot be listed is kept - only a
+// link whose target does not exist counts as dangling
+test('ps: a skill link whose target cannot be listed is kept, not replaced', { skip: (!ps && 'no powershell') || (process.platform !== 'win32' && 'needs icacls') }, t => {
+  const { T, env } = home(t);
+  const shared = profile(T, 'shared', 'tickets-zordon');
+  writeFileSync(join(shared, 'SKILL.md'), 'shared copy\n');
+  const link = join(profile(T, '.codex', 'skills'), 'tickets-zordon');
+  symlinkSync(shared, link, 'junction');
+  const who = `${process.env.USERDOMAIN ? process.env.USERDOMAIN + '\\' : ''}${process.env.USERNAME}`;
+  assert.equal(spawnSync('icacls', [shared, '/deny', `${who}:(RD)`], { windowsHide: true }).status, 0, 'icacls deny failed');
+  t.after(() => spawnSync('icacls', [shared, '/remove:d', who], { windowsHide: true }));
+  const r = install.ps(env, 'codex', join(T, '.codex'));
+  ok(r);
+  assert.ok(lstatSync(link).isSymbolicLink(), `an unlistable live link was replaced\n${r.stdout}`);
+  assert.match(r.stdout, /a link to another copy/);
 });

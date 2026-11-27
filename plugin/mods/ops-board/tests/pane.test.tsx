@@ -274,6 +274,16 @@ test('F111: selected full-width bar and owner from 56 columns', WITH, async ($, 
     await ui.unmount()
   }
 })
+test('A251: a P-chipped row keeps its owner at 56 columns', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': '- [~] F3 — cart drawer [owner: @vidul] [priority: P1]\n' })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: 56 })
+  if (!(await ui.find({ key: 'row:F3' }))) await ui.press({ key: 'head:~' })
+  const row = (await ui.find({ key: 'row:F3' }))!
+  expect(row.text.length).toBe(56)
+  expect(row.text.endsWith('@vidul')).toBe(true)
+  await ui.unmount()
+})
 for (const cols of [40, 60, 80, 120]) {
   for (const ascii of [false, true]) {
     test(`F111: long owner stays within ${cols} columns, ASCII ${ascii}, selected and unselected`, WITH, async ($, on) => {
@@ -993,5 +1003,82 @@ test('F201 by priority groups P1..P5 then Unranked; state groups sort P1 first; 
   await ui.press({ key: 'tab:tickets' })
   expect(await state($, 'openGroups')).toEqual([])
   expect(await ui.find({ key: 'row:B1' })).toBeUndefined()
+  await ui.unmount()
+})
+
+// B36: a personal row draws its raw line by the model's rule - its own key or the bare id -
+// so the list window (counted from the model) matches what is drawn.
+test('B36 expanding F3 in its group draws the raw line under Assigned too, as the model counts it', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  await openAll(ui)
+  await ui.press({ key: 'row:F3' })
+  expect(await state($, 'expanded')).toBe('F3')
+  expect(await ui.find({ key: 'raw:F3' })).toBeDefined()
+  expect(await ui.find({ key: 'raw:assigned:F3' })).toBeDefined()
+  await ui.unmount()
+})
+
+// B35: 70 apps and 70 team members - the app and who Selects would pass 64 options, which
+// the pane refuses (drawing nothing); they page instead, as B33's Auto-assign filters do.
+test('B35 the Tickets filter pages app and who past 64 options', WITH, async ($, on) => {
+  const n = (i: number) => String(i).padStart(2, '0')
+  const tickets = Array.from({ length: 70 }, (_, i) => `- [ ] B${100 + i} — bug ${i} [app: a${n(i)}]`).join('\n')
+  const team = '# Team\n\n' + Array.from({ length: 70 }, (_, i) => `- @m${n(i)}: m${n(i)}@example.com\n`).join('')
+  const [, clock] = world(on, { '/r/TICKETS.md': `# Tickets\n\n## Open\n\n${tickets}\n`, '/r/.skillator/team.md': team })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  await ui.press({ key: 'key:filter' })
+  expect((await ui.find({ key: 'sel:app' }))?.type).toBe('Button')
+  expect((await ui.find({ key: 'sel:who' }))?.type).toBe('Button')
+  await ui.press({ key: 'sel:app' })
+  await ui.press({ key: 'filter:next' })
+  await ui.press({ key: 'filter:option:a50' })   // page 2 at 40 rows
+  expect((await ui.find({ key: 'sel:app' }))?.text).toBe('app a50')
+  expect((await ui.find({ key: 'count' }))?.text).toContain('1 open match')
+  await ui.press({ key: 'sel:who' })
+  await ui.press({ key: 'filter:next' })
+  await ui.press({ key: 'filter:previous' })
+  await ui.press({ key: 'filter:option:@m03' })
+  expect((await ui.find({ key: 'sel:who' }))?.text).toBe('who @m03')
+  await ui.press({ key: 'sel:who' })
+  await ui.press({ key: 'filter:back' })
+  expect((await ui.find({ key: 'sel:who' }))?.text).toBe('who @m03')
+  await ui.unmount()
+})
+
+// B35 review 2: the picker's page fits the pane's rows (at least 3 options), not a fixed 12
+test('B35 the filter picker pages to the pane height', WITH, async ($, on) => {
+  const n = (i: number) => String(i).padStart(2, '0')
+  const [, clock] = world(on, { '/r/TICKETS.md': `# Tickets\n\n## Open\n\n${Array.from({ length: 70 }, (_, i) => `- [ ] B${100 + i} — bug ${i} [app: a${n(i)}]`).join('\n')}\n` })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 } })
+  await ui.press({ key: 'key:filter' })
+  await ui.press({ key: 'sel:app' })
+  const shown = (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('filter:option:')).length
+  expect(shown).toBeGreaterThanOrEqual(3)
+  expect(shown).toBeLessThanOrEqual(10 - 3)   // a tab row, the title and the pages row
+  expect(await ui.find({ key: 'filter:next' })).toBeDefined()
+  await ui.unmount()
+})
+
+// B35 review: the picker's page is clamped when the values shrink, and leaving the tab drops it
+test('B35 the filter picker clamps its page and closes on a tab switch', WITH, async ($, on) => {
+  const n = (i: number) => String(i).padStart(2, '0')
+  const board = (k: number) => `# Tickets\n\n## Open\n\n${Array.from({ length: k }, (_, i) => `- [ ] B${100 + i} — bug ${i} [app: a${n(i)}]`).join('\n')}\n`
+  const [w, clock] = world(on, { '/r/TICKETS.md': board(70) })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  await ui.press({ key: 'key:filter' })
+  await ui.press({ key: 'sel:app' })
+  while (await ui.find({ key: 'filter:next' })) await ui.press({ key: 'filter:next' })
+  expect(await ui.find({ key: 'filter:option:a69' })).toBeDefined()
+  w.files['/r/TICKETS.md'] = { text: board(5), mtimeMs: 9000 }
+  await clock.advance(2000)
+  expect(await ui.find({ key: 'filter:option:a00' })).toBeDefined()
+  await ui.press({ key: 'tab:runs' })
+  await ui.press({ key: 'tab:tickets' })
+  expect(await ui.find({ key: 'filter:title' })).toBeUndefined()
   await ui.unmount()
 })

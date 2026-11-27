@@ -298,6 +298,9 @@ install_into() {
   # F204: 1 while every shipped skill here is written, refreshed, the same as this source or a
   # live link to it - only then does .skillator-version claim this source's version
   _current=1
+  # A254: a dest already recorded at this version skips the hashing below (an unmarked copy is still compared)
+  _fresh=
+  if [ -n "$plugin_version" ] && [ -f "$_dest/.skillator-version" ] && [ "$(tr -d '\r' < "$_dest/.skillator-version")" = "$plugin_version" ]; then _fresh=1; fi
   # $shipped order (ordinal), not the glob's locale order - same as install.ps1
   for _name in $shipped; do
     _s="$src/$_name/"
@@ -310,7 +313,7 @@ install_into() {
     # F204: an older run's command wrapper in a shipped skill's place is reinstalled, --force or not
     if [ -f "$_dest/$_name/SKILL.md" ] && [ -z "$force" ] && ! is_cmd_wrapper "$_dest/$_name/SKILL.md" "$_name"; then
       # compared while the record still holds, and always for an unmarked copy (adoption)
-      if [ "$_current" = 1 ] || [ ! -f "$_dest/$_name/$owned" ]; then
+      if { [ "$_current" = 1 ] && [ -z "$_fresh" ]; } || [ ! -f "$_dest/$_name/$owned" ]; then
         if same_contents "$_dest/$_name" "${_s%/}"; then
           # adopt an unmarked copy that is exactly this repo's current skill
           if [ -z "$dry" ] && [ ! -f "$_dest/$_name/$owned" ]; then write_owned "$_dest/$_name" "${_s%/}"; fi
@@ -944,7 +947,8 @@ if [ -n "$selftest" ]; then
   grep -qF "mode: 'sequential'," "$_mw" || { echo "FAIL: marathon-workflow.js PLAN has no mode line (F112)"; exit 1; }
   grep -qF "PLAN.mode must be 'sequential', 'parallel' or 'parallel <N>'" "$_mw" || { echo "FAIL: marathon-workflow.js does not check PLAN.mode (F112)"; exit 1; }
   if command -v node >/dev/null 2>&1; then
-    awk '{sub(/^return /, "export default "); print} /code: .XXXX., ticket: .F0./ {print "      { stage: 1, code: \047YYYY\047, ticket: \047F1\047, files: [\047b\047], done: \047d\047, prompt: \047p\047 },"}' "$_mw" > "$T/mw.mjs"
+    # the Workflow tool runs the script as an async function body (nested returns are legal) - wrap it the same way
+    awk 'BEGIN {print "await (async () => {"} {sub(/^export /, ""); print} /code: .XXXX., ticket: .F0./ {print "      { stage: 1, code: \047YYYY\047, ticket: \047F1\047, files: [\047b\047], done: \047d\047, prompt: \047p\047 },"} END {print "})()"}' "$_mw" > "$T/mw.mjs"
     _o=$(node --input-type=module -e "import {pathToFileURL} from 'node:url'; globalThis.args={phase:1}; await import(pathToFileURL(process.argv[1]).href)" -- "$T/mw.mjs" 2>&1) || :
     printf '%s' "$_o" | grep -qF 'PLAN.mode sequential needs one ticket per phase - phase 1 holds 2' || { echo "FAIL: marathon-workflow.js runs a two-ticket phase under mode sequential (F112): $_o"; exit 1; }
   fi
@@ -1442,7 +1446,13 @@ if [ -n "$target_host" ]; then
   dest="$target_profile/skills"
   # both sides links resolved: an installer reached through a link still sees its own source
   _src_real=$(fold_case "$(CDPATH= cd -- "$src" && pwd -P)")
-  case "$(fold_case "$dest")" in "$_src_real"|"$_src_real"/*) echo 'The selected skills directory overlaps the installer source' >&2; exit 2 ;; esac
+  # B38: either way round, every dest - a source under a dest would be removed from under itself mid-install
+  refuse_overlap() {
+    _dest_fold=$(fold_case "$1")
+    case "$_dest_fold" in "$_src_real"|"$_src_real"/*) echo 'The selected skills directory overlaps the installer source' >&2; exit 2 ;; esac
+    case "$_src_real" in "$_dest_fold"/*) echo 'The selected skills directory overlaps the installer source' >&2; exit 2 ;; esac
+  }
+  refuse_overlap "$dest"
   for _scoped in "$dest" "$dest/$manifest" "$dest/.skillator-source" "$dest/.skillator-version" "$dest/.ignore" "$dest/PLATFORMS.md" "$dest/PRACTICE.md" "$dest/WORKFLOW.md" "$dest/practice" "$dest/references" "$dest/ops-board"; do
     if under_link "$_scoped"; then echo "Selected profile contains a shared link: $_scoped" >&2; exit 2; fi
   done
@@ -1466,6 +1476,8 @@ if [ -n "$target_host" ]; then
   if [ "$target_host" = pi ]; then
     if same_dir "$target_profile" "$HOME/.pi/agent"; then
       _pi_sibling="$HOME/.pi/skills"
+      # resolved as $_src_real is, so a HOME reached through a link still meets the source
+      refuse_overlap "$(CDPATH= cd -- "$HOME/.pi" && pwd -P)/skills"
       for _scoped in "$_pi_sibling" "$_pi_sibling/$manifest" "$_pi_sibling/.skillator-source" "$_pi_sibling/.skillator-version" "$_pi_sibling/.ignore" "$_pi_sibling/ops-board"; do
         if under_link "$_scoped"; then echo "Selected profile contains a shared link: $_scoped" >&2; exit 2; fi
       done

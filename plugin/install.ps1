@@ -48,7 +48,10 @@ function Test-FsRoot([string]$path) {
 # as install.sh: a bad target is one line on stderr and exit 2, not a thrown error
 function Stop-Target([string]$message) { [Console]::Error.WriteLine($message); exit 2 }
 if ($TargetHost) {
-  if ($TargetProfile -notmatch '^(?:[A-Za-z]:[\\/]|[\\/]{2})') { Stop-Target 'TargetProfile must be an existing, absolute profile directory' }
+  # A254: a drive or UNC path on Windows; pwsh on Linux/macOS takes a POSIX one
+  $posixHost = $PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows
+  $absolute = if ($posixHost) { [IO.Path]::IsPathRooted($TargetProfile) } else { $TargetProfile -match '^(?:[A-Za-z]:[\\/]|[\\/]{2})' }
+  if (-not $absolute) { Stop-Target 'TargetProfile must be an existing, absolute profile directory' }
   if (Test-FsRoot $TargetProfile) { Stop-Target 'TargetProfile must be a profile directory below the filesystem root' }
   if (-not (Test-Path -LiteralPath $TargetProfile -PathType Container)) { Stop-Target 'TargetProfile must be an existing, absolute profile directory' }
   $TargetProfile = (Get-Item -LiteralPath $TargetProfile -Force).FullName
@@ -58,8 +61,7 @@ if ($TargetHost) {
 }
 $src = Join-Path $PSScriptRoot 'skills'
 $selfPath = $PSCommandPath
-$pluginVersion = try { "$(([IO.File]::ReadAllText((Join-Path $PSScriptRoot '.claude-plugin\plugin.json')) | ConvertFrom-Json).version)".Trim() } catch { '' }
-$sharedLinks = @{}   # scoped dest -> the skills in it linked to another copy (kept, never followed)
+$pluginVersion = try { "$(([IO.File]::ReadAllText([IO.Path]::Combine($PSScriptRoot, '.claude-plugin', 'plugin.json')) | ConvertFrom-Json).version)".Trim() } catch { '' }
 
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { "$HOME\.codex" }
 # F67: opencode's config dir - $env:XDG_CONFIG_HOME\opencode when that is set, else
@@ -229,7 +231,7 @@ function Remove-Unshipped([string]$dest) {
     $md = Join-Path $p 'SKILL.md'
     if ($isLink) {
       # only a link into this repo's skills\ - never a link the user made elsewhere
-      if (-not ("$($item.Target)" -like "$src\*")) { continue }
+      if (-not ("$($item.Target)" -like (Join-Path $src '*'))) { continue }
     } elseif (-not (Test-Path -LiteralPath $md -PathType Leaf)) {
       continue
     } elseif ($mode -eq 'manifest') {
@@ -342,8 +344,8 @@ function Write-Cmd([string]$tpl, [string]$skillsDir, [string]$target) {
 # ops-board\pi\ (forward slashes), so the data layer has one copy. Rewritten every run,
 # UTF-8 without BOM, LF - the bytes install.sh writes. Same as install.sh put_pi_ext.
 function Write-PiExt([string]$skillsDir) {
-  $ext = "$piAgent\extensions\skillator-ops.ts"
-  $shifuExt = "$piAgent\extensions\skillator-shifu.ts"
+  $ext = [IO.Path]::Combine($piAgent, 'extensions', 'skillator-ops.ts')
+  $shifuExt = [IO.Path]::Combine($piAgent, 'extensions', 'skillator-shifu.ts')
   if ($DryRun) { Write-Host "        would write $ext"; Write-Host "        would write $shifuExt"; return }
   New-Item -ItemType Directory -Force (Split-Path -Parent $ext) | Out-Null
   $to = $skillsDir.Replace('\', '/').Replace('"', '\"')
@@ -584,10 +586,10 @@ function Write-AgyExt([string]$skillsDir) {
   $ErrorActionPreference = 'Continue'     # the IDE's CLI writes notes to stderr
   $ide = Get-AgyIde
   if (-not $ide) { Write-Host "        skip  the Antigravity IDE ops board (no antigravity-ide CLI found)"; return }
-  $vsix = "$skillsDir\ops-board\antigravity\skillator-ops.vsix"
+  $vsix = [IO.Path]::Combine($skillsDir, 'ops-board', 'antigravity', 'skillator-ops.vsix')
   if ($DryRun) { Write-Host "        would install the ops board extension $vsix with $ide"; return }
   if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Write-Host "        skip  the Antigravity IDE ops board (needs node 22.18 or newer to pack it)"; return }
-  $o = & node "$skillsDir\ops-board\antigravity\pack.mjs" $vsix 2>&1 | Out-String
+  $o = & node ([IO.Path]::Combine($skillsDir, 'ops-board', 'antigravity', 'pack.mjs')) $vsix 2>&1 | Out-String
   if ($LASTEXITCODE -ne 0) { Write-Host "warn  the Antigravity IDE ops board was not packed: $o" -ForegroundColor Yellow; return }
   $o = & $ide --install-extension $vsix --force 2>&1 | Out-String
   if ($LASTEXITCODE -eq 0) { Write-Host "        * Antigravity IDE extension skillator.skillator-ops ($vsix)" }
@@ -728,54 +730,54 @@ function Write-Commands([string]$cli, [string]$dest) {
     'codex' {
       # F105: $skillator-ops - skill hosts only; pi and Claude Code have their own /ops
       # a shipped skill of the same name (code-vader, skillator-sync) is never overwritten by its wrapper
-      foreach ($n in $names + $opsNames) { if ($shipped -cnotcontains $n) { Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md" } }
-      foreach ($n in $retired + @('upstream-sync', 'ops')) { Remove-RetiredDir "$dest\$n" }
-      foreach ($n in $retired + @('skillator-update', 'team-messages')) { Rename-Retired "$codexHome\prompts\$n.md" }
+      foreach ($n in $names + $opsNames) { if ($shipped -cnotcontains $n) { Write-Cmd ([IO.Path]::Combine($c, 'antigravity', $n, 'SKILL.md')) $dest ([IO.Path]::Combine($dest, $n, 'SKILL.md')) } }
+      foreach ($n in $retired + @('upstream-sync', 'ops')) { Remove-RetiredDir (Join-Path $dest $n) }
+      foreach ($n in $retired + @('skillator-update', 'team-messages')) { Rename-Retired ([IO.Path]::Combine($codexHome, 'prompts', "$n.md")) }
     }
     'cursor' {
-      foreach ($n in $fileNames) { Write-Cmd "$c\cursor\$n.md" $dest "$cursorConfig\commands\$n.md" }
-      foreach ($n in $retired + @('upstream-sync')) { Rename-Retired "$cursorConfig\commands\$n.md" }
+      foreach ($n in $fileNames) { Write-Cmd ([IO.Path]::Combine($c, 'cursor', "$n.md")) $dest ([IO.Path]::Combine($cursorConfig, 'commands', "$n.md")) }
+      foreach ($n in $retired + @('upstream-sync')) { Rename-Retired ([IO.Path]::Combine($cursorConfig, 'commands', "$n.md")) }
     }
     'pi' {
-      if ($dest -ne "$piAgent\skills") { return }
-      foreach ($n in $fileNames) { Write-Cmd "$c\pi\$n.md" $dest "$piAgent\prompts\$n.md" }
-      foreach ($n in $retired + @('upstream-sync')) { Rename-Retired "$piAgent\prompts\$n.md" }
+      if ($dest -ne (Join-Path $piAgent 'skills')) { return }
+      foreach ($n in $fileNames) { Write-Cmd ([IO.Path]::Combine($c, 'pi', "$n.md")) $dest ([IO.Path]::Combine($piAgent, 'prompts', "$n.md")) }
+      foreach ($n in $retired + @('upstream-sync')) { Rename-Retired ([IO.Path]::Combine($piAgent, 'prompts', "$n.md")) }
       Write-PiExt $dest
     }
     # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode; F159: /skillator-ops
     'opencode' {
-      foreach ($n in $fileNames + $opsNames) { Write-Cmd "$c\opencode\$n.md" $dest "$ocConfig\commands\$n.md" }
-      foreach ($n in $retired + @('upstream-sync', 'ops')) { Rename-Retired "$ocConfig\commands\$n.md" }
+      foreach ($n in $fileNames + $opsNames) { Write-Cmd ([IO.Path]::Combine($c, 'opencode', "$n.md")) $dest ([IO.Path]::Combine($ocConfig, 'commands', "$n.md")) }
+      foreach ($n in $retired + @('upstream-sync', 'ops')) { Rename-Retired ([IO.Path]::Combine($ocConfig, 'commands', "$n.md")) }
     }
     'gemini' {
-      foreach ($n in $fileNames) { Write-Cmd "$c\gemini\$n.toml" $dest "$geminiConfig\commands\$n.toml" }
-      foreach ($n in $retired + @('upstream-sync')) { Rename-Retired "$geminiConfig\commands\$n.toml" }
+      foreach ($n in $fileNames) { Write-Cmd ([IO.Path]::Combine($c, 'gemini', "$n.toml")) $dest ([IO.Path]::Combine($geminiConfig, 'commands', "$n.toml")) }
+      foreach ($n in $retired + @('upstream-sync')) { Rename-Retired ([IO.Path]::Combine($geminiConfig, 'commands', "$n.toml")) }
       # a full install also leaves the Antigravity command skills in Gemini's skills dir, and
       # Gemini loads them: a Gemini-only update refreshes the ones skillator wrote (never creates one)
-      if ($TargetHost -eq 'gemini') { foreach ($n in $names + $opsNames) { Update-CmdDir "$c\antigravity\$n\SKILL.md" $dest $n } }
+      if ($TargetHost -eq 'gemini') { foreach ($n in $names + $opsNames) { Update-CmdDir ([IO.Path]::Combine($c, 'antigravity', $n, 'SKILL.md')) $dest $n } }
     }
     { $_ -in 'antigravity','agy' } {
       foreach ($n in $names + $opsNames) {
         if ($shipped -ccontains $n) { continue }   # as codex: the shipped skill stays
-        Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md"
+        Write-Cmd ([IO.Path]::Combine($c, 'antigravity', $n, 'SKILL.md')) $dest ([IO.Path]::Combine($dest, $n, 'SKILL.md'))
         # an older run may have marked it owned - it is not a manifest skill
-        $markerPath = "$dest\$n\$owned"
+        $markerPath = [IO.Path]::Combine($dest, $n, $owned)
         $probe = $markerPath
         while ($probe -and -not (Get-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue)) { $probe = Split-Path -Parent $probe }
         if ($probe -and (Test-UnderLink $probe)) { Write-Host "        kept ${markerPath}: a link or under one" }
         elseif (-not $DryRun) { Remove-Item -LiteralPath $markerPath -Force -ErrorAction SilentlyContinue }
       }
-      foreach ($n in $retired + @('upstream-sync', 'ops')) { Remove-RetiredDir "$dest\$n" }
+      foreach ($n in $retired + @('upstream-sync', 'ops')) { Remove-RetiredDir (Join-Path $dest $n) }
       # F57: the Antigravity IDE's extension, from Antigravity's own dest - or the IDE's
       # selected profile when /skillator-update runs in the IDE (target host antigravity). The
       # IDE CLI installs into the IDE's default extensions, so only its default profile gets it.
-      if (-not $TargetHost) { if ($dest -eq "$HOME\.gemini\config\skills") { Write-AgyExt $dest } }
+      if (-not $TargetHost) { if ($dest -eq [IO.Path]::Combine($HOME, '.gemini', 'config', 'skills')) { Write-AgyExt $dest } }
       elseif ($TargetHost -eq 'antigravity') {
-        if ([string]::Equals((Resolve-Real $dest), (Resolve-Real "$HOME\.gemini\config\skills"), [StringComparison]::OrdinalIgnoreCase)) { Write-AgyExt $dest }
+        if ([string]::Equals((Resolve-Real $dest), (Resolve-Real (Join-Path (Join-Path (Join-Path $HOME '.gemini') 'config') 'skills')), [StringComparison]::OrdinalIgnoreCase)) { Write-AgyExt $dest }
         else { Write-Host "        skip  the Antigravity IDE ops board: $(Split-Path -Parent $dest) is not the Antigravity IDE's default profile (~/.gemini/config)" }
       }
       # Gemini CLI shares the ~/.gemini marker and reads ~/.gemini/skills
-      if (-not $TargetHost -and $dest -eq "$geminiConfig\skills") { Write-Commands 'gemini' $dest }
+      if (-not $TargetHost -and $dest -eq (Join-Path $geminiConfig 'skills')) { Write-Commands 'gemini' $dest }
     }
   }
 }
@@ -1015,7 +1017,8 @@ function Invoke-SelfTest([string]$T) {
   if (-not $mw.Contains("PLAN.mode must be 'sequential', 'parallel' or 'parallel <N>'")) { return 'marathon-workflow.js does not check PLAN.mode (F112)' }
   if (Get-Command node -ErrorAction SilentlyContinue) {
     $mwt = Join-Path $T 'mw.mjs'
-    [IO.File]::WriteAllText($mwt, (($mw -replace '(?m)^return ', 'export default ') -replace "(?m)^(      \{ stage: 0, code: 'XXXX', ticket: 'F0'.*)$", "`$1`n      { stage: 1, code: 'YYYY', ticket: 'F1', files: ['b'], done: 'd', prompt: 'p' },"))
+    # the Workflow tool runs the script as an async function body (nested returns are legal) - wrap it the same way
+    [IO.File]::WriteAllText($mwt, "await (async () => {`n" + (($mw -replace '(?m)^export ', '') -replace "(?m)^(      \{ stage: 0, code: 'XXXX', ticket: 'F0'.*)$", "`$1`n      { stage: 1, code: 'YYYY', ticket: 'F1', files: ['b'], done: 'd', prompt: 'p' },") + "`n})()")
     $o = & { $ErrorActionPreference = 'Continue'; & node --input-type=module -e "import {pathToFileURL} from 'node:url'; globalThis.args={phase:1}; await import(pathToFileURL(process.argv[1]).href)" -- $mwt 2>&1 | Out-String }
     if ($o -notmatch [regex]::Escape('PLAN.mode sequential needs one ticket per phase - phase 1 holds 2')) { return "marathon-workflow.js runs a two-ticket phase under mode sequential (F112): $o" }
   }
@@ -1534,40 +1537,34 @@ if ($TargetHost) {
 
   $dest = Join-Path $TargetProfile 'skills'
   # both sides links resolved: an installer reached through a junction still sees its own source
-  $destReal = Resolve-Real $dest; $srcReal = Resolve-Real $src
-  if ($destReal -eq $srcReal -or $destReal.StartsWith($srcReal + '\', [StringComparison]::OrdinalIgnoreCase)) {
-    Stop-Target 'The selected skills directory overlaps the installer source'
-  }
+  $srcReal = Resolve-Real $src
+  $sep = [IO.Path]::DirectorySeparatorChar   # A254: '/' under pwsh on Linux/macOS
   $scopedDests = @($dest)
   # F204: a full install also fills ~\.pi\skills (the pi row in $targets), so pi's default
   # profile refreshes it too; any other pi profile has no such sibling and leaves it alone
   if ($TargetHost -ceq 'pi') {
-    if ([string]::Equals((Resolve-Real $TargetProfile), (Resolve-Real "$HOME\.pi\agent"), [StringComparison]::OrdinalIgnoreCase)) {
-      $scopedDests += "$HOME\.pi\skills"
+    $piHome = Join-Path $HOME '.pi'
+    if ([string]::Equals((Resolve-Real $TargetProfile), (Resolve-Real (Join-Path $piHome 'agent')), [StringComparison]::OrdinalIgnoreCase)) {
+      $scopedDests += Join-Path $piHome 'skills'
     } else {
       Write-Host "note  ~/.pi/skills left alone: $TargetProfile is not pi's default profile (~/.pi/agent)"
     }
   }
   $scopedPaths = @()
   foreach ($sd in $scopedDests) {
+    # B38: either way round, every dest - a source under a dest would be removed from under itself mid-install
+    $destReal = Resolve-Real $sd
+    if ($destReal -eq $srcReal -or $destReal.StartsWith($srcReal + $sep, [StringComparison]::OrdinalIgnoreCase) -or
+        $srcReal.StartsWith($destReal + $sep, [StringComparison]::OrdinalIgnoreCase)) {
+      Stop-Target 'The selected skills directory overlaps the installer source'
+    }
     $scopedPaths += $sd
-    $sharedLinks[$sd] = @()
     if (-not (Test-Path -LiteralPath $sd -PathType Container)) { continue }
     $scopedPaths += @($manifest,'.skillator-source','.skillator-version','.ignore','PLATFORMS.md','PRACTICE.md','WORKFLOW.md','practice','references','ops-board' | ForEach-Object { Join-Path $sd $_ })
-    foreach ($skill in $skills) {
-      $skillPath = Join-Path $sd $skill.Name
-      $item = Get-Item -LiteralPath $skillPath -Force -ErrorAction SilentlyContinue
-      # as install.sh: a live link is left alone (never replaced or followed), a dangling one reinstalled
-      if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -and
-          ($item.LinkType -ne 'SymbolicLink' -or "$($item.Target)" -ne $skill.FullName) -and
-          (Test-Path -LiteralPath $skillPath -PathType Container)) {
-        Write-Host "        kept ${skillPath}: a link to another copy" -ForegroundColor DarkGray
-        $sharedLinks[$sd] += $skill.Name
-      }
-    }
   }
-  if ($TargetHost -eq 'pi' -and (Test-Path -LiteralPath "$TargetProfile\extensions")) {
-    $scopedPaths += "$TargetProfile\extensions\skillator-ops.ts", "$TargetProfile\extensions\skillator-shifu.ts"
+  $piExt = Join-Path $TargetProfile 'extensions'
+  if ($TargetHost -eq 'pi' -and (Test-Path -LiteralPath $piExt)) {
+    $scopedPaths += (Join-Path $piExt 'skillator-ops.ts'), (Join-Path $piExt 'skillator-shifu.ts')
   }
   foreach ($path in $scopedPaths) { if (Test-UnderLink $path) { Stop-Target "Selected profile contains a shared link: $path" } }
   switch ($TargetHost) {
@@ -1600,27 +1597,40 @@ foreach ($cli in $targets.Keys) {
 
   foreach ($dest in $targets[$cli].Dests) {
     Remove-Unshipped $dest
-    # a skill symlinked to this repo is live - never replace it with a stale copy
+    # a skill linked (symlink or junction) to its own dir in this repo is live - never replace it with a stale copy
     $linked = @(Get-ChildItem -LiteralPath $dest -Directory -ErrorAction SilentlyContinue |
-                Where-Object { $_.LinkType -eq 'SymbolicLink' -and "$($_.Target)" -like "$src*" } |
+                Where-Object { $_.LinkType -in 'SymbolicLink', 'Junction' -and
+                  [string]::Equals((Resolve-Real $_.FullName), (Resolve-Real (Join-Path $src $_.Name)), [StringComparison]::OrdinalIgnoreCase) } |
                 ForEach-Object { $_.Name })
-    $kept = if ($sharedLinks.ContainsKey($dest)) { @($sharedLinks[$dest]) } else { @() }
+    # B37, as install.sh: any other live link is left alone (never replaced or followed), a dangling one reinstalled
+    $kept = @($skills | Where-Object {
+      $p = Join-Path $dest $_.Name
+      $i = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+      # live: its resolved target exists (Test-Path -PathType Container is true for a dangling one;
+      # a target that only cannot be listed - access denied, an offline share - is still live)
+      $_.Name -notin $linked -and $i -and $i.LinkType -in 'SymbolicLink', 'Junction' -and
+        [IO.Directory]::Exists((Resolve-Real $p))
+    } | ForEach-Object { $_.Name })
+    foreach ($k in $kept) { Write-Host "        kept $(Join-Path $dest $k): a link to another copy" -ForegroundColor DarkGray }
     $linked += $kept
     # F204: an older run's command wrapper in a shipped skill's place is reinstalled, -Force or not
     $missing = @($skills | Where-Object {
-      $md = Join-Path $dest "$($_.Name)\SKILL.md"
+      $md = [IO.Path]::Combine($dest, $_.Name, 'SKILL.md')
       $_.Name -notin $linked -and
       ($Force -or -not (Test-Path -LiteralPath $md) -or (Test-CmdWrapper $md $_.Name))
     })
     # F204: true while every shipped skill here is written, refreshed, the same as this source or a
     # live link to it - only then does .skillator-version claim this source's version
     $current = $kept.Count -eq 0
+    # A254: a dest already recorded at this version skips the hashing below (an unmarked copy is still compared)
+    $record = Join-Path $dest '.skillator-version'
+    $fresh = $pluginVersion -and $(try { [IO.File]::ReadAllText($record).Trim() -ceq $pluginVersion } catch { $false })
     foreach ($s in $(if ($DryRun) { @() } else { $skills })) {
       $t = Join-Path $dest $s.Name
       if ($s.Name -in $linked -or $missing -contains $s) { continue }
       $unmarked = -not (Test-Path -LiteralPath (Join-Path $t $owned))
       # compared while the record still holds, and always for an unmarked copy (adoption)
-      if (-not $current -and -not $unmarked) { continue }
+      if ((-not $current -or $fresh) -and -not $unmarked) { continue }
       if (Test-SameContents $t $s.FullName) {
         # adopt an unmarked copy that is exactly this repo's current skill
         if ($unmarked -and (Test-Path -LiteralPath (Join-Path $t 'SKILL.md') -PathType Leaf)) { Write-Owned $t $s.FullName }
@@ -1628,7 +1638,7 @@ foreach ($cli in $targets.Keys) {
     }
 
     if ($missing.Count -eq 0) {
-      $how = if ($linked.Count -eq $skills.Count) { "symlinked to this repo" } else { "already installed" }
+      $how = if ($linked.Count - $kept.Count -eq $skills.Count) { "symlinked to this repo" } else { "already installed" }
       Write-Host "ok    $cli (all $($skills.Count) skills $how) -> $dest" -ForegroundColor DarkGray
     } else {
       Write-Host "$cli -> $dest" -ForegroundColor Cyan
@@ -1636,7 +1646,11 @@ foreach ($cli in $targets.Keys) {
         if ($DryRun) { Write-Host "        would install $($s.Name)"; continue }
         New-Item -ItemType Directory -Force $dest | Out-Null
         $t = Join-Path $dest $s.Name
-        if (Test-Path -LiteralPath $t) { Remove-Item -LiteralPath $t -Recurse -Force }   # handles reparse points
+        $ti = Get-Item -LiteralPath $t -Force -ErrorAction SilentlyContinue
+        # B37: a (dangling) link goes by itself - PS 5.1's Remove-Item -Recurse can follow it into its target;
+        # any other reparse point (OneDrive Files On-Demand, dedup) is a real folder, removed recursively
+        if ($ti -and $ti.LinkType -in 'SymbolicLink', 'Junction') { $ti.Delete() }
+        elseif ($ti) { Remove-Item -LiteralPath $t -Recurse -Force }
         if ($Link) {
           try {
             New-Item -ItemType SymbolicLink -Path $t -Target $s.FullName -ErrorAction Stop | Out-Null
@@ -1674,8 +1688,8 @@ foreach ($cli in $targets.Keys) {
       $board = Join-Path $dest 'ops-board'
       if (Test-Path -LiteralPath $board) { Remove-Item -LiteralPath $board -Recurse -Force }
       New-Item -ItemType Directory -Force (Join-Path $board 'hooks') | Out-Null
-      $mod = Join-Path $PSScriptRoot 'mods\ops-board'
-      Copy-Item (Join-Path $mod 'hooks\lib') (Join-Path $board 'hooks') -Recurse -Force
+      $mod = [IO.Path]::Combine($PSScriptRoot, 'mods', 'ops-board')
+      Copy-Item ([IO.Path]::Combine($mod, 'hooks', 'lib')) (Join-Path $board 'hooks') -Recurse -Force
       Copy-Item (Join-Path $mod 'types') $board -Recurse -Force
       Copy-Item (Join-Path $mod 'ops') $board -Recurse -Force
       # F56: pi\, the same board as a pi extension (Write-Commands points pi at it)
@@ -1684,7 +1698,7 @@ foreach ($cli in $targets.Keys) {
       Copy-Item (Join-Path $mod 'antigravity') $board -Recurse -Force
       # A222: commands\, the plugin's own command docs, which the Help tab reads beside ops\
       $boardCmds = New-Item -ItemType Directory -Force (Join-Path $board 'commands')
-      Copy-Item (Join-Path $PSScriptRoot 'commands\*') $boardCmds -Include '*.md', '*.txt' -Force
+      Copy-Item ([IO.Path]::Combine($PSScriptRoot, 'commands', '*')) $boardCmds -Include '*.md', '*.txt' -Force
       # LF, no BOM - the same bytes install.sh writes, so either twin reads the other's
       [IO.File]::WriteAllText((Join-Path $dest $manifest), (($shipped -join "`n") + "`n"))
       # F65: the source pointer - one line, the repo root this ran from, so /skillator-update

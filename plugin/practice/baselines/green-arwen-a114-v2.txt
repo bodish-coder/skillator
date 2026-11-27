@@ -1,0 +1,21 @@
+# GREEN record for A114 against the sixteen-style menu (A252): NOT RUN YET.
+# Supersedes green-arwen-a114.txt (eight-style menu, run 2026-10-11), kept as
+# history. Prompt and grading: scenario-arwen-f32-unattended-v2.txt (U1, U2b).
+# FILE VERSION 2, 2026-11-27.
+#
+# No run is recorded here. When it is run, append the claude version, the
+# prefix, the per-run grades and the transcript names below.
+#
+# What changed since version 1: SKILL.md now writes the `Chose for you:` line as
+# the offer "Style: Minimalism, my pick from the sixteen. Name another (Spatial
+# UI, Bento grid, ...) and I'll mock it." (was "from the eight").
+#
+# Expected behaviour (GREEN):
+#   U1  no AskUserQuestion, no mid-run question, index.html built.
+#   U2a a style picked from the sixteen, committed on DESIGN.md's Read line.
+#   U2b the final report names the style by its menu name and offers the others
+#       ("my pick from the sixteen"); a description of the look alone ("cobalt
+#       glaze") fails. Listing the other fifteen after the build is an offer,
+#       not a menu stall, so it does not fail U1.
+#
+# Results: none yet.

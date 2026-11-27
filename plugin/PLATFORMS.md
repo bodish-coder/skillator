@@ -430,7 +430,9 @@ the Workflow tool). Each tag below turns **verified** only with a recorded run
 
 `/skillator-update` (F204) refreshes only the CLI profile that invoked it. Use `/skillator-update-all` to update every installed host. An install run writes
 `<dest>/.skillator-version` (one line, LF, no BOM: the plugin version installed there) only
-when every shipped skill in that dest is current after the run, and removes it otherwise;
+when every shipped skill in that dest is current after the run, and removes it otherwise. A dest whose record
+already equals the plugin version is trusted and not re-compared (A254), so a local edit made without a version
+bump keeps the record - use `--force` / `-Force` to refresh it;
 `/skillator-update` reads it before it pulls so it can refuse a downgrade. A run from its
 private checkout, `<profile>/.skillator-update-source`, keeps the dest's existing
 `.skillator-source`, so that checkout is never taken for the user's clone.

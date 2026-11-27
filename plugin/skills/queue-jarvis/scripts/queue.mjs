@@ -8,7 +8,7 @@ const statuses = { ' ': 'pending', '~': 'in-progress', '!': 'blocked', '?': 'dec
 const open = new Set(['pending', 'in-progress', 'blocked', 'decide', 'testing', 'verified']);
 const types = { B: 'bug', F: 'feature', A: 'agent-found' };
 const fields = ['id', 'app', 'src', 'owner', 'type', 'status', 'severity', 'release', 'depends-on'];
-const metadata = /[ \t]*\[(app|src|priority|severity|release|depends-on|owner|decide|by|session|tester|working|work-history):[ \t]*([^\]\r\n]*)\]/gi;
+const metadata = /[ \t]*\[(app|src|priority|priority-rule|severity|release|depends-on|owner|decide|by|session|tester|working|work-history):[ \t]*([^\]\r\n]*)\]/gi;
 const row = /^(\uFEFF?[ \t]*- \[([ ~!?%vx>-])\][ \t]+([A-Z]{1,3}\d+[a-z]?)(?:[ \t]+\(was[ \t]+[A-Z]{1,3}\d+[a-z]?\))?[ \t]*[—–-][ \t]*)(.*)$/;
 const levels = ['P1', 'P2', 'P3', 'P4', 'P5'];
 const tokenPattern = /^[a-f0-9]{64}$/;
@@ -101,17 +101,22 @@ function previewToken(path, bytes, priority, selectors) {
   return createHash('sha256').update(JSON.stringify([path, priority, canonical])).update(bytes).digest('hex');
 }
 
-function updateLine(ticket, priority) {
-  const { prefix, body, tags } = ticket;
+// A253: rule (the rules-apply rule number) writes the [priority-rule: N] marker after the priority;
+// without it the marker goes - the priority is then hand-set.
+function updateLine(ticket, priority, rule) {
+  const { prefix } = ticket;
+  const body = ticket.body.replace(/[ \t]*\[priority-rule:[^\]\r\n]*\]/gi, '');
+  const tags = [...body.matchAll(metadata)];
+  const set = `[priority: ${priority}]` + (rule ? ` [priority-rule: ${rule}]` : '');
   const current = tags.find(tag => tag[1].toLowerCase() === 'priority');
   if (current) {
     const leading = current[0].match(/^[ \t]*/)[0];
-    return prefix + body.slice(0, current.index) + `${leading}[priority: ${priority}]` + body.slice(current.index + current[0].length);
+    return prefix + body.slice(0, current.index) + leading + set + body.slice(current.index + current[0].length);
   }
   const anchor = tags.filter(tag => ['app', 'src'].includes(tag[1].toLowerCase())).at(-1);
   const trailingNote = /(?:[ \t]+\([^()]*\))+[ \t]*$/.exec(body);
   const end = anchor ? anchor.index + anchor[0].length : tags[0]?.index ?? trailingNote?.index ?? body.trimEnd().length;
-  return prefix + body.slice(0, end) + ` [priority: ${priority}]` + body.slice(end);
+  return prefix + body.slice(0, end) + ' ' + set + body.slice(end);
 }
 
 function replaceBoard(path, contents, mode) {
@@ -151,7 +156,7 @@ function apply(path, token, plan) {
     const { bytes, lines, mode } = boardSnapshot(path);
     const { changes, rule, selectors, done } = plan(ticketRows(lines));
     if (previewToken(path, bytes, rule, selectors) !== token) throw new Error('The board or rule changed. Run a new preview before applying.');
-    for (const { ticket, level } of changes) lines[ticket.index] = updateLine(ticket, level);
+    for (const { ticket, level, rule } of changes) lines[ticket.index] = updateLine(ticket, level, rule?.n);
     if (changes.length) replaceBoard(path, lines.join(''), mode);
     console.log(`${heading('Applied')}\n${changes.length} ticket(s) ${done}.`);
   });
@@ -183,7 +188,8 @@ function validateMatches(tickets, matches) {
 function plannedChanges(tickets, selectors, priority) {
   const matches = matching(tickets, selectors);
   validateMatches(tickets, matches);
-  return matches.filter(ticket => ticket.priority !== priority);
+  // A253: a same-level ticket still carrying the rule marker changes too - the marker goes
+  return matches.filter(ticket => ticket.priority !== priority || ticket.attributes.has('priority-rule'));
 }
 
 const severityPriority = new Map([
@@ -354,9 +360,7 @@ function rulesCommand(root, args) {
     if (rest.length !== 1) throw new Error('Rules remove takes one rule number.');
     const { text, revision } = editRules(path, rev, ({ rules, lines }) => {
       const rule = pick(rules, rest[0]);
-      if (rule.index + 1 < lines.length) lines.splice(rule.index, 2);
-      else if (rule.index > 0) lines.splice(rule.index - 1, 2);
-      else lines[0] = '';
+      lines.splice(rule.index, 2);
       return { text: ruleText(rule) };
     });
     return console.log(`${heading('Rule removed')}\n${text}\nRules revision: ${revision}`);
@@ -382,6 +386,12 @@ function rulesCommand(root, args) {
   console.log(levels.map(level => `${level}: ${changes.filter(change => change.level === level).length}`).join(' · '));
   for (const { ticket, level, rule: winner } of changes) {
     console.log(`${ticket.id.padEnd(8)} ${(ticket.priority ?? 'Unranked').padEnd(8)} -> ${level}   rule ${winner.n}   ${ticket.label}`);
+  }
+  // A253: a priority without the [priority-rule:] marker was set by hand
+  const lowered = changes.filter(({ ticket, level }) => ticket.priority && !/^\d+$/.test(String(ticket.attributes.get('priority-rule') ?? '').trim()) && level > ticket.priority);
+  if (lowered.length) {
+    const list = lowered.map(({ ticket, level, rule: winner }) => `${ticket.id} ${ticket.priority} -> ${level} (rule ${winner.n})`).join(', ');
+    console.log(`Warning: ${lowered.length} ticket${lowered.length > 1 ? 's go' : ' goes'} down from a priority set by hand: ${list}.`);
   }
   if (changes.length) console.log(`Preview token: ${previewToken(board, bytes, rule, [])}`);
 }
@@ -430,7 +440,7 @@ function main(args) {
   if (mode === 'preview') {
     const changes = plannedChanges(tickets, selectors, priority);
     console.log(`${heading('Preview')}\n${changes.length} ticket(s) would change.`);
-    for (const ticket of changes) console.log(`${ticket.id.padEnd(8)} ${(ticket.priority ?? 'Unranked').padEnd(8)} -> ${color(33, priority)}   ${ticket.label}`);
+    for (const ticket of changes) console.log(`${ticket.id.padEnd(8)} ${(ticket.priority ?? 'Unranked').padEnd(8)} -> ${color(33, priority)}${ticket.priority === priority ? ' (now hand-set)' : ''}   ${ticket.label}`);
     if (changes.length) console.log(`Preview token: ${previewToken(path, bytes, priority, selectors)}`);
     return;
   }

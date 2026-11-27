@@ -13,7 +13,7 @@ import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from 
 import type { State, PointerAction, SkillGuide, HelpItem } from './state'
 import { pointerModal, decideLines, dialogLines, engageLines, filteredSkills, formLines, helpCommand, reconcileLines, runsCursor, setupLines, SKILLS, COMMANDS, HELP_ITEMS, startRunLines, teamRow, viewOf } from './state'
 import { cleanIntakeText, intakeDetails } from '../hooks/lib/intake'
-import { armLines } from '../hooks/lib/teamsarm'
+import { armLines, wrapWords } from '../hooks/lib/teamsarm'
 import { messageLines, pendingHandoffOf, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { buildModel, chipsOf, headKey, HEAD, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
@@ -26,7 +26,7 @@ import { FIVE_HOLD_PCT, resetsText, usageColor, WEEKLY_STOP_PCT } from '../hooks
 import { runLines as runTabLines } from './runtab'
 import { explorerBody } from './explorer'
 import { DASHBOARD_WIDE, dashboardPanels } from '../hooks/lib/dashboard'
-import { hasValue, orderedRules, ruleOptions, ruleSummary } from '../hooks/lib/rules'
+import { hasValue, orderedRules, ruleMatchLine, ruleOptions, ruleReads, ruleSummary } from '../hooks/lib/rules'
 
 export type Seg = BaseSeg & { action?: PointerAction }
 const hot = (text: string, name: string, shift = false, isDim = false): Seg => ({
@@ -477,6 +477,7 @@ function chipLine(t: Ticket): Seg[] {
   if (t.decide) groups.push(chip('decide', t.decide))
   if (t.tester) groups.push(chip('tester', t.tester))
   if (t.by.length) groups.push(chip('by', t.by.join(' ')))
+  if (t.rule) groups.push(chip('rule', String(t.rule)))
   if (t.session) groups.push([dim(t.session)])
   const out: Seg[] = [{ text: '      ' }]
   groups.forEach((g, i) => { if (i) out.push({ text: '  ' }); out.push(...g) })
@@ -860,6 +861,7 @@ function prioritiesBody(s: State, room: number): Seg[][] {
   else if (!shown.length && !rules.invalid.length) status.push([dim('No priority rules yet. Press n to add one, e.g. P1 for bugs in an app.')])
   if (rules?.invalid.length && !rules.error) {
     status.push(...rules.invalid.slice(0, 3).map(text => [{ text, color: 'warning' as Color }]))
+    if (rules.invalid.length > 3) status.push([{ text: `+${rules.invalid.length - 3} more`, color: 'warning' }])
     status.push([dim('Fix these in .skillator/priority-rules.md; rules cannot be applied until then.')])
   }
   const tail = status.slice(0, Math.max(0, room - 1))
@@ -868,7 +870,11 @@ function prioritiesBody(s: State, room: number): Seg[][] {
   return [...lines.slice(offset, offset + space), ...tail].slice(0, room)
 }
 
-function ruleEditBody(s: State, room: number): Seg[][] {
+// A253: at most max rows; the last one kept becomes … when some are cut
+const capRows = (rows: Boxed['rows'], max: number): Boxed['rows'] =>
+  rows.length <= max ? rows : max <= 0 ? [] : [...rows.slice(0, max - 1), { text: '…', color: rows[max - 1]!.color }]
+
+export function ruleEditBody(s: State, room: number): Seg[][] {
   const edit = s.ruleEdit!
   const fields = priorityFilterOptions(s.board, true)
   const picking = edit.option !== undefined ? fields[edit.row - 1] : undefined
@@ -882,23 +888,31 @@ function ruleEditBody(s: State, room: number): Seg[][] {
   if (picking && !rows.length) rows.push({ text: 'No open ticket has a value for this field.' })
   const active = Math.max(0, Math.min(rows.length - 1, picking ? edit.option! : edit.row))
   const note = edit.message ?? (picking ? 'Checked values: any of them matches.' : 'Every chosen field must match.')
-  const page = Math.max(1, room - (room >= 5 ? 3 : 2))
+  // A253: the rule in plain words and the tickets it matches now, under the fields when there is room
+  const reads: Boxed['rows'] = picking || room < 8 ? [] : capRows([...wrapWords('Reads as: ' + ruleReads(edit.level, edit.values), innerOf(s)).map(text => ({ text })),
+    ...(Object.values(edit.values).some(v => v.length) ? [{ text: ruleMatchLine(s.board?.tickets ?? [], edit.values), color: 'inactive' as const }] : [])], room - 4)
+  const page = Math.max(1, room - (room >= 5 ? 3 : 2) - reads.length)
   const offset = Math.max(0, active - page + 1)
   const visible: Boxed['rows'] = rows.slice(offset, offset + page).map((row, index) => ({
     ...row, text: (offset + index === active ? '› ' : '  ') + row.text,
     color: offset + index === active ? 'suggestion' as const : undefined,
   }))
+  visible.push(...reads)
   if (room >= 5) visible.push({ text: note, color: edit.message && !edit.busy ? 'warning' as const : undefined, action: undefined })
   return boxBody(s, { title: picking ? 'Choose ' + picking.label : edit.n === null ? 'New priority rule' : 'Edit rule ' + edit.n, rows: visible })
 }
 
-function rulesPreviewBody(s: State, room: number): Seg[][] {
+export function rulesPreviewBody(s: State, room: number): Seg[][] {
   const draft = s.rulesPreview!
   const rows: Boxed['rows'] = [{ text: draft.message ?? '' }]
   if (draft.preview) {
     const counts = cells(draft.preview.counts) <= innerOf(s) ? draft.preview.counts : draft.preview.counts.replace(/: /g, ':').replace(/ · /g, '  ')
     rows.push({ text: counts, color: 'suggestion' })
-    const page = Math.max(1, room - 2 - rows.length)
+    // A253: at least one real warning row, its space taken from the change list
+    const warn = draft.preview.warning ? wrapWords(draft.preview.warning, innerOf(s)) : []
+    if (warn.length > 1 && room - 5 < 2) rows.push({ text: cut(warn[0]! + ' …', innerOf(s)), color: 'warning' })
+    else rows.push(...capRows(warn.map(text => ({ text, color: 'warning' as const })), Math.max(1, room - 5)))
+    const page = Math.max(warn.length ? 0 : 1, room - 2 - rows.length)
     rows.push(...draft.preview.rows.slice(draft.preview.offset, draft.preview.offset + page).map(text => ({ text })))
   }
   return boxBody(s, { title: 'Apply priority rules', rows })

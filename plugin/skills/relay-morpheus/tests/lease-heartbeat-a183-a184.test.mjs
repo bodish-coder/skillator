@@ -67,20 +67,18 @@ function runPs1(cwd, args, extraEnv = {}) {
   };
 }
 
+const shEnv = (cwd, extraEnv = {}) => gitEnv({
+  RELAY_WORKTREE: 'off',
+  RELAY_TICKET_META: join(cwd, 'nope.sh').replace(/\\/g, '/'),
+  RELAY_LEVEL_CMD: 'echo src=claude-code 5h=40 7d=10 ctx=5 max=40',
+  ...extraEnv,
+});
+
 function runSh(cwd, args, extraEnv = {}) {
   const res = spawnSync(
     SH_BIN,
     [RELAY_SH.replace(/\\/g, '/'), ...args],
-    {
-      cwd,
-      encoding: 'utf8',
-      env: gitEnv({
-        RELAY_WORKTREE: 'off',
-        RELAY_TICKET_META: join(cwd, 'nope.sh').replace(/\\/g, '/'),
-        RELAY_LEVEL_CMD: 'echo src=claude-code 5h=40 7d=10 ctx=5 max=40',
-        ...extraEnv,
-      }),
-    }
+    { cwd, encoding: 'utf8', env: shEnv(cwd, extraEnv) }
   );
   return {
     status: res.status,
@@ -303,7 +301,16 @@ test('A184 (PowerShell & Shell): heartbeat reads and updates under one lock with
 
     // Now test Shell port with the same deterministic lock-held interleaving on stage s2
     if (SH_BIN) {
-      assert.equal(runSh(tmp, ['stage', s2, '~', 'build:opus'], { RELAY_RUN: runFile.replace(/\\/g, '/') }).status, 0);
+      // A bare '~' argv from a native Windows parent is rewritten to $HOME by the MSYS runtime; pass it inside -c,
+      // re-running the very shell SH_BIN started (its Git shim would re-expand '~' if called by path).
+      const stSh = process.platform !== 'win32'
+        ? runSh(tmp, ['stage', s2, '~', 'build:opus'], { RELAY_RUN: runFile })
+        : spawnSync(SH_BIN, ['-c', `exec "/proc/$$/exe" "$0" stage ${s2} '~' build:opus`, RELAY_SH.replace(/\\/g, '/')], {
+          cwd: tmp,
+          encoding: 'utf8',
+          env: shEnv(tmp, { RELAY_RUN: runFile.replace(/\\/g, '/') }),
+        });
+      assert.equal(stSh.status, 0, stSh.stderr);
 
       writeFileSync(lockFile, `${process.pid} ps1\n`, 'ascii');
       const hbShPromise = new Promise((resolve) => {

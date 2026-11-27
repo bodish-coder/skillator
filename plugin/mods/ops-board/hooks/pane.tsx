@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, Color, ElementConstructor, EngineInterface, RenderElement, RenderInput,
   SelectProps, TextProps } from 'claude-code'
-import type { Filter } from '../types'
+import type { Filter, FilterPicker } from '../types'
 import { PRIORITIES, STATE_COLOR } from './lib/board'
 import { buildModel, chipsOf, groupKey, headKey, isDecidable, toggleGroup, toggleUserSection, UNI, ASCII, cutTo, headText, userHeadText, rowText, chromeRows, windowOf, paneTabs } from './lib/ticketsmodel'
 import type { Model, PANE_TABS, UserSection, View } from './lib/ticketsmodel'
@@ -51,6 +51,7 @@ const ticketOffsetA = atom({ plugin: 'ops-board', key: 'ticketOffset' } as const
 const expandedA = atom({ plugin: 'ops-board', key: 'expanded' } as const, null)
 const filterA = atom({ plugin: 'ops-board', key: 'filter' } as const, { app: null, who: null, mine: false, showDone: false })
 const filterOpenA = atom({ plugin: 'ops-board', key: 'filterOpen' } as const, false)
+const filterPickerA = atom({ plugin: 'ops-board', key: 'filterPicker' } as const, null)   // B35
 const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 // F61: the boxes of the open groups, this session; empty = every group collapsed. Only
 // the set is held, never rows: the board's own value stays within $.state's cap (B4).
@@ -64,6 +65,7 @@ export async function collapseTickets($: EngineInterface, keepSections = false) 
   await update($, selectedA, () => null)
   await update($, ticketOffsetA, () => null)
   await update($, expandedA, () => null)
+  await update($, filterPickerA, () => null)   // B35: a paged filter list does not outlive the tab
 }
 const sessionA = atom({ plugin: 'ops-board', key: 'session' } as const, null)   // F109: register.tsx sets it
 // F76: the Workflows tab's open sections (Runs, Workflows, F93 Agents), this session; all start open.
@@ -107,17 +109,41 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
       void collapseTickets($, true)
     }}>{v.byPriority ? 'by state' : 'by priority'}</Button>
   )
+  const choices = {
+    app: ['all', ...[...new Set((v.board?.tickets ?? []).flatMap(t => t.apps))].sort()],
+    who: ['all', ...v.team.map(p => p.handle)],
+  }
+  const pick = (key: 'app' | 'who', val: string) => setFilter(x => key === 'app'
+    ? { ...x, app: val === 'all' ? null : val } : { ...x, who: val === 'all' ? null : val, mine: false })
+  const setPicker = (p: FilterPicker) => { void update($, filterPickerA, () => p) }
+  // B35: past 64 choices the filter pages in place of the list, as B33's Auto-assign filters do
+  const pk = v.filterOpen ? v.filterPicker : null
+  if (pk) {
+    // the tab bar stays; the title and the pages row are the picker's own chrome
+    const pageSize = v.rows ? Math.max(3, v.rows - chromeRows(v, m, glyphs).tabs - 2) : 12, values = choices[pk.key]
+    const page = Math.min(pk.page, Math.max(0, Math.ceil(values.length / pageSize) - 1)), start = page * pageSize   // the values can shrink under it
+    return [
+      <Text key="filter:title" bold>{pk.key}</Text>,
+      ...values.slice(start, start + pageSize).map(value =>
+        <Button key={'filter:option:' + value} plain variant={(pk.key === 'who' && f.mine ? v.me : (f[pk.key] ?? 'all')) === value ? 'primary' : undefined}
+          onPress={() => { setPicker(null); pick(pk.key, value) }}>{value}</Button>),
+      <Box key="filter:pages" flexDirection="row" flexWrap="wrap" gap={2}>
+        {start > 0 && <Button key="filter:previous" plain onPress={() => setPicker({ ...pk, page: page - 1 })}>Previous</Button>}
+        {start + pageSize < values.length && <Button key="filter:next" plain onPress={() => setPicker({ ...pk, page: page + 1 })}>Next</Button>}
+        <Button key="filter:back" plain onPress={() => setPicker(null)}>Back</Button>
+      </Box>,
+    ]
+  }
+  const filterSelect = (key: 'app' | 'who') => choices[key].length <= 64
+    ? <Select key={'sel:' + key} label={key} value={f[key] ?? 'all'} options={choices[key].map(c => ({ value: c, label: c }))}
+        onSelect={val => pick(key, val)} />
+    : <Button key={'sel:' + key} plain onPress={() => setPicker({ key, page: 0 })}>{key + ' ' + (f[key] ?? 'all')}</Button>
   // filter row (closed: the g button's label, its 'g: ' hotkey prefix and the gap come off the text width)
   if (v.filterOpen && Select) {
-    const apps = [...new Set((v.board?.tickets ?? []).flatMap(t => t.apps))].sort()
     out.push(
       <Box key="filters" flexDirection="row" gap={2}>
-        <Select key="sel:app" label="app" value={f.app ?? 'all'}
-          options={[{ value: 'all', label: 'all' }, ...apps.map(a => ({ value: a, label: a }))]}
-          onSelect={val => setFilter(x => ({ ...x, app: val === 'all' ? null : val }))} />
-        {hasTeam && <Select key="sel:who" label="who" value={f.who ?? 'all'}
-          options={[{ value: 'all', label: 'all' }, ...v.team.map(p => ({ value: p.handle, label: p.handle }))]}
-          onSelect={val => setFilter(x => ({ ...x, who: val === 'all' ? null : val, mine: false }))} />}
+        {filterSelect('app')}
+        {hasTeam && filterSelect('who')}
         {hasTeam && v.me && <Button key="key:mine" hotkey="m" plain onPress={() => setFilter(x => ({ ...x, mine: !x.mine, who: null }))}>
           {(f.mine ? '[x]' : '[ ]') + ' mine'}</Button>}
       </Box>,
@@ -140,7 +166,8 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
   const pushTicketEntry = (t: Model['rows'][number], itemKey: string, nested: boolean) => {
     const isSel = itemKey === m.selected
     const priorityWidth = t.priority ? 3 : 0   // F201: 'P1 ' in place of the 2-cell rail
-    const row = rowText(t, v.cols - (t.priority && !v.ascii ? priorityWidth - 2 : priorityWidth), glyphs, !!v.ascii, nested, isSel ? 3 : 0)
+    // A251: the chip goes in the prefix so rowText's 56-column owner cut-off sees the pane width
+    const row = rowText(t, v.cols, glyphs, !!v.ascii, nested, (isSel ? 3 : 0) + (t.priority && !v.ascii ? priorityWidth - 2 : priorityWidth))
     const body = v.ascii && isSel ? '> ' + row.text.slice(2) : row.text
     entries.push(
       <Button key={'row:' + itemKey} hotkey={isSel ? 'o' : undefined} plain onPress={() => {
@@ -157,7 +184,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
     )
     if (chipsOf(t)) {
       const parts: (RenderElement | string)[] = ['    ']
-      const groupCount = [t.apps.length, t.owner, t.workingSession, t.assignedSession, t.decide, t.tester, t.by.length, t.session].filter(Boolean).length
+      const groupCount = [t.apps.length, t.owner, t.workingSession, t.assignedSession, t.decide, t.tester, t.by.length, t.rule, t.session].filter(Boolean).length
       let room = v.cols - 4 - (isDecidable(t) ? (isSel ? 13 : 10) : 0) - Math.max(0, groupCount - 1) * 2
       const take = (s: string) => { const text = cutTo(s, Math.max(0, room), glyphs.cut); room -= text.length; return text }
       const chip = (k: string, val: string) => [<Text color={k === 'decide' ? 'autoAccept' : CHIP_KEY}>{take(k + ':')}</Text>, <Text color={CHIP_VALUE}>{take(val)}</Text>]
@@ -169,6 +196,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
       if (t.decide) groupsOf.push(chip('decide', t.decide))
       if (t.tester) groupsOf.push(chip('tester', t.tester))
       if (t.by.length) groupsOf.push(chip('by', t.by.join(' ')))
+      if (t.rule) groupsOf.push(chip('rule', String(t.rule)))
       if (t.session) groupsOf.push([<Text dimColor>{take(t.session)}</Text>])
       groupsOf.forEach((gr, i) => { if (i) parts.push('  '); parts.push(...gr) })
       entries.push(
@@ -178,7 +206,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
         </Box>,
       )
     }
-    if (v.expanded === itemKey || (itemKey === t.id && v.expanded === t.id)) {
+    if (v.expanded === itemKey || v.expanded === t.id) {   // B36: as buildModel counts it (the ops TUI expands by bare id)
       const raw = `    - [${t.box}] ${t.line}`
       const at = list.slice(0, entries.length).reduce((n, l) => n + l.rows, 0)
       const from = Math.max(0, w.start - at), to = Math.min(Math.ceil(raw.length / v.cols), w.end - at)
@@ -275,7 +303,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
 export async function readView($: EngineInterface, cols: number, rows: number | null = null, unread = 0, logCount = 0): Promise<View> {
   return {
     board: await read($, boardA), team: await read($, teamA), me: await read($, meA),
-    filter: await read($, filterA), filterOpen: await read($, filterOpenA),
+    filter: await read($, filterA), filterOpen: await read($, filterOpenA), filterPicker: await read($, filterPickerA),
     selected: await read($, selectedA), expanded: await read($, expandedA), open: await read($, openA),
     session: await read($, sessionA), byPriority: await read($, byPriorityA),
     cols, ascii: await read($, asciiA), rows, unread, logCount, offset: await read($, ticketOffsetA),

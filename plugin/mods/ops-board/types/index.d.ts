@@ -4,6 +4,7 @@ export type Ticket = {
   id: string; box: Box; title: string; line: string      // line = exact text after "- [b] "
   parent: string | null; indent: number; section: string // heading it sits under
   priority?: Priority
+  rule?: number                                          // A253: [priority-rule: N] beside the priority - rules apply set it
   apps: string[]; decide: string | null; owner: string | null; tester: string | null; by: string[]
   session: string | null                                 // "(@cc-4ae496)" or F109 "(@cc-k7q2:asha:run)" tag, without parens
   workingSession?: string | null
@@ -13,6 +14,7 @@ export type Ticket = {
 export type Board = { path: string; mtimeMs: number; size: number; tickets: Ticket[]; error: string | null }
 export type Member = { handle: string; emails: string[]; name?: string; lead?: true }   // name: the `  name:` line under it; lead: the `lead:` line names it
 export type Filter = { app: string | null; who: string | null; mine: boolean; showDone: boolean }
+export type FilterPicker = { key: 'app' | 'who'; page: number } | null   // B35: the paged app / who list up
 export type Lock = { path: string; ageMin: number; holder: string }
 export type Machine = { at: number; drive: string; diskFree: number | null; diskTotal: number | null;
                         memFree: number | null; locks: Lock[]; hold: string | null; watchdogOff?: boolean    // bytes
@@ -64,7 +66,7 @@ export type AutoPriorityDraft = {
 // F203: the Priorities tab's rules (queue-jarvis `rules list`), the add/edit form and the apply preview.
 // Rule and RulesPreview live here (the types contract must be self-contained); hooks/lib/rules.ts re-exports them.
 export type Rule = { n: number; level: Priority; conditions: [string, string[]][] }
-export type RulesPreview = { token: string | null; count: string; levels: string; changes: string[] }
+export type RulesPreview = { token: string | null; count: string; levels: string; changes: string[]; warning?: string }   // A253: warning - a hand-set priority goes down
 export type RulesView = { loading: boolean; error: string | null; revision: string; rules: Rule[]; invalid: string[] }
 export type RuleDraft = {
   request: number; n: number | null; level: Priority; values: Record<string, string[]>
@@ -205,7 +207,7 @@ declare module 'claude-code' {
       board: Board | null; team: Member[]; me: string | null
       session: string | null   // F109: this session's sid (team.ts sessionTag), the band's
       tab: 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run' | 'help' | 'log' | 'dashboard' | 'priorities'; selected: string | null; expanded: string | null
-      filter: Filter; filterOpen: boolean
+      filter: Filter; filterOpen: boolean; filterPicker: FilterPicker
       ascii: boolean
       ticketOffset: number | null    // pinned Tickets list; null follows selection
       ticketsByPriority: boolean   // F201: the Tickets tab groups by P1..P5 instead of by state

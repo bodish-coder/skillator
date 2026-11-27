@@ -195,7 +195,7 @@ async function changePriority($: EngineInterface, draft: PriorityDraft, level: P
     return
   }
   if (token) {
-    await refreshBoardTicket($, draft.id, t => ({ ...t, priority: level }))
+    await refreshBoardTicket($, draft.id, t => ({ ...t, priority: level, rule: undefined }))
     say($, `✓ ${draft.id} priority set to ${level}`, { timeoutMs: 8000 })
     if ((await read($, priorityA))?.request === request) await closeForm($)
     return
