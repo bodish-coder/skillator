@@ -1047,3 +1047,23 @@ test('B35 the Tickets filter pages app and who past 64 options', WITH, async ($,
   expect((await ui.find({ key: 'sel:who' }))?.text).toBe('who @m03')
   await ui.unmount()
 })
+
+// B35 review: the picker's page is clamped when the values shrink, and leaving the tab drops it
+test('B35 the filter picker clamps its page and closes on a tab switch', WITH, async ($, on) => {
+  const n = (i: number) => String(i).padStart(2, '0')
+  const board = (k: number) => `# Tickets\n\n## Open\n\n${Array.from({ length: k }, (_, i) => `- [ ] B${100 + i} — bug ${i} [app: a${n(i)}]`).join('\n')}\n`
+  const [w, clock] = world(on, { '/r/TICKETS.md': board(70) })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  await ui.press({ key: 'key:filter' })
+  await ui.press({ key: 'sel:app' })
+  for (let i = 0; i < 5; i++) await ui.press({ key: 'filter:next' })
+  expect(await ui.find({ key: 'filter:option:a69' })).toBeDefined()
+  w.files['/r/TICKETS.md'] = { text: board(5), mtimeMs: 9000 }
+  await clock.advance(2000)
+  expect(await ui.find({ key: 'filter:option:a00' })).toBeDefined()
+  await ui.press({ key: 'tab:runs' })
+  await ui.press({ key: 'tab:tickets' })
+  expect(await ui.find({ key: 'filter:title' })).toBeUndefined()
+  await ui.unmount()
+})

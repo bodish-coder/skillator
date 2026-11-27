@@ -65,6 +65,7 @@ export async function collapseTickets($: EngineInterface, keepSections = false) 
   await update($, selectedA, () => null)
   await update($, ticketOffsetA, () => null)
   await update($, expandedA, () => null)
+  await update($, filterPickerA, () => null)   // B35: a paged filter list does not outlive the tab
 }
 const sessionA = atom({ plugin: 'ops-board', key: 'session' } as const, null)   // F109: register.tsx sets it
 // F76: the Workflows tab's open sections (Runs, Workflows, F93 Agents), this session; all start open.
@@ -118,15 +119,16 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
   // B35: past 64 choices the filter pages in place of the list, as B33's Auto-assign filters do
   const pk = v.filterOpen ? v.filterPicker : null
   if (pk) {
-    const pageSize = 12, start = pk.page * pageSize, values = choices[pk.key]
+    const pageSize = 12, values = choices[pk.key]
+    const page = Math.min(pk.page, Math.max(0, Math.ceil(values.length / pageSize) - 1)), start = page * pageSize   // the values can shrink under it
     return [
       <Text key="filter:title" bold>{pk.key}</Text>,
       ...values.slice(start, start + pageSize).map(value =>
         <Button key={'filter:option:' + value} plain variant={(f[pk.key] ?? 'all') === value ? 'primary' : undefined}
           onPress={() => { setPicker(null); pick(pk.key, value) }}>{value}</Button>),
       <Box key="filter:pages" flexDirection="row" flexWrap="wrap" gap={2}>
-        {start > 0 && <Button key="filter:previous" plain onPress={() => setPicker({ ...pk, page: pk.page - 1 })}>Previous</Button>}
-        {start + pageSize < values.length && <Button key="filter:next" plain onPress={() => setPicker({ ...pk, page: pk.page + 1 })}>Next</Button>}
+        {start > 0 && <Button key="filter:previous" plain onPress={() => setPicker({ ...pk, page: page - 1 })}>Previous</Button>}
+        {start + pageSize < values.length && <Button key="filter:next" plain onPress={() => setPicker({ ...pk, page: page + 1 })}>Next</Button>}
         <Button key="filter:back" plain onPress={() => setPicker(null)}>Back</Button>
       </Box>,
     ]

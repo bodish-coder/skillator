@@ -50,7 +50,8 @@ function fieldOf(t: Ticket, key: string): string {
   if (key === 'id') return t.id
   if (key === 'status') return STATUS[t.box]
   if (key === 'type') return TYPE[/^[A-Z]+/.exec(t.id)?.[0] ?? ''] ?? ''
-  return new RegExp('\\[' + key + ':[ \\t]*([^\\]\\r\\n]*)\\]', 'i').exec(t.line)?.[1] ?? ''
+  // the last tag wins, as queue.mjs's new Map(tags) does
+  return [...t.line.matchAll(new RegExp('\\[' + key + ':[ \\t]*([^\\]\\r\\n]*)\\]', 'gi'))].at(-1)?.[1] ?? ''
 }
 export function ruleMatchLine(tickets: readonly Ticket[], values: Record<string, string[]>): string {
   const chosen = Object.entries(values).filter(([, v]) => v.length)

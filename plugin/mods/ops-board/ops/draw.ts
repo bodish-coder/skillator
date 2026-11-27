@@ -870,7 +870,11 @@ function prioritiesBody(s: State, room: number): Seg[][] {
   return [...lines.slice(offset, offset + space), ...tail].slice(0, room)
 }
 
-function ruleEditBody(s: State, room: number): Seg[][] {
+// A253: at most max rows; the last one kept becomes … when some are cut
+const capRows = (rows: Boxed['rows'], max: number): Boxed['rows'] =>
+  rows.length <= max ? rows : max <= 0 ? [] : [...rows.slice(0, max - 1), { text: '…', color: rows[max - 1]!.color }]
+
+export function ruleEditBody(s: State, room: number): Seg[][] {
   const edit = s.ruleEdit!
   const fields = priorityFilterOptions(s.board, true)
   const picking = edit.option !== undefined ? fields[edit.row - 1] : undefined
@@ -885,8 +889,8 @@ function ruleEditBody(s: State, room: number): Seg[][] {
   const active = Math.max(0, Math.min(rows.length - 1, picking ? edit.option! : edit.row))
   const note = edit.message ?? (picking ? 'Checked values: any of them matches.' : 'Every chosen field must match.')
   // A253: the rule in plain words and the tickets it matches now, under the fields when there is room
-  const reads: Boxed['rows'] = picking || room < 8 ? [] : [...wrapWords('Reads as: ' + ruleReads(edit.level, edit.values), innerOf(s)).map(text => ({ text })),
-    ...(Object.values(edit.values).some(v => v.length) ? [{ text: ruleMatchLine(s.board?.tickets ?? [], edit.values), color: 'inactive' as const }] : [])]
+  const reads: Boxed['rows'] = picking || room < 8 ? [] : capRows([...wrapWords('Reads as: ' + ruleReads(edit.level, edit.values), innerOf(s)).map(text => ({ text })),
+    ...(Object.values(edit.values).some(v => v.length) ? [{ text: ruleMatchLine(s.board?.tickets ?? [], edit.values), color: 'inactive' as const }] : [])], room - 4)
   const page = Math.max(1, room - (room >= 5 ? 3 : 2) - reads.length)
   const offset = Math.max(0, active - page + 1)
   const visible: Boxed['rows'] = rows.slice(offset, offset + page).map((row, index) => ({
@@ -898,13 +902,13 @@ function ruleEditBody(s: State, room: number): Seg[][] {
   return boxBody(s, { title: picking ? 'Choose ' + picking.label : edit.n === null ? 'New priority rule' : 'Edit rule ' + edit.n, rows: visible })
 }
 
-function rulesPreviewBody(s: State, room: number): Seg[][] {
+export function rulesPreviewBody(s: State, room: number): Seg[][] {
   const draft = s.rulesPreview!
   const rows: Boxed['rows'] = [{ text: draft.message ?? '' }]
   if (draft.preview) {
     const counts = cells(draft.preview.counts) <= innerOf(s) ? draft.preview.counts : draft.preview.counts.replace(/: /g, ':').replace(/ · /g, '  ')
     rows.push({ text: counts, color: 'suggestion' })
-    if (draft.preview.warning) rows.push(...wrapWords(draft.preview.warning, innerOf(s)).map(text => ({ text, color: 'warning' as const })))
+    if (draft.preview.warning) rows.push(...capRows(wrapWords(draft.preview.warning, innerOf(s)).map(text => ({ text, color: 'warning' as const })), room - 5))
     const page = Math.max(1, room - 2 - rows.length)
     rows.push(...draft.preview.rows.slice(draft.preview.offset, draft.preview.offset + page).map(text => ({ text })))
   }
