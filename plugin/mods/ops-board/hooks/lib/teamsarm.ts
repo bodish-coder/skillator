@@ -48,7 +48,7 @@ export function expiryShown(raw: string | null, now: number): string | null {
 
 const cut = (s: string, room: number) => (s.length <= room ? s : s.slice(0, Math.max(1, room - 1)) + '…')
 // Whole words per line; a word wider than the room is cut (the copy key still has it whole).
-function wrapWords(s: string, room: number): string[] {
+export function wrapWords(s: string, room: number): string[] {
   const out: string[] = []
   let cur = ''
   for (const w of s.split(' ')) {

@@ -3,7 +3,7 @@ import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 import type { Priority, RuleDraft, RulesPreviewDraft, RulesView } from '../types'
 import { PRIORITIES, PRIORITY_FILTERS, priorityFilterOptions } from './lib/board'
 import { runCall } from './lib/host'
-import { hasValue, orderedRules, parseRulesList, parseRulesPreview, ruleArgs, ruleOptions, ruleSummary, sameRule, toggleValue } from './lib/rules'
+import { hasValue, orderedRules, parseRulesList, parseRulesPreview, ruleArgs, ruleMatchLine, ruleOptions, ruleReads, ruleSummary, sameRule, toggleValue } from './lib/rules'
 import { clearForm, closeForm, showForm } from './assign'
 import { say } from './logtab'
 
@@ -175,6 +175,7 @@ export async function renderRuleForm($: EngineInterface, e: RenderInput<'Pane'>)
         {preview.error && <Box key="rule:preview-error"><Text color="error" wrap="wrap">{preview.error}</Text></Box>}
         {p && <Box key="rule:preview-summary" flexDirection="column">
           <Text>{p.count}</Text><Text wrap="wrap">{p.levels}</Text>
+          {p.warning && <Text key="rule:preview-warning" color="warning" wrap="wrap">{p.warning}</Text>}
           {!p.token && <Text dimColor wrap="wrap">No ticket would change: every matching ticket already has its rule's priority, or no open ticket matches a rule.</Text>}
         </Box>}
         <Box flexDirection="row" flexWrap="wrap" gap={2}>
@@ -191,7 +192,8 @@ export async function renderRuleForm($: EngineInterface, e: RenderInput<'Pane'>)
   const set = (change: (d: RuleDraft) => RuleDraft) => {
     void update($, draftA, current => current && !current.busy && current.request === draft.request ? change(current) : current)
   }
-  const fields = priorityFilterOptions(await read($, boardA), true)
+  const board = await read($, boardA)
+  const fields = priorityFilterOptions(board, true)
   const picking = draft.picker && fields.find(field => field.key === draft.picker!.key)
   if (draft.picker && picking) {
     const chosen = draft.values[picking.key] ?? []
@@ -233,6 +235,11 @@ export async function renderRuleForm($: EngineInterface, e: RenderInput<'Pane'>)
         return draft.busy ? <Text key={'rule:field:' + key} wrap="wrap">{text}</Text>
           : <Button key={'rule:field:' + key} plain onPress={() => set(d => ({ ...d, picker: { key, page: 0 }, confirmDelete: false }))}>{text}</Button>
       })}
+      <Box key="rule:reads" flexDirection="column">
+        <Text dimColor>Reads as</Text>
+        <Text wrap="wrap">{ruleReads(draft.level, draft.values)}</Text>
+        {hasCondition && <Text dimColor wrap="wrap">{ruleMatchLine(board?.tickets ?? [], draft.values)}</Text>}
+      </Box>
       {draft.busy && <Text dimColor>Working…</Text>}
       {draft.error && <Box key="rule:error"><Text color="error" wrap="wrap">{draft.error}</Text></Box>}
       {draft.confirmDelete && !draft.busy
