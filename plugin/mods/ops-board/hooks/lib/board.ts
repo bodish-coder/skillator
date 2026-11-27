@@ -113,7 +113,7 @@ export function parseBoard(text: string, path: string, mtimeMs: number, size: nu
     while (stack.length && stack[stack.length - 1]!.indent >= indent) stack.pop()
     const priority = tag(body, 'priority')?.toUpperCase()
     const ranked = !!priority && Object.hasOwn(PRIORITIES, priority)
-    const rule = Number(/^\d+$/.exec(tag(body, 'priority-rule') ?? '')?.[0] ?? 0)   // A253: only beside a priority
+    const rule = Number(/\[priority-rule:\s*(\d+)\s*\]/i.exec(body)?.[1] ?? 0)   // A253: only beside a priority; any case, as queue.mjs reads it
     const t: Ticket = {
       ...(ranked ? { priority: priority as Priority } : {}),
       ...(ranked && rule ? { rule } : {}),

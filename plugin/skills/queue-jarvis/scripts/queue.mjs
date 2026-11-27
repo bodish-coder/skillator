@@ -188,7 +188,8 @@ function validateMatches(tickets, matches) {
 function plannedChanges(tickets, selectors, priority) {
   const matches = matching(tickets, selectors);
   validateMatches(tickets, matches);
-  return matches.filter(ticket => ticket.priority !== priority);
+  // A253: a same-level ticket still carrying the rule marker changes too - the marker goes
+  return matches.filter(ticket => ticket.priority !== priority || ticket.attributes.has('priority-rule'));
 }
 
 const severityPriority = new Map([
@@ -439,7 +440,7 @@ function main(args) {
   if (mode === 'preview') {
     const changes = plannedChanges(tickets, selectors, priority);
     console.log(`${heading('Preview')}\n${changes.length} ticket(s) would change.`);
-    for (const ticket of changes) console.log(`${ticket.id.padEnd(8)} ${(ticket.priority ?? 'Unranked').padEnd(8)} -> ${color(33, priority)}   ${ticket.label}`);
+    for (const ticket of changes) console.log(`${ticket.id.padEnd(8)} ${(ticket.priority ?? 'Unranked').padEnd(8)} -> ${color(33, priority)}${ticket.priority === priority ? ' (now hand-set)' : ''}   ${ticket.label}`);
     if (changes.length) console.log(`Preview token: ${previewToken(path, bytes, priority, selectors)}`);
     return;
   }

@@ -908,8 +908,11 @@ export function rulesPreviewBody(s: State, room: number): Seg[][] {
   if (draft.preview) {
     const counts = cells(draft.preview.counts) <= innerOf(s) ? draft.preview.counts : draft.preview.counts.replace(/: /g, ':').replace(/ · /g, '  ')
     rows.push({ text: counts, color: 'suggestion' })
-    if (draft.preview.warning) rows.push(...capRows(wrapWords(draft.preview.warning, innerOf(s)).map(text => ({ text, color: 'warning' as const })), room - 5))
-    const page = Math.max(1, room - 2 - rows.length)
+    // A253: at least one real warning row, its space taken from the change list
+    const warn = draft.preview.warning ? wrapWords(draft.preview.warning, innerOf(s)) : []
+    if (warn.length > 1 && room - 5 < 2) rows.push({ text: cut(warn[0]! + ' …', innerOf(s)), color: 'warning' })
+    else rows.push(...capRows(warn.map(text => ({ text, color: 'warning' as const })), Math.max(1, room - 5)))
+    const page = Math.max(warn.length ? 0 : 1, room - 2 - rows.length)
     rows.push(...draft.preview.rows.slice(draft.preview.offset, draft.preview.offset + page).map(text => ({ text })))
   }
   return boxBody(s, { title: 'Apply priority rules', rows })

@@ -119,7 +119,8 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
   // B35: past 64 choices the filter pages in place of the list, as B33's Auto-assign filters do
   const pk = v.filterOpen ? v.filterPicker : null
   if (pk) {
-    const pageSize = 12, values = choices[pk.key]
+    // the tab bar stays; the title and the pages row are the picker's own chrome
+    const pageSize = v.rows ? Math.max(3, v.rows - chromeRows(v, m, glyphs).tabs - 2) : 12, values = choices[pk.key]
     const page = Math.min(pk.page, Math.max(0, Math.ceil(values.length / pageSize) - 1)), start = page * pageSize   // the values can shrink under it
     return [
       <Text key="filter:title" bold>{pk.key}</Text>,
