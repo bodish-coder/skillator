@@ -78,9 +78,9 @@ function loadBoardRuntime() {
 
 test("source metadata is separate from the title", () => {
   const { parse } = loadBoardRuntime();
-  const { tickets: [ticket] } = parse("- [ ] F199 - Report from CI [app: web] [src: test runner] [priority: P1] [severity: critical] [release: next] [depends-on: F198]");
+  const { tickets: [ticket] } = parse("- [ ] F199 - Report from CI [app: web] [src: test runner] [priority: P1] [severity: critical] [release: next] [depends-on: F198] [priority-rule: 2]");
   assert.equal(ticket.title, "Report from CI");
-  assert.equal(ticket.tags.map(([name, value]) => `${name}=${value}`).join(","), "app=web,src=test runner,priority=P1,severity=critical,release=next,depends-on=F198");
+  assert.equal(ticket.tags.map(([name, value]) => `${name}=${value}`).join(","), "app=web,src=test runner,priority=P1,severity=critical,release=next,depends-on=F198,priority-rule=2");
 });
 
 test("A204: parse preserves lowercase sub-ticket suffix and normalizes only prefix", () => {

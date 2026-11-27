@@ -33,7 +33,7 @@ const inGroups = (id) => GROUPS.some(([p]) => id.startsWith(p));
 const LINE = /^(\s*)- \[([ x~!?%v>-])\]\s+([A-Za-z]+\d+[a-z]?)\s*[—-]\s*(.*)$/;
 // F43/F45: trailing `[app: ..] [decide: @x] [owner: @x] [by: @y, a@b]` tags. Lifted out of the
 // title and drawn as chips; a line without them parses exactly as before.
-const TAG = /\s*\[(app|src|priority|severity|release|depends-on|decide|owner|by|session):\s*([^\]]*)\]/g;
+const TAG = /\s*\[(app|src|priority|priority-rule|severity|release|depends-on|decide|owner|by|session):\s*([^\]]*)\]/g;
 
 export function parse(md) {
   const out = [];
@@ -224,6 +224,7 @@ not a ticket line
   const c = tally(ts);
   ok(ts.length === 9, "parsed 9", ts.length);
   ok(ts.find((t) => t.id === "B2a")?.sub === true, "B2a is a sub-part");
+  ok(parse("- [ ] F2 — Ranked [priority-rule: 3]")[0]?.title === "Ranked", "priority-rule is a tag, not title");
   ok(c.open === 5 && c.deferred === 1 && c.closed === 3 && c.total === 9, "counts", c);
   const html = render(md, "demo");
   ok(html.includes("Working &lt;thing&gt; &amp; more"), "escapes html");

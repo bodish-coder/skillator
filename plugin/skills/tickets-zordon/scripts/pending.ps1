@@ -153,7 +153,7 @@ function Get-Board {
       $note = ''
       $x = [regex]::Match($r, '\(testing:[^)]*\)')
       if ($x.Success) { $note = $x.Value.Substring(9, $x.Length - 10).Trim(' ') }
-      $r = [regex]::Replace($r, '\[(app|src|priority|severity|release|depends-on|owner|decide|by|session):[^\]]*\]', '')
+      $r = [regex]::Replace($r, '\[(app|src|priority|priority-rule|severity|release|depends-on|owner|decide|by|session):[^\]]*\]', '')
       $r = [regex]::Replace($r, '\(@[^() ]+\)', '')
       $r = [regex]::Replace($r, '\(testing:[^)]*\)', '')
       $a = $r.IndexOf(' (', [StringComparison]::Ordinal)
@@ -785,7 +785,7 @@ function Invoke-Selftest {
       "- [?] F1 $dash pick the chart library [decide: @asha]",
       "- [>] F2 $dash later thing",
       "- [%] F4 $dash built, under test (testing: live check)",
-      "- [ ] F3 $dash pending one [session: cc-1ir0]",
+      "- [ ] F3 $dash pending one [session: cc-1ir0] [priority-rule: 2]",
       "  - [ ] F3a $dash a towed car, slowed down",
       "- [x] A1 $dash fixed, the GREEN re-run is OWED",
       '- [ ] no id on this line',

@@ -333,6 +333,19 @@ test('A253: rules preview warns before a hand-set priority goes down; apply mark
   assert.equal(readFileSync(board, 'utf8'), applied.replace('[priority: P3] [priority-rule: 1] [owner:', '[priority: P2] [owner:'));
 });
 
+test('A253: rules remove leaves the [priority-rule: N] markers as they are; the marker still means rule-set', t => {
+  const { cwd, board } = fixture(t);
+  const text = '- [ ] B1 — Rule-set [app: a] [priority: P1] [priority-rule: 2]\n';
+  writeFileSync(board, text);
+  assert.equal(run(cwd, 'rules', 'add', 'P5', 'app=z').status, 0);
+  assert.equal(run(cwd, 'rules', 'add', 'P3', 'app=a').status, 0);
+  assert.equal(run(cwd, 'rules', 'remove', '1').status, 0);       // rule 2 is now rule 1; N stays 2 (SKILL.md)
+  assert.equal(readFileSync(board, 'utf8'), text);
+  const shown = run(cwd, 'rules', 'preview');
+  assert.match(shown.stdout, /^B1 +P1 +-> P3 +rule 1 /m);
+  assert.doesNotMatch(shown.stdout, /^Warning:/m);
+});
+
 test('rules add and edit refuse a value that holds whitespace then word=', t => {
   const { cwd } = ruled(t);
   const before = readFileSync(rulesFile(cwd), 'utf8');
