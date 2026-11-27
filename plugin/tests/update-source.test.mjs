@@ -221,13 +221,17 @@ test('F204 review 5, item 1: step 2b of /skillator-update-all and step 3b of /sk
 const selftest = extra => spawnSync('sh', [join(plugin, 'install.sh').replaceAll('\\', '/'), '--selftest'],
   { env: { ...env, ...extra }, encoding: 'utf8', timeout: 120000, windowsHide: true });
 const pathKey = Object.keys(env).find(k => k.toUpperCase() === 'PATH') || 'PATH';
+// B40: the sh's own tools dir; ahead of system32, install.sh keeps PATH as given
+const shBin = hasSh && process.platform === 'win32'
+  ? spawnSync('sh', ['-c', 'cygpath -w /usr/bin'], { encoding: 'utf8', windowsHide: true }).stdout.trim() : '';
 // a bin dir whose `timeout` prints <version> for --version and otherwise exits <rc>
 const fakeTimeout = (name, version, rc) => {
   const bin = join(root, name); mkdirSync(bin, { recursive: true });
   writeFileSync(join(bin, 'timeout'), `#!/bin/sh\nif [ "$1" = --version ]; then echo '${version}'; exit 0; fi\nexit ${rc}\n`, { mode: 0o755 });
-  return { [pathKey]: bin + nodePath.delimiter + env[pathKey] };
+  return { [pathKey]: [bin, shBin, env[pathKey]].filter(Boolean).join(nodePath.delimiter) };
 };
-const gnuTimeout = available('sh', ['-c', 'timeout --version </dev/null | grep -q coreutils']);
+// B40: GNU timeout beside the sh, as install.sh finds it, not the first timeout on PATH
+const gnuTimeout = available('sh', ['-c', 'PATH=/usr/bin:$PATH; timeout --version </dev/null | grep -q coreutils']);
 test('sh selftest stops at its time limit, says so and leaves no temp HOME', { skip: !hasSh || !gnuTimeout ? 'no sh or no GNU timeout' : false }, () => {
   const started = Date.now(), tmp = join(root, 'a232-tmp'); mkdirSync(tmp);
   const r = selftest({ SKILLATOR_SELFTEST_TIMEOUT: '6', TMPDIR: tmp.replaceAll('\\', '/') });

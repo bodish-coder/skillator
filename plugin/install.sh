@@ -21,6 +21,8 @@
 # Claude Code is left to its plugin install whenever one exists, --force included.
 # Skills already symlinked to this repo are left alone - they are always current.
 set -eu
+# B40: a Windows-started Git sh finds system32's sort/find/timeout.exe before its own tools
+case $(uname -s 2>/dev/null) in MINGW*|MSYS*|CYGWIN*) [ "$(command -v sort)" = /usr/bin/sort ] || PATH=/usr/bin:$PATH ;; esac
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 src="$root/skills"
