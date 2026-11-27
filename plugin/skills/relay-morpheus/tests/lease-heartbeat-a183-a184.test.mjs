@@ -303,7 +303,13 @@ test('A184 (PowerShell & Shell): heartbeat reads and updates under one lock with
 
     // Now test Shell port with the same deterministic lock-held interleaving on stage s2
     if (SH_BIN) {
-      assert.equal(runSh(tmp, ['stage', s2, '~', 'build:opus'], { RELAY_RUN: runFile.replace(/\\/g, '/') }).status, 0);
+      // A bare '~' argv from a native Windows parent is rewritten to $HOME by the MSYS runtime; pass it inside -c.
+      const stSh = spawnSync(SH_BIN, ['-c', `exec sh "$0" stage ${s2} '~' build:opus`, RELAY_SH.replace(/\\/g, '/')], {
+        cwd: tmp,
+        encoding: 'utf8',
+        env: gitEnv({ RELAY_WORKTREE: 'off', RELAY_RUN: runFile.replace(/\\/g, '/'), RELAY_TICKET_META: join(tmp, 'nope.sh').replace(/\\/g, '/') }),
+      });
+      assert.equal(stSh.status, 0, stSh.stderr);
 
       writeFileSync(lockFile, `${process.pid} ps1\n`, 'ascii');
       const hbShPromise = new Promise((resolve) => {
