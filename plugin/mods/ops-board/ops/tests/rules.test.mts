@@ -267,6 +267,10 @@ test('A253: an expanded Tickets row shows rule:N only when its priority carries 
   const st = { ...onBoard(initial(80, 24, 0), board, [], null), open: [' '] as State['open'] }
   assert.match(text(reduce({ ...st, selected: 'B1' }, key('return')).state), /app:web +rule:3/)
   assert.doesNotMatch(text(reduce({ ...st, selected: 'B2' }, key('return')).state), /rule:/)
+  const mixed = parseBoard('- [ ] B4 — Mixed case [app: web] [priority: P2] [Priority-Rule: 2]\n', 'T', 1, 1)
+  assert.equal(mixed.tickets[0]!.rule, 2)
+  const ms = { ...onBoard(initial(80, 24, 0), mixed, [], null), open: [' '] as State['open'] }
+  assert.match(text(reduce({ ...ms, selected: 'B4' }, key('return')).state), /app:web +rule:2/)
 })
 
 test('A253: the rule form and the preview never draw more rows than the room', () => {
@@ -281,6 +285,17 @@ test('A253: the rule form and the preview never draw more rows than the room', (
   const shown = rulesPreviewBody(preview, 8)
   assert.ok(shown.length <= 8, `${shown.length} rows`)
   assert.match(shown.map(l => l.map(x => x.text).join('')).join('\n'), /…|more/)
+})
+
+test('A253: a small room still shows a real hand-set warning row', () => {
+  const warning = 'Warning: 30 tickets go down from a priority set by hand: ' + Array.from({ length: 30 }, (_, i) => `B${i + 1} P1 -> P4 (rule 4)`).join(', ') + '.'
+  const rows = Array.from({ length: 30 }, (_, i) => `B${i + 1} P1 -> P4 rule 4 Ticket ${i + 1}`)
+  const preview: State = { ...loaded, cols: 40, rulesPreview: { message: '30 ticket(s) would change.', preview: { token: TOKEN, counts: 'P1: 0 · P2: 0 · P3: 0 · P4: 30 · P5: 0', rows, offset: 0, warning } } }
+  for (const room of [5, 6, 8]) {
+    const shown = rulesPreviewBody(preview, room)
+    assert.match(shown.map(l => l.map(x => x.text).join('')).join('\n'), /Warning/, `room ${room}`)
+    assert.ok(shown.length <= room, `room ${room}: ${shown.length} rows`)
+  }
 })
 
 test('A253: the live count reads the last of two same-named tags, as rules preview does', () => {

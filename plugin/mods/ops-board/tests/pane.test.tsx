@@ -1034,8 +1034,8 @@ test('B35 the Tickets filter pages app and who past 64 options', WITH, async ($,
   expect((await ui.find({ key: 'sel:who' }))?.type).toBe('Button')
   await ui.press({ key: 'sel:app' })
   await ui.press({ key: 'filter:next' })
-  await ui.press({ key: 'filter:option:a15' })
-  expect((await ui.find({ key: 'sel:app' }))?.text).toBe('app a15')
+  await ui.press({ key: 'filter:option:a50' })   // page 2 at 40 rows
+  expect((await ui.find({ key: 'sel:app' }))?.text).toBe('app a50')
   expect((await ui.find({ key: 'count' }))?.text).toContain('1 open match')
   await ui.press({ key: 'sel:who' })
   await ui.press({ key: 'filter:next' })
@@ -1048,6 +1048,21 @@ test('B35 the Tickets filter pages app and who past 64 options', WITH, async ($,
   await ui.unmount()
 })
 
+// B35 review 2: the picker's page fits the pane's rows (at least 3 options), not a fixed 12
+test('B35 the filter picker pages to the pane height', WITH, async ($, on) => {
+  const n = (i: number) => String(i).padStart(2, '0')
+  const [, clock] = world(on, { '/r/TICKETS.md': `# Tickets\n\n## Open\n\n${Array.from({ length: 70 }, (_, i) => `- [ ] B${100 + i} — bug ${i} [app: a${n(i)}]`).join('\n')}\n` })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 } })
+  await ui.press({ key: 'key:filter' })
+  await ui.press({ key: 'sel:app' })
+  const shown = (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('filter:option:')).length
+  expect(shown).toBeGreaterThanOrEqual(3)
+  expect(shown).toBeLessThanOrEqual(10 - 3)   // a tab row, the title and the pages row
+  expect(await ui.find({ key: 'filter:next' })).toBeDefined()
+  await ui.unmount()
+})
+
 // B35 review: the picker's page is clamped when the values shrink, and leaving the tab drops it
 test('B35 the filter picker clamps its page and closes on a tab switch', WITH, async ($, on) => {
   const n = (i: number) => String(i).padStart(2, '0')
@@ -1057,7 +1072,7 @@ test('B35 the filter picker clamps its page and closes on a tab switch', WITH, a
   const ui = await mountPane($, 'terminal')
   await ui.press({ key: 'key:filter' })
   await ui.press({ key: 'sel:app' })
-  for (let i = 0; i < 5; i++) await ui.press({ key: 'filter:next' })
+  while (await ui.find({ key: 'filter:next' })) await ui.press({ key: 'filter:next' })
   expect(await ui.find({ key: 'filter:option:a69' })).toBeDefined()
   w.files['/r/TICKETS.md'] = { text: board(5), mtimeMs: 9000 }
   await clock.advance(2000)

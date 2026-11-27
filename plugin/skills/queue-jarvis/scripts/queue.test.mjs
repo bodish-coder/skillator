@@ -333,6 +333,18 @@ test('A253: rules preview warns before a hand-set priority goes down; apply mark
   assert.equal(readFileSync(board, 'utf8'), applied.replace('[priority: P3] [priority-rule: 1] [owner:', '[priority: P2] [owner:'));
 });
 
+test('A253: a manual apply to the level a ticket already has still strips its rule marker', t => {
+  const { cwd, board } = fixture(t);
+  writeFileSync(board, '- [ ] B2 — Rule-set [app: a] [priority: P2] [priority-rule: 1]\n');
+  const manual = preview(cwd, 'P2', 'id=B2');
+  assert.match(manual.stdout, /^1 ticket\(s\) would change\.$/m);
+  assert.match(manual.stdout, /^B2 +P2 +-> .*P2.* \(now hand-set\) /m);
+  assert.equal(run(cwd, 'apply', manual.token, 'P2', 'id=B2').status, 0);
+  assert.equal(readFileSync(board, 'utf8'), '- [ ] B2 — Rule-set [app: a] [priority: P2]\n');
+  assert.equal(run(cwd, 'rules', 'add', 'P4', 'app=a').status, 0);
+  assert.match(run(cwd, 'rules', 'preview').stdout, /^Warning: 1 ticket goes down from a priority set by hand: B2 P2 -> P4 \(rule 1\)\.$/m);
+});
+
 test('A253: rules remove leaves the [priority-rule: N] markers as they are; the marker still means rule-set', t => {
   const { cwd, board } = fixture(t);
   const text = '- [ ] B1 — Rule-set [app: a] [priority: P1] [priority-rule: 2]\n';
