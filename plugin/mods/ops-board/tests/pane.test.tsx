@@ -995,3 +995,45 @@ test('F201 by priority groups P1..P5 then Unranked; state groups sort P1 first; 
   expect(await ui.find({ key: 'row:B1' })).toBeUndefined()
   await ui.unmount()
 })
+
+// B36: a personal row draws its raw line by the model's rule - its own key or the bare id -
+// so the list window (counted from the model) matches what is drawn.
+test('B36 expanding F3 in its group draws the raw line under Assigned too, as the model counts it', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  await openAll(ui)
+  await ui.press({ key: 'row:F3' })
+  expect(await state($, 'expanded')).toBe('F3')
+  expect(await ui.find({ key: 'raw:F3' })).toBeDefined()
+  expect(await ui.find({ key: 'raw:assigned:F3' })).toBeDefined()
+  await ui.unmount()
+})
+
+// B35: 70 apps and 70 team members - the app and who Selects would pass 64 options, which
+// the pane refuses (drawing nothing); they page instead, as B33's Auto-assign filters do.
+test('B35 the Tickets filter pages app and who past 64 options', WITH, async ($, on) => {
+  const n = (i: number) => String(i).padStart(2, '0')
+  const tickets = Array.from({ length: 70 }, (_, i) => `- [ ] B${100 + i} — bug ${i} [app: a${n(i)}]`).join('\n')
+  const team = '# Team\n\n' + Array.from({ length: 70 }, (_, i) => `- @m${n(i)}: m${n(i)}@example.com\n`).join('')
+  const [, clock] = world(on, { '/r/TICKETS.md': `# Tickets\n\n## Open\n\n${tickets}\n`, '/r/.skillator/team.md': team })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  await ui.press({ key: 'key:filter' })
+  expect((await ui.find({ key: 'sel:app' }))?.type).toBe('Button')
+  expect((await ui.find({ key: 'sel:who' }))?.type).toBe('Button')
+  await ui.press({ key: 'sel:app' })
+  await ui.press({ key: 'filter:next' })
+  await ui.press({ key: 'filter:option:a15' })
+  expect((await ui.find({ key: 'sel:app' }))?.text).toBe('app a15')
+  expect((await ui.find({ key: 'count' }))?.text).toContain('1 open match')
+  await ui.press({ key: 'sel:who' })
+  await ui.press({ key: 'filter:next' })
+  await ui.press({ key: 'filter:previous' })
+  await ui.press({ key: 'filter:option:@m03' })
+  expect((await ui.find({ key: 'sel:who' }))?.text).toBe('who @m03')
+  await ui.press({ key: 'sel:who' })
+  await ui.press({ key: 'filter:back' })
+  expect((await ui.find({ key: 'sel:who' }))?.text).toBe('who @m03')
+  await ui.unmount()
+})

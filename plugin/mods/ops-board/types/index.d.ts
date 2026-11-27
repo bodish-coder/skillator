@@ -13,6 +13,7 @@ export type Ticket = {
 export type Board = { path: string; mtimeMs: number; size: number; tickets: Ticket[]; error: string | null }
 export type Member = { handle: string; emails: string[]; name?: string; lead?: true }   // name: the `  name:` line under it; lead: the `lead:` line names it
 export type Filter = { app: string | null; who: string | null; mine: boolean; showDone: boolean }
+export type FilterPicker = { key: 'app' | 'who'; page: number } | null   // B35: the paged app / who list up
 export type Lock = { path: string; ageMin: number; holder: string }
 export type Machine = { at: number; drive: string; diskFree: number | null; diskTotal: number | null;
                         memFree: number | null; locks: Lock[]; hold: string | null; watchdogOff?: boolean    // bytes
@@ -205,7 +206,7 @@ declare module 'claude-code' {
       board: Board | null; team: Member[]; me: string | null
       session: string | null   // F109: this session's sid (team.ts sessionTag), the band's
       tab: 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run' | 'help' | 'log' | 'dashboard' | 'priorities'; selected: string | null; expanded: string | null
-      filter: Filter; filterOpen: boolean
+      filter: Filter; filterOpen: boolean; filterPicker: FilterPicker
       ascii: boolean
       ticketOffset: number | null    // pinned Tickets list; null follows selection
       ticketsByPriority: boolean   // F201: the Tickets tab groups by P1..P5 instead of by state

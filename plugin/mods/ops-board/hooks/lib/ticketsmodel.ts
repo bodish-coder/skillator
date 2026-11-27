@@ -1,4 +1,4 @@
-import type { Board, Box as State, Filter, Member, Proposal, Ticket } from '../../types'
+import type { Board, Box as State, Filter, FilterPicker, Member, Proposal, Ticket } from '../../types'
 import type { Call } from './calls'
 import type { Color } from 'claude-code'
 import { GROUPS, isOpen, PRIORITIES, STATE_NAME, visible } from './board'
@@ -79,6 +79,7 @@ export type Model = {
 export type View = {
   board: Board | null; team: Member[]; me: string | null; filter: Filter; filterOpen: boolean
   selected: string | null; expanded: string | null; open: string[]; cols: number
+  filterPicker?: FilterPicker         // B35: the pane's paged app / who list; omitted by the ops app
   personalUser?: string | null
   session?: string | null             // F178: the board's own session code (cc-1ir0), none null
   ascii?: boolean; rows?: number | null // omitted by the standalone ops app

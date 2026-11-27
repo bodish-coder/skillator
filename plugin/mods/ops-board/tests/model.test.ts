@@ -83,6 +83,16 @@ test('A161: physical-row windows include every slice of oversized raw text', () 
   expect(seen.size).toBe(list.length)
   expect(windowOf(m, null).end).toBe(list.length)
 })
+// B36: the model counts a personal row's raw line for its own key and for the bare id
+// (the ops TUI expands by bare id); the pane draws by the same rule.
+test('B36 personal row raw line for its own key and for the bare id', () => {
+  const board = parseBoard('- [~] F3 — cart drawer [owner: @vidul]', '/r/T', 1, 1)
+  const keys = (expanded: string) => buildModel(view({ board, me: '@vidul', expanded, open: ['~', 'unfold:assigned'] })).lines.map(l => l.key)
+  expect(keys('F3')).toContain('raw:F3')
+  expect(keys('F3')).toContain('raw:assigned:F3')
+  expect(keys('assigned:F3')).toContain('raw:assigned:F3')
+  expect(keys('assigned:F3')).not.toContain('raw:F3')
+})
 test('F111 unread count participates in tab wrapping', () => {
   const v = view({ cols: 60, ascii: true, unread: 3 })
   expect(chromeRows(v, buildModel(v), ASCII).tabs).toBe(2)
