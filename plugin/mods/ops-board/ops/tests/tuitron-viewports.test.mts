@@ -52,6 +52,22 @@ test('Dashboard shows all four sections in a short split pane', () => {
   assert.match(lines, /^Messages {2}0 unread/m)
 })
 
+test('F206: Dashboard quick row copies each word and its badges fit 40 columns', () => {
+  const quick = [['n', 'next'], ['c', 'continue'], ['u', 'resume'], ['g', 'go'], ['s', 'status']] as const
+  const d: State = { ...withRuns, tab: 'dashboard', cols: 40, rows: 18 }
+  for (const [k, word] of quick) {
+    const step = reduce(d, { name: k })
+    assert.deepEqual(step.effects.map(e => e.kind === 'copy' ? e.text : e.kind), [word], `${k} copies ${word}`)
+  }
+  const sc = screen(d, P)
+  for (const [k, word] of quick) {
+    const hit = sc.hits.find(h => h.action.kind === 'key' && (h.action as any).key.name === k)
+    assert.ok(hit, `${k} badge is clickable at 40 columns`)
+    assert.equal(sc.lines[hit.y - 1]!.slice(hit.x - 1, hit.x - 1 + hit.width), `[${k} ${word}]`)
+  }
+  sc.lines.forEach(l => assert.ok(cells(l) <= 40, `overflow: "${l}"`))
+})
+
 test('A165: Tui-tron exhaustive multi-width viewport validation across 40, 60, 80, 100, 120 columns', () => {
   for (const cols of VIEWPORT_WIDTHS) {
     for (const rows of [18, 24, 35]) {

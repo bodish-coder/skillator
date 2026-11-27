@@ -21,6 +21,8 @@ export type DashboardPanel = {
 }
 
 export const DASHBOARD_WIDE = 84
+// F206: the words the owner types most, with their Dashboard hotkeys (free on that tab in pane and TUI)
+export const QUICK_WORDS = [['next', 'n'], ['continue', 'c'], ['resume', 'u'], ['go', 'g'], ['status', 's']] as const
 
 export function dashboardPanels({ board, health, runs, unread, workflow }: DashboardView): DashboardPanel[] {
   const tickets = board && !board.error ? board.tickets : []
