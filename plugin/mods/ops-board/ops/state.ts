@@ -730,7 +730,7 @@ function teamKey(s: State, k: Key): Step {
   }
 }
 
-// D: ticket-meta decided <ID> ([?] -> [ ], the [decide:] tag kept).
+// D: ticket-meta decided <ID> ([?] -> [ ], the [decide:] tag cleared).
 function decided(s: State): Step {
   const raw = rawTicketId(s.selected)
   const id = raw && !isHead(raw) ? raw : buildModel(viewOf(s)).ticket

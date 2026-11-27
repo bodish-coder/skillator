@@ -92,7 +92,7 @@ export function parseGitConfigEmail(text: string): string | null {
 export function ticketsOf(m: Member, board: Board | null, me: string | null): string {
   const open = (board?.tickets ?? []).filter(isOpen)
   const owned = open.filter(t => sameHandle(t.owner, m.handle)).length
-  const decide = open.filter(t => sameHandle(t.decide, m.handle)).length
+  const decide = open.filter(t => t.box === '?' && sameHandle(t.decide, m.handle)).length
   const parts = [...(m.lead ? ['lead'] : []), ...(m.handle === me ? ['(you)'] : []), ...(owned ? [`${owned} owned`] : []), ...(decide ? [`${decide} decide`] : [])]
   return parts.join(' · ') || '-'
 }

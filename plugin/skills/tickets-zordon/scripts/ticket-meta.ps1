@@ -553,6 +553,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
       if ($o[$k]) { $line = Set-Tag $line $k $o[$k] }
     }
     if ($o.dropsession) { $m = Find-Tag $line 'session'; $line = $line.Remove($m.Index, $m.Length) }
+    if ($o.dropdecide) { $m = Find-Tag $line 'decide'; if ($m.Success) { $line = $line.Remove($m.Index, $m.Length) } }
     # F62/F64: a note replaces the one matching its pattern, else goes before a
     # trailing (@agent-id) session tag, else at the end of the line. (testing: ..)
     # replaces only itself; (blocked: ..) and (deferred: ..) replace either - the
@@ -882,11 +883,11 @@ function Do-Decide([string[]]$a) {
   return (Edit-Line $x[0] @{ mark = '?'; decide = $x[1]; samekey = 'decide'; sameval = $x[1] })
 }
 
-# The decision is made: [?] -> [ ]; the [decide:] tag stays as the record.
+# The decision is made: [?] -> [ ] and the [decide:] tag cleared (B41).
 function Do-Decided([string[]]$a) {
   if ($a.Count -ne 1) { Fail 'usage: decided <ID>' }
   $id = Get-NormId $a[0]
-  return (Edit-Line $id @{ mark = ' '; need = '?' })
+  return (Edit-Line $id @{ mark = ' '; need = '?'; dropdecide = $true })
 }
 
 # F62: built, waiting on a test: the box [%] and ` (testing: <test>)` on the
@@ -1763,7 +1764,7 @@ function Invoke-Selftest {
     Eq 'assign from [?]' (Run assign F20 '@vidul') "- [ ] F20 $dash Done thing [decide: @asha] [owner: @vidul] (@cc-1)"
     Eq 'assign from [-]' (Run assign F23 '@vidul') "- [ ] F23 $dash Dropped thing [owner: @vidul]"
     Eq 'assign from [x]' (Run assign F26 '@asha') "- [ ] F26 $dash Shipped [owner: @asha] (@cc-3)"
-    Eq 'decided' (Run decided F24) "- [ ] F24 $dash Waiting [decide: @asha]"
+    Eq 'decided' (Run decided F24) "- [ ] F24 $dash Waiting"
     # the same handle with the box not yet the target still moves the box
     $env:SKILLATOR_ME = '@asha'; try { Eq 'same owner from [x]' (Run assign F27 '@asha') "- [ ] F27 $dash Kept [owner: @asha]" } finally { $env:SKILLATOR_ME = $null }   # by its owner, F80 review
     Eq 'same decider from [ ]' (Run decide F28 '@asha') "- [?] F28 $dash Decided before [decide: @asha]"
@@ -1794,7 +1795,7 @@ function Invoke-Selftest {
     if (([string]::Join(' ', $o)) -match 'no longer the owner') { Write-Output "FAIL: warning still says the session lost the ticket: [$o]"; $script:fail = 1 }
     if (-not ($o[0].EndsWith('(@cc-cccccc)'))) { Write-Output "FAIL: decide dropped the [~] session tag: [$($o[0])]"; $script:fail = 1 }
     $want45 = "# TICKETS`n`n- [ ] F20 $dash Done thing [decide: @asha] [owner: @vidul] (@cc-1)`n- [?] F21 $dash Later thing [decide: @asha] (deferred: q4) (@cc-2)`n" +
-      "- [?] F22 $dash Open thing [decide: @vidul]`n- [ ] F23 $dash Dropped thing [owner: @vidul]`n- [ ] F24 $dash Waiting [decide: @asha]`n" +
+      "- [?] F22 $dash Open thing [decide: @vidul]`n- [ ] F23 $dash Dropped thing [owner: @vidul]`n- [ ] F24 $dash Waiting`n" +
       "- [ ] F25 $dash Both [app: web] [decide: @asha] [owner: @vidul] [by: @vidul]`n- [ ] F26 $dash Shipped [owner: @asha] (@cc-3)`n- [ ] F27 $dash Kept [owner: @asha]`n" +
       "- [?] F28 $dash Decided before [decide: @asha]`n- [ ] F29 $dash Owner waiting [owner: @vidul]`n" +
       "- [ ] F31 $dash Working [owner: @asha] (@cc-bbbbbb)`n- [?] F32 $dash Busy [decide: @vidul] (a note) (@cc-cccccc)`n"
@@ -2295,7 +2296,7 @@ function Invoke-Selftest {
       Run decided F3 | Out-Null
       Run tag F4 | Out-Null
       $want = ("# TICKETS$nl$nl- [ ] F1 $dash One [owner: @vidul]$nl- [?] F2 $dash Two [decide: @asha]$nl" +
-        "- [ ] F3 $dash Three [decide: @asha]$nl- [ ] F4 $dash Four [by: @vidul]$nl")
+        "- [ ] F3 $dash Three$nl- [ ] F4 $dash Four [by: @vidul]$nl")
       if ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes("$C/TICKETS.md")) -cne [Convert]::ToBase64String($Utf8.GetBytes($want))) {
         Write-Output "FAIL: $name board line endings or bytes"; $script:fail = 1
       }

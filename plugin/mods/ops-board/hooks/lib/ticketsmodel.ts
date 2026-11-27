@@ -14,7 +14,7 @@ export const assignedTickets = (tickets: readonly Ticket[], user: string | null)
   user ? tickets.filter(t => isOpen(t) && sameHandle(t.owner, user)) : []
 
 export const decideTickets = (tickets: readonly Ticket[], user: string | null): Ticket[] =>
-  user ? tickets.filter(t => isOpen(t) && (sameHandle(t.decide, user) || (t.box === '?' && !t.decide))) : []
+  user ? tickets.filter(t => t.box === '?' && (sameHandle(t.decide, user) || !t.decide)) : []
 
 export const sessionTickets = (tickets: readonly Ticket[], code: string | null | undefined): Ticket[] =>
   code ? tickets.filter(t => isOpen(t) && sameHandle(t.workingSession ? (t.box === '~' ? t.workingSession : null) : t.assignedSession, code)) : []
