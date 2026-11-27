@@ -1446,10 +1446,13 @@ if [ -n "$target_host" ]; then
   dest="$target_profile/skills"
   # both sides links resolved: an installer reached through a link still sees its own source
   _src_real=$(fold_case "$(CDPATH= cd -- "$src" && pwd -P)")
-  _dest_fold=$(fold_case "$dest")
-  # B38: either way round - a source under the dest would be removed from under itself mid-install
-  case "$_dest_fold" in "$_src_real"|"$_src_real"/*) echo 'The selected skills directory overlaps the installer source' >&2; exit 2 ;; esac
-  case "$_src_real" in "$_dest_fold"/*) echo 'The selected skills directory overlaps the installer source' >&2; exit 2 ;; esac
+  # B38: either way round, every dest - a source under a dest would be removed from under itself mid-install
+  refuse_overlap() {
+    _dest_fold=$(fold_case "$1")
+    case "$_dest_fold" in "$_src_real"|"$_src_real"/*) echo 'The selected skills directory overlaps the installer source' >&2; exit 2 ;; esac
+    case "$_src_real" in "$_dest_fold"/*) echo 'The selected skills directory overlaps the installer source' >&2; exit 2 ;; esac
+  }
+  refuse_overlap "$dest"
   for _scoped in "$dest" "$dest/$manifest" "$dest/.skillator-source" "$dest/.skillator-version" "$dest/.ignore" "$dest/PLATFORMS.md" "$dest/PRACTICE.md" "$dest/WORKFLOW.md" "$dest/practice" "$dest/references" "$dest/ops-board"; do
     if under_link "$_scoped"; then echo "Selected profile contains a shared link: $_scoped" >&2; exit 2; fi
   done
@@ -1473,6 +1476,7 @@ if [ -n "$target_host" ]; then
   if [ "$target_host" = pi ]; then
     if same_dir "$target_profile" "$HOME/.pi/agent"; then
       _pi_sibling="$HOME/.pi/skills"
+      refuse_overlap "$_pi_sibling"
       for _scoped in "$_pi_sibling" "$_pi_sibling/$manifest" "$_pi_sibling/.skillator-source" "$_pi_sibling/.skillator-version" "$_pi_sibling/.ignore" "$_pi_sibling/ops-board"; do
         if under_link "$_scoped"; then echo "Selected profile contains a shared link: $_scoped" >&2; exit 2; fi
       done

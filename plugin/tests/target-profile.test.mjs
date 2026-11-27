@@ -210,10 +210,14 @@ test('sh: a target profile whose skills dir is the source, reached through a lin
 
 // B38: the guard runs both ways - a source checkout inside the selected skills dir is refused
 // too. A minimal copy of the installer under <profile>/skills; --dry-run, so nothing is written.
-for (const [port, skip] of ports) test(`${port}: an installer source inside the selected skills dir exits 2`, { skip }, t => {
+// Review item 2: pi's default profile also writes its sibling ~/.pi/skills, so that dest is checked too.
+for (const [port, skip] of ports) for (const [what, profAt, cloneAt] of [
+  ['the selected skills dir', ['prof'], ['prof', 'skills', 'clone']],
+  ["pi's default-profile sibling ~/.pi/skills", ['.pi', 'agent'], ['.pi', 'skills', 'clone']],
+]) test(`${port}: an installer source inside ${what} exits 2`, { skip }, t => {
   const { T, env } = home(t);
-  const prof = profile(T, 'prof');
-  const clone = profile(prof, 'skills', 'clone');
+  const prof = profile(T, ...profAt);
+  const clone = profile(T, ...cloneAt);
   for (const f of ['install.ps1', 'install.sh', '.claude-plugin/plugin.json', 'skills/tickets-zordon/SKILL.md']) {
     mkdirSync(join(clone, f, '..'), { recursive: true });
     writeFileSync(join(clone, f), readFileSync(join(plugin, f)));
@@ -281,6 +285,43 @@ test('ps: a dangling skill link is replaced by the shipped skill', { skip: !ps &
   assert.ok(!lstatSync(link).isSymbolicLink(), 'the dangling link was kept');
   assert.equal(readFileSync(join(link, 'SKILL.md'), 'utf8'), readFileSync(join(plugin, 'skills/tickets-zordon/SKILL.md'), 'utf8'));
 });
+
+// Review item 1: only a symlink or junction is deleted by itself; any other reparse point
+// (OneDrive Files On-Demand, dedup) is a real folder and goes with Remove-Item -Recurse.
+test('ps: a reparse-point folder that is no link is removed recursively', { skip: !ps && 'no powershell' }, () => {
+  const lines = readFileSync(join(plugin, 'install.ps1'), 'utf8').match(/^\s*if \(\$ti -and .*\r?\n\s*elseif \(\$ti\) .*$/m)?.[0];
+  assert.ok(lines, 'install.ps1: no reparse-point removal');
+  const how = linkType => spawnSync(ps, ['-NoProfile', '-Command',
+    `function Remove-Item { 'recurse' }; $t = 'x'\n$ti = [pscustomobject]@{ Attributes = [IO.FileAttributes]'Directory, ReparsePoint'; LinkType = ${linkType} }\n` +
+    `$ti | Add-Member ScriptMethod Delete { 'delete' }\n${lines}`], { encoding: 'utf8', timeout: 30000, windowsHide: true }).stdout.trim();
+  assert.equal(how('$null'), 'recurse', 'a cloud/dedup folder was deleted non-recursively');
+  assert.equal(how("'Junction'"), 'delete');
+  assert.equal(how("'SymbolicLink'"), 'delete');
+});
+
+// Review item 3: the scoped block builds paths with Join-Path - a '\' join breaks under pwsh off Windows
+test('ps: the scoped install joins $HOME and profile paths with Join-Path', () => {
+  const text = readFileSync(join(plugin, 'install.ps1'), 'utf8');
+  const block = text.match(/^if \(\$TargetHost\) \{\r?\n  if \(Test-UnderLink[\s\S]*?^foreach \(\$cli in \$targets\.Keys\)/m)?.[0];
+  assert.ok(block, 'install.ps1: no scoped block');
+  assert.deepEqual(block.match(/"\$(HOME|TargetProfile)\\[^"]*"/g) ?? [], []);
+  assert.deepEqual(text.match(/Resolve-Real "\$HOME\\[^"]*"/g) ?? [], []);
+});
+
+// Review items 4 and 5: a skill link counts as this source's only when it points at that skill's own
+// source dir - a symlink or a junction; a link to another skill under the source is kept, no record
+for (const [kind, what, target, linked] of [['junction', 'its own source skill', 'tickets-zordon', true], ['dir', 'another source skill', 'audit-sherlock', false]])
+  test(`ps: a ${kind === 'dir' ? 'symlink' : kind} to ${what} ${linked ? 'counts as linked' : 'is kept and records no version'}`, { skip: !ps && 'no powershell' }, t => {
+    const { T, env } = home(t);
+    const codex = profile(T, '.codex');
+    try { symlinkSync(join(plugin, 'skills', target), join(profile(codex, 'skills'), 'tickets-zordon'), kind); }
+    catch (e) { if (e.code === 'EPERM') return t.skip('no symlink privilege'); throw e; }
+    const r = install.ps(env, 'codex', codex);
+    ok(r);
+    assert.ok(lstatSync(join(codex, 'skills/tickets-zordon')).isSymbolicLink(), 'the link was replaced');
+    assert.equal(/a link to another copy/.test(r.stdout), !linked, r.stdout);
+    assert.equal(existsSync(join(codex, 'skills/.skillator-version')), linked, 'version record');
+  });
 
 // F204 review 3, item 5: /c is a drive root only under MSYS (cygpath present) - a Linux /p is a
 // valid directory - and a UNC share root //host/share is a root too

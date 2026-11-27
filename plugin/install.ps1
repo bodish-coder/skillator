@@ -773,7 +773,7 @@ function Write-Commands([string]$cli, [string]$dest) {
       # IDE CLI installs into the IDE's default extensions, so only its default profile gets it.
       if (-not $TargetHost) { if ($dest -eq "$HOME\.gemini\config\skills") { Write-AgyExt $dest } }
       elseif ($TargetHost -eq 'antigravity') {
-        if ([string]::Equals((Resolve-Real $dest), (Resolve-Real "$HOME\.gemini\config\skills"), [StringComparison]::OrdinalIgnoreCase)) { Write-AgyExt $dest }
+        if ([string]::Equals((Resolve-Real $dest), (Resolve-Real (Join-Path (Join-Path (Join-Path $HOME '.gemini') 'config') 'skills')), [StringComparison]::OrdinalIgnoreCase)) { Write-AgyExt $dest }
         else { Write-Host "        skip  the Antigravity IDE ops board: $(Split-Path -Parent $dest) is not the Antigravity IDE's default profile (~/.gemini/config)" }
       }
       # Gemini CLI shares the ~/.gemini marker and reads ~/.gemini/skills
@@ -1537,31 +1537,34 @@ if ($TargetHost) {
 
   $dest = Join-Path $TargetProfile 'skills'
   # both sides links resolved: an installer reached through a junction still sees its own source
-  $destReal = Resolve-Real $dest; $srcReal = Resolve-Real $src
-  # B38: either way round - a source under the dest would be removed from under itself mid-install
+  $srcReal = Resolve-Real $src
   $sep = [IO.Path]::DirectorySeparatorChar   # A254: '/' under pwsh on Linux/macOS
-  if ($destReal -eq $srcReal -or $destReal.StartsWith($srcReal + $sep, [StringComparison]::OrdinalIgnoreCase) -or
-      $srcReal.StartsWith($destReal + $sep, [StringComparison]::OrdinalIgnoreCase)) {
-    Stop-Target 'The selected skills directory overlaps the installer source'
-  }
   $scopedDests = @($dest)
   # F204: a full install also fills ~\.pi\skills (the pi row in $targets), so pi's default
   # profile refreshes it too; any other pi profile has no such sibling and leaves it alone
   if ($TargetHost -ceq 'pi') {
-    if ([string]::Equals((Resolve-Real $TargetProfile), (Resolve-Real "$HOME\.pi\agent"), [StringComparison]::OrdinalIgnoreCase)) {
-      $scopedDests += "$HOME\.pi\skills"
+    $piHome = Join-Path $HOME '.pi'
+    if ([string]::Equals((Resolve-Real $TargetProfile), (Resolve-Real (Join-Path $piHome 'agent')), [StringComparison]::OrdinalIgnoreCase)) {
+      $scopedDests += Join-Path $piHome 'skills'
     } else {
       Write-Host "note  ~/.pi/skills left alone: $TargetProfile is not pi's default profile (~/.pi/agent)"
     }
   }
   $scopedPaths = @()
   foreach ($sd in $scopedDests) {
+    # B38: either way round, every dest - a source under a dest would be removed from under itself mid-install
+    $destReal = Resolve-Real $sd
+    if ($destReal -eq $srcReal -or $destReal.StartsWith($srcReal + $sep, [StringComparison]::OrdinalIgnoreCase) -or
+        $srcReal.StartsWith($destReal + $sep, [StringComparison]::OrdinalIgnoreCase)) {
+      Stop-Target 'The selected skills directory overlaps the installer source'
+    }
     $scopedPaths += $sd
     if (-not (Test-Path -LiteralPath $sd -PathType Container)) { continue }
     $scopedPaths += @($manifest,'.skillator-source','.skillator-version','.ignore','PLATFORMS.md','PRACTICE.md','WORKFLOW.md','practice','references','ops-board' | ForEach-Object { Join-Path $sd $_ })
   }
-  if ($TargetHost -eq 'pi' -and (Test-Path -LiteralPath "$TargetProfile\extensions")) {
-    $scopedPaths += "$TargetProfile\extensions\skillator-ops.ts", "$TargetProfile\extensions\skillator-shifu.ts"
+  $piExt = Join-Path $TargetProfile 'extensions'
+  if ($TargetHost -eq 'pi' -and (Test-Path -LiteralPath $piExt)) {
+    $scopedPaths += (Join-Path $piExt 'skillator-ops.ts'), (Join-Path $piExt 'skillator-shifu.ts')
   }
   foreach ($path in $scopedPaths) { if (Test-UnderLink $path) { Stop-Target "Selected profile contains a shared link: $path" } }
   switch ($TargetHost) {
@@ -1594,9 +1597,10 @@ foreach ($cli in $targets.Keys) {
 
   foreach ($dest in $targets[$cli].Dests) {
     Remove-Unshipped $dest
-    # a skill symlinked to this repo is live - never replace it with a stale copy
+    # a skill linked (symlink or junction) to its own dir in this repo is live - never replace it with a stale copy
     $linked = @(Get-ChildItem -LiteralPath $dest -Directory -ErrorAction SilentlyContinue |
-                Where-Object { $_.LinkType -eq 'SymbolicLink' -and "$($_.Target)" -like "$src*" } |
+                Where-Object { $_.LinkType -in 'SymbolicLink', 'Junction' -and
+                  [string]::Equals((Resolve-Real $_.FullName), (Resolve-Real (Join-Path $src $_.Name)), [StringComparison]::OrdinalIgnoreCase) } |
                 ForEach-Object { $_.Name })
     # B37, as install.sh: any other live link is left alone (never replaced or followed), a dangling one reinstalled
     $kept = @($skills | Where-Object {
@@ -1642,8 +1646,9 @@ foreach ($cli in $targets.Keys) {
         New-Item -ItemType Directory -Force $dest | Out-Null
         $t = Join-Path $dest $s.Name
         $ti = Get-Item -LiteralPath $t -Force -ErrorAction SilentlyContinue
-        # B37: a (dangling) link goes by itself - PS 5.1's Remove-Item -Recurse can follow it into its target
-        if ($ti -and ($ti.Attributes -band [IO.FileAttributes]::ReparsePoint)) { $ti.Delete() }
+        # B37: a (dangling) link goes by itself - PS 5.1's Remove-Item -Recurse can follow it into its target;
+        # any other reparse point (OneDrive Files On-Demand, dedup) is a real folder, removed recursively
+        if ($ti -and $ti.LinkType -in 'SymbolicLink', 'Junction') { $ti.Delete() }
         elseif ($ti) { Remove-Item -LiteralPath $t -Recurse -Force }
         if ($Link) {
           try {
