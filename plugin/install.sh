@@ -1476,7 +1476,8 @@ if [ -n "$target_host" ]; then
   if [ "$target_host" = pi ]; then
     if same_dir "$target_profile" "$HOME/.pi/agent"; then
       _pi_sibling="$HOME/.pi/skills"
-      refuse_overlap "$_pi_sibling"
+      # resolved as $_src_real is, so a HOME reached through a link still meets the source
+      refuse_overlap "$(CDPATH= cd -- "$HOME/.pi" && pwd -P)/skills"
       for _scoped in "$_pi_sibling" "$_pi_sibling/$manifest" "$_pi_sibling/.skillator-source" "$_pi_sibling/.skillator-version" "$_pi_sibling/.ignore" "$_pi_sibling/ops-board"; do
         if under_link "$_scoped"; then echo "Selected profile contains a shared link: $_scoped" >&2; exit 2; fi
       done

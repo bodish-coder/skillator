@@ -430,3 +430,53 @@ test('ps: the second positional argument still binds -Profile', { skip: !ps && '
   assert.ok(r.stdout.includes(prof), `the dry run does not name the positional profile\n${r.stdout}`);
   assert.ok(!existsSync(prof), 'a dry run wrote the profile');
 });
+
+// Review 2, item 1: under pwsh off Windows [IO.File] takes '\' as a filename character, so every path
+// the scoped run reaches - the version read, the install loop, the command writers - uses Join-Path
+test('ps: the scoped run reaches no backslash path join', () => {
+  const text = readFileSync(join(plugin, 'install.ps1'), 'utf8').replaceAll('\r', '');
+  const parts = [
+    text.match(/^\$pluginVersion = .*$/m)?.[0],
+    text.match(/^foreach \(\$cli in \$targets\.Keys\)[\s\S]*?^if \(\$TargetHost\) \{ exit 0 \}/m)?.[0],
+    ...['Remove-Unshipped', 'Write-PiExt', 'Write-AgyExt', 'Write-Commands'].map(f => text.match(new RegExp(`^function ${f}\\([\\s\\S]*?^\\}`, 'm'))?.[0]),
+  ];
+  assert.ok(parts.every(Boolean), 'install.ps1: a scoped-path section was not found');
+  const code = parts.join('\n').split('\n').filter(l => !/^\s*(#|Write-Host|if \(\$cli -eq 'pi'\) \{ Write-Host)/.test(l)).join('\n');
+  assert.deepEqual(code.match(/(\$\w+|\$\([^)]*\)|'[^'\s]*[\w.])\\[\w.$*]/g) ?? [], []);
+});
+
+// Review 2, item 2: ~/.pi/skills is resolved before the overlap check - a HOME reached through a link
+// with the source inside its ~/.pi/skills still exits 2 (--dry-run, nothing is written)
+test('sh: a source inside ~/.pi/skills under a HOME reached through a link exits 2', { skip: !hasSh && 'no sh' }, t => {
+  const { T, env } = home(t);
+  const real = profile(T, 'real');
+  const via = join(T, 'via');
+  symlinkSync(real, via, 'junction');
+  const prof = profile(real, '.pi', 'agent');
+  const clone = profile(real, '.pi', 'skills', 'clone');
+  for (const f of ['install.sh', '.claude-plugin/plugin.json', 'skills/tickets-zordon/SKILL.md']) {
+    mkdirSync(join(clone, f, '..'), { recursive: true });
+    writeFileSync(join(clone, f), readFileSync(join(plugin, f)));
+  }
+  const r = spawnSync('sh', [fwd(join(clone, 'install.sh')), '--dry-run', '--force', '--target-host', 'pi', '--target-profile', fwd(prof)],
+    { env: { ...env, HOME: fwd(via), USERPROFILE: via }, encoding: 'utf8', timeout: 120000, windowsHide: true });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /overlaps the installer source/);
+});
+
+// Review 2, item 3: a live skill link whose target exists but cannot be listed is kept - only a
+// link whose target does not exist counts as dangling
+test('ps: a skill link whose target cannot be listed is kept, not replaced', { skip: (!ps && 'no powershell') || (process.platform !== 'win32' && 'needs icacls') }, t => {
+  const { T, env } = home(t);
+  const shared = profile(T, 'shared', 'tickets-zordon');
+  writeFileSync(join(shared, 'SKILL.md'), 'shared copy\n');
+  const link = join(profile(T, '.codex', 'skills'), 'tickets-zordon');
+  symlinkSync(shared, link, 'junction');
+  const who = `${process.env.USERDOMAIN ? process.env.USERDOMAIN + '\\' : ''}${process.env.USERNAME}`;
+  assert.equal(spawnSync('icacls', [shared, '/deny', `${who}:(RD)`], { windowsHide: true }).status, 0, 'icacls deny failed');
+  t.after(() => spawnSync('icacls', [shared, '/remove:d', who], { windowsHide: true }));
+  const r = install.ps(env, 'codex', join(T, '.codex'));
+  ok(r);
+  assert.ok(lstatSync(link).isSymbolicLink(), `an unlistable live link was replaced\n${r.stdout}`);
+  assert.match(r.stdout, /a link to another copy/);
+});
