@@ -106,14 +106,17 @@ export function parseBoard(text: string, path: string, mtimeMs: number, size: nu
     let session: string | null = null
     const s = SESSION_TAIL.exec(body)
     if (s) { session = s[1]!; body = body.slice(0, s.index) }
-    let cut = body.search(/ \[(?:app|src|priority|severity|release|depends-on|decide|owner|session|working|work-history|tester|by):/)
+    let cut = body.search(/ \[(?:app|src|priority|priority-rule|severity|release|depends-on|decide|owner|session|working|work-history|tester|by):/)
     if (cut < 0) cut = body.search(/ \([^()]*\)\s*$/)
     const baseTitle = (cut < 0 ? body : body.slice(0, cut)).trim()
     const title = al ? `${al} ${baseTitle}` : baseTitle
     while (stack.length && stack[stack.length - 1]!.indent >= indent) stack.pop()
     const priority = tag(body, 'priority')?.toUpperCase()
+    const ranked = !!priority && Object.hasOwn(PRIORITIES, priority)
+    const rule = Number(/^\d+$/.exec(tag(body, 'priority-rule') ?? '')?.[0] ?? 0)   // A253: only beside a priority
     const t: Ticket = {
-      ...(priority && Object.hasOwn(PRIORITIES, priority) ? { priority: priority as Priority } : {}),
+      ...(ranked ? { priority: priority as Priority } : {}),
+      ...(ranked && rule ? { rule } : {}),
       id: m[3]!, box: m[2] as Box, title, line, parent: stack.length ? stack[stack.length - 1]!.id : null,
       indent, section,
       apps: handles(tag(body, 'app') ?? ''), decide: tag(body, 'decide')?.toLowerCase() ?? null,

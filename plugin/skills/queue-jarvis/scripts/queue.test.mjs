@@ -299,14 +299,38 @@ test('rules apply writes the previewed plan and refuses a stale token', t => {
   assert.equal(applied.status, 0, applied.stderr);
   assert.match(applied.stdout, /^5 ticket\(s\) updated by the priority rules\.$/m);
   assert.equal(readFileSync(board, 'utf8'), rulesBoard
-    .replace('[app: a] [severity: low]', '[app: a] [priority: P1] [severity: low]')
-    .replace('B2 — Crash in d [app: d]', 'B2 — Crash in d [app: d] [priority: P3]')
-    .replace('[app: c, a] [priority: P3]', '[app: c, a] [priority: P1]')
-    .replace('[app: b] [priority: P2]', '[app: b] [priority: P1]')        // B7 first: A5 becomes P2 on the next line
-    .replace('[app: b] [priority: P4]', '[app: b] [priority: P2]'));
+    .replace('[app: a] [severity: low]', '[app: a] [priority: P1] [priority-rule: 1] [severity: low]')
+    .replace('B2 — Crash in d [app: d]', 'B2 — Crash in d [app: d] [priority: P3] [priority-rule: 5]')
+    .replace('[app: c, a] [priority: P3]', '[app: c, a] [priority: P1] [priority-rule: 2]')
+    .replace('[app: b] [priority: P2]', '[app: b] [priority: P1] [priority-rule: 1]')        // B7 first: A5 becomes P2 on the next line
+    .replace('[app: b] [priority: P4]', '[app: b] [priority: P2] [priority-rule: 4]'));
   assert.equal(existsSync(`${board}.lock`), false);
   assert.doesNotMatch(run(cwd, 'rules', 'preview').stdout, /Preview token:/);
   assert.notEqual(run(cwd, 'rules', 'apply', next).status, 0);
+});
+
+test('A253: rules preview warns before a hand-set priority goes down; apply marks the rule, a manual apply clears it', t => {
+  const { cwd, board } = fixture(t);
+  const text = [
+    '- [ ] B1 — Hand-set high [app: a] [priority: P1]',
+    '- [ ] B2 — Rule-set high [app: a] [priority: P1] [priority-rule: 9] [owner: @sher]',
+    '- [ ] B3 — Hand-set low [app: a] [priority: P5]',
+  ].join('\n') + '\n';
+  writeFileSync(board, text);
+  assert.equal(run(cwd, 'rules', 'add', 'P3', 'app=a').status, 0);
+  const shown = run(cwd, 'rules', 'preview');
+  assert.equal(shown.status, 0, shown.stderr);
+  assert.match(shown.stdout, /^3 ticket\(s\) would change\.$/m);
+  assert.match(shown.stdout, /^Warning: 1 ticket goes down from a priority set by hand: B1 P1 -> P3 \(rule 1\)\.$/m);
+  assert.doesNotMatch(run(cwd, 'list').stdout, /priority-rule|\[owner/);
+  const token = shown.stdout.match(/^Preview token: ([a-f0-9]{64})$/m)?.[1];
+  assert.equal(run(cwd, 'rules', 'apply', token).status, 0);
+  const applied = readFileSync(board, 'utf8');
+  assert.equal(applied, text.replace(/\[priority: P[15]\]( \[priority-rule: 9\])?/g, '[priority: P3] [priority-rule: 1]'));
+  assert.doesNotMatch(run(cwd, 'rules', 'preview').stdout, /^Warning:/m);
+  const manual = preview(cwd, 'P2', 'id=B2');
+  assert.equal(run(cwd, 'apply', manual.token, 'P2', 'id=B2').status, 0);
+  assert.equal(readFileSync(board, 'utf8'), applied.replace('[priority: P3] [priority-rule: 1] [owner:', '[priority: P2] [owner:'));
 });
 
 test('rules add and edit refuse a value that holds whitespace then word=', t => {

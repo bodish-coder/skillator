@@ -4,6 +4,7 @@ export type Ticket = {
   id: string; box: Box; title: string; line: string      // line = exact text after "- [b] "
   parent: string | null; indent: number; section: string // heading it sits under
   priority?: Priority
+  rule?: number                                          // A253: [priority-rule: N] beside the priority - rules apply set it
   apps: string[]; decide: string | null; owner: string | null; tester: string | null; by: string[]
   session: string | null                                 // "(@cc-4ae496)" or F109 "(@cc-k7q2:asha:run)" tag, without parens
   workingSession?: string | null
@@ -65,7 +66,7 @@ export type AutoPriorityDraft = {
 // F203: the Priorities tab's rules (queue-jarvis `rules list`), the add/edit form and the apply preview.
 // Rule and RulesPreview live here (the types contract must be self-contained); hooks/lib/rules.ts re-exports them.
 export type Rule = { n: number; level: Priority; conditions: [string, string[]][] }
-export type RulesPreview = { token: string | null; count: string; levels: string; changes: string[] }
+export type RulesPreview = { token: string | null; count: string; levels: string; changes: string[]; warning?: string }   // A253: warning - a hand-set priority goes down
 export type RulesView = { loading: boolean; error: string | null; revision: string; rules: Rule[]; invalid: string[] }
 export type RuleDraft = {
   request: number; n: number | null; level: Priority; values: Record<string, string[]>

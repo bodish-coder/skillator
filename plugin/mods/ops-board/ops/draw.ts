@@ -13,7 +13,7 @@ import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from 
 import type { State, PointerAction, SkillGuide, HelpItem } from './state'
 import { pointerModal, decideLines, dialogLines, engageLines, filteredSkills, formLines, helpCommand, reconcileLines, runsCursor, setupLines, SKILLS, COMMANDS, HELP_ITEMS, startRunLines, teamRow, viewOf } from './state'
 import { cleanIntakeText, intakeDetails } from '../hooks/lib/intake'
-import { armLines } from '../hooks/lib/teamsarm'
+import { armLines, wrapWords } from '../hooks/lib/teamsarm'
 import { messageLines, pendingHandoffOf, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { buildModel, chipsOf, headKey, HEAD, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
@@ -26,7 +26,7 @@ import { FIVE_HOLD_PCT, resetsText, usageColor, WEEKLY_STOP_PCT } from '../hooks
 import { runLines as runTabLines } from './runtab'
 import { explorerBody } from './explorer'
 import { DASHBOARD_WIDE, dashboardPanels } from '../hooks/lib/dashboard'
-import { hasValue, orderedRules, ruleOptions, ruleSummary } from '../hooks/lib/rules'
+import { hasValue, orderedRules, ruleMatchLine, ruleOptions, ruleReads, ruleSummary } from '../hooks/lib/rules'
 
 export type Seg = BaseSeg & { action?: PointerAction }
 const hot = (text: string, name: string, shift = false, isDim = false): Seg => ({
@@ -477,6 +477,7 @@ function chipLine(t: Ticket): Seg[] {
   if (t.decide) groups.push(chip('decide', t.decide))
   if (t.tester) groups.push(chip('tester', t.tester))
   if (t.by.length) groups.push(chip('by', t.by.join(' ')))
+  if (t.rule) groups.push(chip('rule', String(t.rule)))
   if (t.session) groups.push([dim(t.session)])
   const out: Seg[] = [{ text: '      ' }]
   groups.forEach((g, i) => { if (i) out.push({ text: '  ' }); out.push(...g) })
@@ -883,12 +884,16 @@ function ruleEditBody(s: State, room: number): Seg[][] {
   if (picking && !rows.length) rows.push({ text: 'No open ticket has a value for this field.' })
   const active = Math.max(0, Math.min(rows.length - 1, picking ? edit.option! : edit.row))
   const note = edit.message ?? (picking ? 'Checked values: any of them matches.' : 'Every chosen field must match.')
-  const page = Math.max(1, room - (room >= 5 ? 3 : 2))
+  // A253: the rule in plain words and the tickets it matches now, under the fields when there is room
+  const reads: Boxed['rows'] = picking || room < 8 ? [] : [...wrapWords('Reads as: ' + ruleReads(edit.level, edit.values), innerOf(s)).map(text => ({ text })),
+    ...(Object.values(edit.values).some(v => v.length) ? [{ text: ruleMatchLine(s.board?.tickets ?? [], edit.values), color: 'inactive' as const }] : [])]
+  const page = Math.max(1, room - (room >= 5 ? 3 : 2) - reads.length)
   const offset = Math.max(0, active - page + 1)
   const visible: Boxed['rows'] = rows.slice(offset, offset + page).map((row, index) => ({
     ...row, text: (offset + index === active ? '› ' : '  ') + row.text,
     color: offset + index === active ? 'suggestion' as const : undefined,
   }))
+  visible.push(...reads)
   if (room >= 5) visible.push({ text: note, color: edit.message && !edit.busy ? 'warning' as const : undefined, action: undefined })
   return boxBody(s, { title: picking ? 'Choose ' + picking.label : edit.n === null ? 'New priority rule' : 'Edit rule ' + edit.n, rows: visible })
 }
@@ -899,6 +904,7 @@ function rulesPreviewBody(s: State, room: number): Seg[][] {
   if (draft.preview) {
     const counts = cells(draft.preview.counts) <= innerOf(s) ? draft.preview.counts : draft.preview.counts.replace(/: /g, ':').replace(/ · /g, '  ')
     rows.push({ text: counts, color: 'suggestion' })
+    if (draft.preview.warning) rows.push(...wrapWords(draft.preview.warning, innerOf(s)).map(text => ({ text, color: 'warning' as const })))
     const page = Math.max(1, room - 2 - rows.length)
     rows.push(...draft.preview.rows.slice(draft.preview.offset, draft.preview.offset + page).map(text => ({ text })))
   }

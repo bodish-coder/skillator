@@ -240,7 +240,7 @@ export type State = {
   // F203: the saved priority rules (queue-jarvis `rules list`), the add/edit form and the apply preview
   rules?: { loading?: boolean; error?: string; revision: string; list: Rule[]; invalid: string[]; sel: number; confirm?: boolean; busy?: boolean }
   ruleEdit?: RuleEdit
-  rulesPreview?: { busy?: boolean; message?: string; preview?: { token: string; counts: string; rows: string[]; offset: number } }
+  rulesPreview?: { busy?: boolean; message?: string; preview?: { token: string; counts: string; rows: string[]; offset: number; warning?: string } }
   explorer: ExState                        // F75: the Explorer tab (ops/explorer.ts)
 } & RunState                               // F79: the Run tab's file, row, form, job
 export type Setup = SetupValues & {
@@ -1430,7 +1430,7 @@ function previewRules(s: State): Step {
     const preview = parseRulesPreview(r.out)
     if (!preview) return { ...x, rulesPreview: { message: 'Queue Jarvis did not return a complete preview. Press p to try again.' } }
     if (!preview.token) return { ...x, rulesPreview: { message: 'No ticket would change.' } }
-    return { ...x, rulesPreview: { message: preview.count, preview: { token: preview.token, counts: preview.levels, rows: preview.changes, offset: 0 } } }
+    return { ...x, rulesPreview: { message: preview.count, preview: { token: preview.token, counts: preview.levels, rows: preview.changes, offset: 0, warning: preview.warning } } }
   }
   return { state: { ...s, rulesPreview: { busy: true, message: 'Checking tickets against the rules…' } }, effects: [run('queue-priority', [...RULES, 'preview'], done)] }
 }
