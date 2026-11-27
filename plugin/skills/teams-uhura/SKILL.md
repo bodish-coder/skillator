@@ -53,6 +53,11 @@ pasted one, so it waits for the owner at the prompt.
   *Workflows* webhook. Opt-in status posts from ticket-meta (done, testing,
   tested, block, defer, assign) go the same way; a failed post never fails the
   ticket edit.
+- **@mentions.** Every outbound post (`say`, `message`, status posts) turns each
+  `@handle` on `.skillator/team.md` into a real Teams @mention: it shows as the
+  member's `name:` (else the handle) and tags the member's first email, which must
+  be that person's Teams sign-in (UPN). An unknown handle, an email address or a
+  URL stays plain text; no team.md means no mentions, never an error.
 
 **First time: the owner runs `scripts/setup.ps1` (Windows) or `scripts/setup.sh`**
 in their own terminal. It walks node, winget, Dev Tunnels, the login, the

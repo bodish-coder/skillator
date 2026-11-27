@@ -126,6 +126,11 @@ fixed. Ruling: linking an id to your own email is allowed and gets no special
 label - every message is data, whoever sent it, so a message "from you" in Teams
 is still not your word at the prompt.
 
+The same list drives outbound @mentions: a post naming `@asha` tags the member
+whose first team.md email is asha's Teams sign-in (UPN), shown as her `name:`.
+Use that sign-in as the first email, or the mention does not reach her; a handle
+not on team.md stays plain text.
+
 ## 6. Status posts
 
 Off by default. On (setup form, or `TEAMS_STATUS_POSTS=on`), ticket-meta's

@@ -10,7 +10,7 @@ import { spawnSync, spawn } from 'node:child_process'
 import { tmpdir, homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { verifyHmac, cleanText, senderOf, parseTeam, startListener, cardPayload, say, statusText, loadConfig, BODY_MAX,
+import { verifyHmac, cleanText, senderOf, parseTeam, startListener, cardPayload, mentions, say, statusText, loadConfig, BODY_MAX,
   configPath, validateConfig, saveConfig, clearConfig, sidOfWhoami, aceSids, aclSids } from './team.mjs'
 import { mainRoot, parseInbox, after, INBOX, READ, DELIVERED, frameMessages, inboxDir, cleanRecord } from './inbox.mjs'
 
@@ -469,6 +469,70 @@ test('cardPayload: a message with one Adaptive Card attachment (the Workflows te
   assert.equal(p.attachments[0].contentType, 'application/vnd.microsoft.card.adaptive')
   assert.equal(p.attachments[0].content.type, 'AdaptiveCard')
   assert.deepEqual(p.attachments[0].content.body, [{ type: 'TextBlock', text: 'hello *team*', wrap: true }])
+})
+
+// F205: @handles on team.md become Teams mentions (name: line = display, first email = UPN)
+const TEAM_F205 = parseTeam('# Team\n\n- @pragya: Pragya@ikran.in, p2@x.com\n  name: Pragya S\n- @sher: sher@ikran.in\n')
+
+test('parseTeam: the indented name: line under a member is kept as name', () => {
+  assert.equal(TEAM_F205[0].name, 'Pragya S')
+  assert.equal(TEAM_F205[1].name, undefined)
+})
+
+test('mentions: known @handles become <at>Display</at> with one entity per distinct text', () => {
+  const r = mentions('hi @PRAGYA and @sher, @pragya again; @bob, mail x@pragya.in or pragya@ikran.in, https://t.example/@sher ok', TEAM_F205)
+  assert.equal(r.text, 'hi <at>Pragya S</at> and <at>sher</at>, <at>Pragya S</at> again; @bob, mail x@pragya.in or pragya@ikran.in, https://t.example/@sher ok')
+  assert.deepEqual(r.entities, [
+    { type: 'mention', text: '<at>Pragya S</at>', mentioned: { id: 'pragya@ikran.in', name: 'Pragya S' } },
+    { type: 'mention', text: '<at>sher</at>', mentioned: { id: 'sher@ikran.in', name: 'sher' } },
+  ])
+  assert.deepEqual(mentions('end @sher.', TEAM_F205).text, 'end <at>sher</at>.')
+  assert.deepEqual(mentions('@sherx @sher-x', TEAM_F205), { text: '@sherx @sher-x', entities: [] })
+  assert.deepEqual(mentions('hi @sher', []), { text: 'hi @sher', entities: [] })
+})
+
+test('cardPayload: mentions go in msteams.entities; no members or no match is byte-identical to before', () => {
+  const p = cardPayload('ping @sher', TEAM_F205)
+  assert.equal(p.attachments[0].content.body[0].text, 'ping <at>sher</at>')
+  assert.deepEqual(p.attachments[0].content.msteams, { entities: [{ type: 'mention', text: '<at>sher</at>', mentioned: { id: 'sher@ikran.in', name: 'sher' } }] })
+  const plain = JSON.stringify(cardPayload('ping @bob'))
+  assert.equal(JSON.stringify(cardPayload('ping @bob', TEAM_F205)), plain)
+  assert.equal(JSON.stringify(cardPayload('ping @bob', [])), plain)
+  assert.doesNotMatch(plain, /msteams/)
+})
+
+test('say, message and post-status tag team.md members; no team.md posts plain, no error', async t => {
+  const got = []
+  const srv = createServer((req, res) => {
+    let b = ''
+    req.on('data', d => { b += d })
+    req.on('end', () => { got.push(JSON.parse(b)); res.writeHead(202); res.end() })
+  })
+  await new Promise(res => srv.listen(0, '127.0.0.1', res))
+  t.after(() => new Promise(res => srv.close(res)))
+  const env = { ...process.env, TEAMS_WORKFLOW_URL: `http://127.0.0.1:${srv.address().port}/w?sig=S`, TEAMS_STATUS_POSTS: 'on', SKILLATOR_TEAMS_CONFIG: join(tmpdir(), 'none-' + Date.now() + '.json') }
+  const run = (cwd, args, input) => new Promise(res => {
+    const c = spawn(process.execPath, [join(HERE, 'team.mjs'), ...args], { env, cwd })
+    let err = ''
+    c.stderr.on('data', d => { err += d })
+    c.on('close', code => res({ code, err }))
+    c.stdin.end(input ?? '')
+  })
+  const card = () => got.at(-1).attachments[0].content
+  const asha = { type: 'mention', text: '<at>Asha Rao</at>', mentioned: { id: 'asha@x.com', name: 'Asha Rao' } }
+  const cwd = repo()
+  assert.equal((await run(cwd, ['say', '--stdin'], 'over to @asha\n')).code, 0)
+  assert.equal(card().body[0].text, 'over to <at>Asha Rao</at>')
+  assert.deepEqual(card().msteams.entities, [asha])
+  assert.equal((await run(cwd, ['message', '@vidul', '--stdin', '--from', '@asha'], 'cc @asha\n')).code, 0)
+  assert.deepEqual(card().msteams.entities, [asha])
+  assert.equal((await run(cwd, ['post-status', 'assign', 'F1', '@vidul'])).code, 0)
+  assert.deepEqual(card().msteams.entities, [{ type: 'mention', text: '<at>vidul</at>', mentioned: { id: 'vidul@ikran.in', name: 'vidul' } }])
+  rmSync(join(cwd, '.skillator/team.md'))
+  const r = await run(cwd, ['say', '--stdin'], 'over to @asha\n')
+  assert.equal(r.code, 0, r.err)
+  assert.equal(card().body[0].text, 'over to @asha')
+  assert.equal(card().msteams, undefined)
 })
 
 test('say: POSTs the card to the Workflows URL; refuses a plain-http URL that is not loopback; never prints the URL', async t => {
