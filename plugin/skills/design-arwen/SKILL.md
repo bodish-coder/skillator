@@ -39,7 +39,7 @@ No setup, no scripts.
 
 **Routing.** First word matches a mode → that mode, everything after is the target.
 No mode given → infer from intent and *say which you picked in one line*:
-"make it bolder / fix the spacing / the colors feel flat / add motion" → `improve` ·
+"make it bolder / fix the spacing / the colors feel flat / add motion / fix the transition flash" → `improve` ·
 "review this / what's wrong with it" → `critique` · existing app + "modernise, overhaul,
 elevate" → `redesign` · otherwise `build`. Two modes could fit → ask once.
 `build` is for UI-only builds: a restyle, polish, a static page with no behaviour. A new
@@ -56,6 +56,15 @@ build-jarvis's prompt.
 forms, data tables, settings, multi-step flows, permissions, notifications, dashboards,
 i18n/RTL. These are the surfaces real apps are made of and the ones generated UI most
 reliably gets subtly wrong. Non-optional when the work touches any of them.
+
+**UX animation → [references/ux-animation.md](references/ux-animation.md)** when motion
+is part of the brief or a transition's motion is being designed, tuned, or debugged.
+It is an opt-in recipe and evidence guide in the current mode, not a new mode.
+A routine UI pass still uses the normal craft and verification references.
+
+**Measured palette or color-role review → [references/color-critique.md](references/color-critique.md)**
+when the brief calls for evidence about emphasis, palette or contrast. Routine UI work
+stays on the normal craft reference and ship gate.
 
 **Every mode that writes code ends in [references/verify.md](references/verify.md)** —
 the ship gate, executed with a real browser or simulator. Not a checklist you assert.
@@ -369,7 +378,7 @@ report format.
 ## Compose with these skills (delegate, don't duplicate)
 
 - **Visual artboards before code** → [references/canvas.md](references/canvas.md) (the
-  optional `/design` canvas gate — the user tweaks the layout visually, then arwen builds it).
+  optional `/design` canvas gate, also used for requested marketing hero concepts).
   It is also skillator's visual companion for *any* design conversation: `PRACTICE.md` §1
   routes here whenever a question is clearer shown than described, even from outside this skill.
 - **Charts / graphs / KPI tiles / series colors → `dataviz`.** It owns the validated
@@ -382,13 +391,9 @@ report format.
   carries the design-time perf rules; web-perf runs the measured audit.
 - **Quick named theme for a static deck/report → `theme-factory`.** (Not for app design
   systems — arwen's token guidance is stronger.)
-- **Motion craft → `emil-design-eng` (interruptibility, springs, `@starting-style`,
-  clip-path, blur-masked transitions) and `apple-design` (gesture physics, velocity
-  handoff, momentum projection, rubber-banding).** craft.md carries arwen's motion *policy*
-  — when motion is allowed, how long, reduced-motion, the forbidden patterns. Those two own
-  the *execution*. Building anything gesture-driven or spring-based without reading them is
-  how motion ends up technically correct and lifeless. `animate` builds a single animation
-  end-to-end; `find-animation-opportunities` finds where motion is missing.
+- **Motion craft → [references/ux-animation.md](references/ux-animation.md)** first.
+  For deeper mechanics, use `emil-design-eng` or `apple-design` when available;
+  `animate` and `find-animation-opportunities` remain optional specialist helpers.
 - **Deep React/RN implementation → the Vercel skills:** `vercel-react-view-transitions`,
   `vercel-react-native-skills`, `vercel-composition-patterns`.
 

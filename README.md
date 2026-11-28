@@ -253,6 +253,10 @@ Deactivating is deleting `.skillator/grayskull.md`.
   as a first-class constraint; and a `DESIGN.md` design memory it reads on entry and
   leaves behind on exit — interoperable with one another skill already wrote.
   Invoke with `/design-arwen`.
+- **launch-hermes** — design or review App Store and Google Play screenshot sets
+  using real app captures and store-specific export checks. No publishing.
+- **tutorial-merlin** — teach one product workflow with a short, interactive
+  practice task, feedback, retry and an uncoached check.
 - **grayskull-power** — one entry point that switches the whole skillator workflow on:
   arms the standing skills (reads `TICKETS.md`, checks `watch-cortana` is wired),
   prints the state in a single line, then routes each request to the one skill

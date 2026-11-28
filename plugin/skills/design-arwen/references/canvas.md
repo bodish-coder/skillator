@@ -62,6 +62,20 @@ route-confirmation screen; it doesn't add a phase.
 
 ---
 
+## Marketing hero concept (when requested)
+
+For a landing-page hero mockup, anchor one focal subject in the product's world and let
+type and one accent support it. Try a framed and a cropped composition only when the
+choice is meaningful. Test the offer and call to action at a phone-sized crop as well as
+desktop; if the subject obscures key words, separate their layers. Keep navigation,
+copy and calls to action editable. An image mockup is concept evidence, not a functional
+site; use approved references for inspiration, not a transferable third-party design.
+For store galleries use `skillator:launch-hermes` instead.
+
+Inspired by [Charles Hero Mockups](https://github.com/LemonFace0309/charles-skills/tree/main/skills/drops/charles-hero-mockups).
+
+---
+
 ## The round trip — turning their saved artboard into code that matches
 
 This is the part that makes the gate worth more than a mockup. The user edits artboards in

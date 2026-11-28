@@ -51,6 +51,9 @@ Capture both themes if both ship, and at least 320px / tablet / desktop widths.
 
 ---
 
+For a focused palette or hierarchy question, apply [color-critique.md](color-critique.md)
+to sampled evidence before ranking the findings.
+
 ## 3. Judge against the register, not your taste
 
 - **Product register:** the bar is trust and fluency. "Would someone fluent in
