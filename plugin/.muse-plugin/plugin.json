@@ -67,6 +67,10 @@
         "path": "skills/holo-r2d2/SKILL.md"
       },
       {
+        "id": "launch-hermes",
+        "path": "skills/launch-hermes/SKILL.md"
+      },
+      {
         "id": "live-friday",
         "path": "skills/live-friday/SKILL.md"
       },
@@ -133,6 +137,10 @@
       {
         "id": "tui-tron",
         "path": "skills/tui-tron/SKILL.md"
+      },
+      {
+        "id": "tutorial-merlin",
+        "path": "skills/tutorial-merlin/SKILL.md"
       },
       {
         "id": "watch-cortana",

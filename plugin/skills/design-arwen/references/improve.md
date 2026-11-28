@@ -24,8 +24,8 @@ Name the lane in one line before you start, so the user can redirect you cheaply
 | "quieter", "too much", "calm it down" | **quieter** | Lower VARIANCE and MOTION. Cut decoration, reduce the palette, cut competing wow moments, keep the single signature. |
 | "spacing", "hierarchy", "alignment", "it feels off" | **layout** | Spacing scale, rhythm variation, optical alignment, section-rhythm repetition, overflow at every width. |
 | "fonts", "typography", "hard to read" | **typeset** | Pairing on a contrast axis, scale ratio, line length, line height, weights, `text-wrap`, tracking floor. |
-| "colors are flat", "add color", "washed out" | **colorize** | Color strategy first, then OKLCH values, tinted neutrals, accent discipline, contrast re-verified. |
-| "add motion", "it feels static" | **animate** | State transitions first. Reveals only if MOTION ≥4. Reduced-motion path in the same commit, always. |
+| "colors are flat", "add color", "washed out" | **colorize** | Color strategy first, then OKLCH values and contrast re-verified. Use [color-critique.md](color-critique.md) when palette or emphasis needs measured diagnosis. |
+| "add motion", "this transition flashes or snaps" | **animate** | Read [UX animation](ux-animation.md) and use the recipe for the affected interaction. The register limits and reduced-motion path in [craft.md](craft.md) still apply. |
 | "mobile", "tablet", "responsive", "it breaks on…" | **adapt** | Every breakpoint from 320px, touch targets, safe areas, keyboard insets, and on native the platform-idiomatic layout, not a shrunk web one. |
 | "production-ready", "edge cases", "i18n" | **harden** | Error and empty states, loading, long strings, RTL, zero/one/many, offline, permission-denied, slow network. |
 | "it's slow", "janky", "laggy" | **optimize** | LCP/CLS/INP against craft.md budgets. Measure first — delegate a real audit to `web-perf` rather than guessing. |
